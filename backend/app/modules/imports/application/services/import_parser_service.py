@@ -116,10 +116,10 @@ class CsvImportParser:
                             )
                             continue
 
-                        normalized_payload = {
-                            key: self._normalize_value(value)
-                            for key, value in raw_payload.items()
-                        }
+                        normalized_payload = self._normalize_row_payload(
+                            raw_payload=raw_payload,
+                            profile=profile,
+                        )
                         rows.append(
                             NewImportRow(
                                 file_id=file_id,
@@ -177,6 +177,20 @@ class CsvImportParser:
         if isinstance(value, str):
             return value.strip()
         return value
+
+    def _normalize_row_payload(
+        self,
+        *,
+        raw_payload: dict[str, Any],
+        profile: Any,
+    ) -> dict[str, Any]:
+        if profile is not None and hasattr(profile, "normalize_row"):
+            return profile.normalize_row(raw_payload=raw_payload)
+
+        return {
+            key: self._normalize_value(value)
+            for key, value in raw_payload.items()
+        }
 
     @staticmethod
     def _is_empty_row(raw_payload: dict[str, Any]) -> bool:

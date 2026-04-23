@@ -9,6 +9,12 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.db.session import get_db_session
+from app.modules.finance.application.commands.map_pos_sales_batch_to_transactions import (
+    MapPosSalesBatchToTransactionsCommand,
+)
+from app.modules.finance.infrastructure.repositories.sqlalchemy_transaction_repository import (
+    SqlAlchemyFinancialTransactionRepository,
+)
 from app.modules.imports.application.commands.upload_import_file import (
     UploadImportFileCommand,
 )
@@ -72,3 +78,16 @@ def get_parse_import_batch_command(session: DbSession) -> ParseImportBatchComman
     repository = SqlAlchemyImportBatchRepository(session)
     parser = CsvImportParser()
     return ParseImportBatchCommand(repository, parser)
+
+
+def get_map_pos_sales_batch_to_transactions_command(
+    session: DbSession,
+) -> MapPosSalesBatchToTransactionsCommand:
+    """Wire the import-to-finance mapping command."""
+
+    imports_repository = SqlAlchemyImportBatchRepository(session)
+    finance_repository = SqlAlchemyFinancialTransactionRepository(session)
+    return MapPosSalesBatchToTransactionsCommand(
+        imports_repository=imports_repository,
+        finance_repository=finance_repository,
+    )

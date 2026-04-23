@@ -366,3 +366,6 @@ A következő tervezési lépésként érdemes elkészíteni:
 - frontend route tree-t,
 - első MVP user story-k és use case-ek listáját,
 - kezdeti migrációs és importstratégiát.
+## Jelenlegi allapot
+
+A projekt aktualis, futtathato allapotat a [CURRENT_STATUS.md](C:\BizTracker\docs\CURRENT_STATUS.md) foglalja ossze. Ez a forras mutatja meg legjobban, hol tartunk most, mi mukodik mar, es mely teruletek hianyoznak meg.

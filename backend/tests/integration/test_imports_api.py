@@ -21,35 +21,13 @@ from app.modules.master_data.infrastructure.orm.business_unit_model import (
 API_PREFIX = "/api/v1/imports"
 
 
-def upload_import_fixture(
-    client: TestClient,
-    *,
-    business_unit_id: UUID,
-    import_type: str,
-    file_path: Path,
-):
-    with file_path.open("rb") as file_object:
-        response = client.post(
-            f"{API_PREFIX}/files",
-            data={
-                "business_unit_id": str(business_unit_id),
-                "import_type": import_type,
-            },
-            files={
-                "file": (file_path.name, file_object, "text/csv"),
-            },
-        )
-
-    return response
-
-
 def test_list_import_batches_returns_uploaded_batch(
     client: TestClient,
     imports_fixtures_dir: Path,
     test_business_unit: BusinessUnitModel,
+    upload_import_fixture,
 ) -> None:
     upload_response = upload_import_fixture(
-        client,
         business_unit_id=test_business_unit.id,
         import_type="pos_sales",
         file_path=imports_fixtures_dir / "sample_pos_sales_clean.csv",
@@ -74,9 +52,9 @@ def test_upload_creates_batch_and_file_metadata(
     db_session: Session,
     imports_fixtures_dir: Path,
     test_business_unit: BusinessUnitModel,
+    upload_import_fixture,
 ) -> None:
     response = upload_import_fixture(
-        client,
         business_unit_id=test_business_unit.id,
         import_type="pos_sales",
         file_path=imports_fixtures_dir / "sample_pos_sales_clean.csv",
@@ -101,9 +79,9 @@ def test_parse_succeeds_for_clean_csv(
     db_session: Session,
     imports_fixtures_dir: Path,
     test_business_unit: BusinessUnitModel,
+    upload_import_fixture,
 ) -> None:
     upload_response = upload_import_fixture(
-        client,
         business_unit_id=test_business_unit.id,
         import_type="pos_sales",
         file_path=imports_fixtures_dir / "sample_pos_sales_clean.csv",
@@ -127,15 +105,30 @@ def test_parse_succeeds_for_clean_csv(
     )
     assert row_count == 4
 
+    first_row = db_session.scalar(
+        select(ImportRowModel)
+        .where(ImportRowModel.batch_id == UUID(batch_id))
+        .order_by(ImportRowModel.row_number.asc())
+    )
+    assert first_row is not None
+    assert first_row.normalized_payload == {
+        "date": "2026-04-22",
+        "receipt_no": "RCPT-1001",
+        "product_name": "Croissant",
+        "quantity": 2,
+        "gross_amount": 1200,
+        "payment_method": "cash",
+    }
+
 
 def test_parse_bad_csv_creates_import_row_error(
     client: TestClient,
     db_session: Session,
     imports_fixtures_dir: Path,
     test_business_unit: BusinessUnitModel,
+    upload_import_fixture,
 ) -> None:
     upload_response = upload_import_fixture(
-        client,
         business_unit_id=test_business_unit.id,
         import_type="pos_sales",
         file_path=imports_fixtures_dir / "sample_pos_sales_with_issues.csv",
@@ -163,9 +156,9 @@ def test_parse_pos_sales_missing_required_column_returns_profile_error(
     db_session: Session,
     imports_fixtures_dir: Path,
     test_business_unit: BusinessUnitModel,
+    upload_import_fixture,
 ) -> None:
     upload_response = upload_import_fixture(
-        client,
         business_unit_id=test_business_unit.id,
         import_type="pos_sales",
         file_path=imports_fixtures_dir / "sample_pos_sales_missing_required_column.csv",
@@ -190,13 +183,51 @@ def test_parse_pos_sales_missing_required_column_returns_profile_error(
     assert "gross_amount" in stored_error.message
 
 
+def test_parse_pos_sales_normalizes_whitespace_and_empty_values(
+    client: TestClient,
+    db_session: Session,
+    imports_fixtures_dir: Path,
+    test_business_unit: BusinessUnitModel,
+    upload_import_fixture,
+) -> None:
+    upload_response = upload_import_fixture(
+        business_unit_id=test_business_unit.id,
+        import_type="pos_sales",
+        file_path=imports_fixtures_dir / "sample_pos_sales_whitespace_values.csv",
+    )
+    batch_id = upload_response.json()["id"]
+
+    parse_response = client.post(f"{API_PREFIX}/batches/{batch_id}/parse")
+
+    assert parse_response.status_code == 200
+    payload = parse_response.json()
+    assert payload["status"] == "parsed"
+    assert payload["parsed_rows"] == 1
+
+    db_session.expire_all()
+    stored_row = db_session.scalar(
+        select(ImportRowModel)
+        .where(ImportRowModel.batch_id == UUID(batch_id))
+        .order_by(ImportRowModel.row_number.asc())
+    )
+    assert stored_row is not None
+    assert stored_row.normalized_payload == {
+        "date": "2026-04-22",
+        "receipt_no": None,
+        "product_name": "Latte Macchiato",
+        "quantity": 2,
+        "gross_amount": 1890,
+        "payment_method": "card",
+    }
+
+
 def test_rows_endpoint_returns_staging_rows(
     client: TestClient,
     imports_fixtures_dir: Path,
     test_business_unit: BusinessUnitModel,
+    upload_import_fixture,
 ) -> None:
     upload_response = upload_import_fixture(
-        client,
         business_unit_id=test_business_unit.id,
         import_type="pos_sales",
         file_path=imports_fixtures_dir / "sample_pos_sales_clean.csv",
@@ -218,9 +249,9 @@ def test_errors_endpoint_returns_parse_errors(
     client: TestClient,
     imports_fixtures_dir: Path,
     test_business_unit: BusinessUnitModel,
+    upload_import_fixture,
 ) -> None:
     upload_response = upload_import_fixture(
-        client,
         business_unit_id=test_business_unit.id,
         import_type="pos_sales",
         file_path=imports_fixtures_dir / "sample_pos_sales_with_issues.csv",
@@ -241,9 +272,9 @@ def test_reparse_of_non_uploaded_batch_returns_conflict(
     client: TestClient,
     imports_fixtures_dir: Path,
     test_business_unit: BusinessUnitModel,
+    upload_import_fixture,
 ) -> None:
     upload_response = upload_import_fixture(
-        client,
         business_unit_id=test_business_unit.id,
         import_type="pos_sales",
         file_path=imports_fixtures_dir / "sample_pos_sales_clean.csv",

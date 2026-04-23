@@ -1,4 +1,6 @@
 # BizTracker Database Schema and Alembic Migration Plan
+Current status:
+- [CURRENT_STATUS.md](C:\BizTracker\docs\CURRENT_STATUS.md)
 
 Ez a dokumentum az első adatbázis-séma és Alembic migration stratégiát rögzíti. A cél, hogy a sémát ne egyszerre, túl nagy csomagokban vezessük be, hanem modulárisan, jól áttekinthető migration hullámokban.
 
@@ -386,4 +388,3 @@ E dokumentum után a legjobb következő technikai lépés:
 - az első 7 Alembic revision backlogjának konkrét kidolgozása
 - a hozzájuk tartozó ORM modellek első verziójának megtervezése
 - a `core master data` és `identity` API contract rögzítése
-

@@ -13,6 +13,13 @@ from app.modules.imports.application.commands.parse_import_batch import (
     ImportBatchStateError,
     ParseImportBatchCommand,
 )
+from app.modules.finance.application.commands.map_pos_sales_batch_to_transactions import (
+    FinancialTransactionMappingResult,
+    ImportBatchMappingStateError,
+    ImportBatchMappingValueError,
+    ImportBatchNotFoundError as ImportBatchMappingNotFoundError,
+    MapPosSalesBatchToTransactionsCommand,
+)
 from app.modules.imports.application.commands.upload_import_file import (
     UploadImportFileCommand,
 )
@@ -31,10 +38,12 @@ from app.modules.imports.presentation.dependencies import (
     get_list_import_batches_query,
     get_list_import_errors_query,
     get_list_import_rows_query,
+    get_map_pos_sales_batch_to_transactions_command,
     get_parse_import_batch_command,
     get_upload_import_file_command,
 )
 from app.modules.imports.presentation.schemas.import_batch import (
+    FinancialTransactionMappingResponse,
     ImportBatchResponse,
     ImportRowErrorResponse,
     ImportRowResponse,
@@ -122,3 +131,31 @@ def parse_import_batch(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
     return ImportBatchResponse.model_validate(batch)
+
+
+@router.post(
+    "/batches/{batch_id}/map/financial-transactions",
+    response_model=FinancialTransactionMappingResponse,
+)
+def map_batch_to_financial_transactions(
+    batch_id: uuid.UUID,
+    command: Annotated[
+        MapPosSalesBatchToTransactionsCommand,
+        Depends(get_map_pos_sales_batch_to_transactions_command),
+    ],
+) -> FinancialTransactionMappingResponse:
+    """Create finance transactions from a parsed pos_sales import batch."""
+
+    try:
+        result: FinancialTransactionMappingResult = command.execute(batch_id=batch_id)
+    except ImportBatchMappingNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ImportBatchMappingStateError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except ImportBatchMappingValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+
+    return FinancialTransactionMappingResponse.model_validate(result)

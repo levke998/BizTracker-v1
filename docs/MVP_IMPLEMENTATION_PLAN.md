@@ -1,4 +1,6 @@
 # BizTracker MVP Implementation Plan
+Current status:
+- [CURRENT_STATUS.md](C:\BizTracker\docs\CURRENT_STATUS.md)
 
 Ez a dokumentum a BizTracker MVP fejlesztési sorrendjét rögzíti. A cél egy reális, fokozatos implementációs terv, amely clean architecture és SOLID elvek mentén halad, de nem próbál meg túl sokat lefedni az első verzióban.
 
@@ -401,4 +403,3 @@ A jelen dokumentum után érdemes elkészíteni:
 - az első Alembic migration backlogot konkrét táblalistával
 - az első sprint use case bontását
 - az első API contract vázat
-

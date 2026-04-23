@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.modules.inventory.infrastructure.orm.inventory_item_model import InventoryItemModel
 from app.modules.master_data.infrastructure.orm.business_unit_model import (
     BusinessUnitModel,
 )
@@ -53,6 +54,81 @@ LOCATIONS = (
     },
 )
 
+INVENTORY_ITEMS = (
+    {
+        "business_unit_code": "gourmand",
+        "name": "Flour",
+        "item_type": "raw_material",
+        "uom_code": "kg",
+        "track_stock": True,
+        "is_active": True,
+    },
+    {
+        "business_unit_code": "gourmand",
+        "name": "Butter",
+        "item_type": "raw_material",
+        "uom_code": "kg",
+        "track_stock": True,
+        "is_active": True,
+    },
+    {
+        "business_unit_code": "gourmand",
+        "name": "Cake Box",
+        "item_type": "packaging",
+        "uom_code": "pcs",
+        "track_stock": True,
+        "is_active": True,
+    },
+    {
+        "business_unit_code": "gourmand",
+        "name": "Croissant",
+        "item_type": "finished_good",
+        "uom_code": "pcs",
+        "track_stock": True,
+        "is_active": True,
+    },
+    {
+        "business_unit_code": "gourmand",
+        "name": "Macaron",
+        "item_type": "finished_good",
+        "uom_code": "pcs",
+        "track_stock": True,
+        "is_active": True,
+    },
+    {
+        "business_unit_code": "flow",
+        "name": "Draft Beer",
+        "item_type": "finished_good",
+        "uom_code": "l",
+        "track_stock": True,
+        "is_active": True,
+    },
+    {
+        "business_unit_code": "flow",
+        "name": "Wine Bottle",
+        "item_type": "finished_good",
+        "uom_code": "pcs",
+        "track_stock": True,
+        "is_active": True,
+    },
+    {
+        "business_unit_code": "flow",
+        "name": "Soft Drink Syrup",
+        "item_type": "raw_material",
+        "uom_code": "l",
+        "track_stock": True,
+        "is_active": True,
+    },
+    {
+        "business_unit_code": "flow",
+        "name": "Plastic Cup",
+        "item_type": "packaging",
+        "uom_code": "pcs",
+        "track_stock": True,
+        "is_active": True,
+    },
+)
+
 
 @dataclass(frozen=True, slots=True)
 class BootstrapSummary:
@@ -81,6 +157,11 @@ def bootstrap_reference_data(session: Session) -> BootstrapSummary:
 
         for payload in LOCATIONS:
             created, updated = _upsert_location(session, payload)
+            created_count += int(created)
+            updated_count += int(updated)
+
+        for payload in INVENTORY_ITEMS:
+            created, updated = _upsert_inventory_item(session, payload)
             created_count += int(created)
             updated_count += int(updated)
 
@@ -166,6 +247,64 @@ def _upsert_location(
     changed = False
     for field in ("kind", "is_active"):
         value = payload[field]
+        if getattr(model, field) != value:
+            setattr(model, field, value)
+            changed = True
+
+    return False, changed
+
+
+def _upsert_inventory_item(
+    session: Session,
+    payload: dict[str, str | bool],
+) -> tuple[bool, bool]:
+    business_unit = session.scalar(
+        select(BusinessUnitModel).where(
+            BusinessUnitModel.code == payload["business_unit_code"]
+        )
+    )
+    if business_unit is None:
+        raise RuntimeError(
+            "Cannot create bootstrap inventory item because business unit "
+            f"{payload['business_unit_code']!r} does not exist."
+        )
+
+    unit_of_measure = session.scalar(
+        select(UnitOfMeasureModel).where(UnitOfMeasureModel.code == payload["uom_code"])
+    )
+    if unit_of_measure is None:
+        raise RuntimeError(
+            "Cannot create bootstrap inventory item because unit of measure "
+            f"{payload['uom_code']!r} does not exist."
+        )
+
+    model = session.scalar(
+        select(InventoryItemModel).where(
+            InventoryItemModel.business_unit_id == business_unit.id,
+            InventoryItemModel.name == payload["name"],
+        )
+    )
+    if model is None:
+        session.add(
+            InventoryItemModel(
+                business_unit_id=business_unit.id,
+                name=str(payload["name"]),
+                item_type=str(payload["item_type"]),
+                uom_id=unit_of_measure.id,
+                track_stock=bool(payload["track_stock"]),
+                is_active=bool(payload["is_active"]),
+            )
+        )
+        return True, False
+
+    changed = False
+    updates = {
+        "item_type": str(payload["item_type"]),
+        "uom_id": unit_of_measure.id,
+        "track_stock": bool(payload["track_stock"]),
+        "is_active": bool(payload["is_active"]),
+    }
+    for field, value in updates.items():
         if getattr(model, field) != value:
             setattr(model, field, value)
             changed = True

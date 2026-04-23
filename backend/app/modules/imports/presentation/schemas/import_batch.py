@@ -60,3 +60,12 @@ class ImportRowErrorResponse(ImportSchemaBase):
     error_code: str
     message: str
     raw_payload: dict[str, Any] | None
+
+
+class FinancialTransactionMappingResponse(ImportSchemaBase):
+    """Small response schema for import-to-finance mapping results."""
+
+    batch_id: uuid.UUID
+    created_transactions: int
+    transaction_type: str
+    source_type: str

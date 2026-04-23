@@ -1,4 +1,6 @@
 # BizTracker Initial Structure
+Current status:
+- [CURRENT_STATUS.md](C:\BizTracker\docs\CURRENT_STATUS.md)
 
 Ez a dokumentum a jelenleg létrehozott induló mappa- és fájlszerkezetet rögzíti. A cél, hogy legyen egy közös, verziózható technikai alap, amelyre a fejlesztés ráépülhet.
 
@@ -9,6 +11,7 @@ BizTracker/
   PROJECT_DESCRIPTION.md
   docs/
     ARCHITECTURE.md
+    CURRENT_STATUS.md
     IDENTITY_CORE_MODEL_PLAN.md
     INITIAL_STRUCTURE.md
     MIGRATION_PLAN.md

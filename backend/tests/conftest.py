@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from collections.abc import Generator
+from datetime import datetime
 from pathlib import Path
+from decimal import Decimal
 from uuid import uuid4
 
 import pytest
@@ -12,6 +14,9 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.db.session import SessionLocal
+from app.modules.finance.infrastructure.orm.transaction_model import (
+    FinancialTransactionModel,
+)
 from app.main import app
 from app.modules.imports.infrastructure.orm.import_batch_model import ImportBatchModel
 from app.modules.imports.infrastructure.orm.import_file_model import ImportFileModel
@@ -19,9 +24,103 @@ from app.modules.imports.infrastructure.orm.import_row_error_model import (
     ImportRowErrorModel,
 )
 from app.modules.imports.infrastructure.orm.import_row_model import ImportRowModel
+from app.modules.inventory.infrastructure.orm.inventory_item_model import (
+    InventoryItemModel,
+)
 from app.modules.master_data.infrastructure.orm.business_unit_model import (
     BusinessUnitModel,
 )
+from app.modules.master_data.infrastructure.orm.unit_of_measure_model import (
+    UnitOfMeasureModel,
+)
+
+TEST_BUSINESS_UNIT_CODE = "test-integration"
+TEST_BUSINESS_UNIT_NAME = "Integration Test Unit"
+TEST_BUSINESS_UNIT_TYPE = "test"
+
+
+def _collect_import_file_paths(
+    db_session: Session,
+    *,
+    business_unit_ids: list,
+) -> list[Path]:
+    """Return uploaded file paths for the given business units."""
+
+    if not business_unit_ids:
+        return []
+
+    return [
+        Path(stored_path)
+        for stored_path, in db_session.execute(
+            select(ImportFileModel.stored_path)
+            .join(ImportBatchModel, ImportFileModel.batch_id == ImportBatchModel.id)
+            .where(ImportBatchModel.business_unit_id.in_(business_unit_ids))
+        ).all()
+    ]
+
+
+def _cleanup_business_unit_data(
+    db_session: Session,
+    *,
+    business_unit_ids: list,
+) -> list[Path]:
+    """Delete finance/import test data for the given business units."""
+
+    if not business_unit_ids:
+        return []
+
+    file_paths = _collect_import_file_paths(
+        db_session,
+        business_unit_ids=business_unit_ids,
+    )
+    batch_ids = [
+        batch_id
+        for batch_id, in db_session.execute(
+            select(ImportBatchModel.id).where(
+                ImportBatchModel.business_unit_id.in_(business_unit_ids)
+            )
+        ).all()
+    ]
+
+    db_session.execute(
+        delete(FinancialTransactionModel).where(
+            FinancialTransactionModel.business_unit_id.in_(business_unit_ids)
+        )
+    )
+    db_session.execute(
+        delete(InventoryItemModel).where(
+            InventoryItemModel.business_unit_id.in_(business_unit_ids)
+        )
+    )
+
+    if batch_ids:
+        db_session.execute(
+            delete(ImportRowErrorModel).where(ImportRowErrorModel.batch_id.in_(batch_ids))
+        )
+        db_session.execute(
+            delete(ImportRowModel).where(ImportRowModel.batch_id.in_(batch_ids))
+        )
+        db_session.execute(
+            delete(ImportFileModel).where(ImportFileModel.batch_id.in_(batch_ids))
+        )
+        db_session.execute(delete(ImportBatchModel).where(ImportBatchModel.id.in_(batch_ids)))
+
+    db_session.commit()
+    return file_paths
+
+
+def _delete_business_units(
+    db_session: Session,
+    *,
+    business_unit_ids: list,
+) -> None:
+    """Delete business units after their dependent test data is removed."""
+
+    if not business_unit_ids:
+        return
+
+    db_session.execute(delete(BusinessUnitModel).where(BusinessUnitModel.id.in_(business_unit_ids)))
+    db_session.commit()
 
 
 @pytest.fixture
@@ -52,58 +151,195 @@ def imports_fixtures_dir() -> Path:
 
 
 @pytest.fixture
-def test_business_unit(db_session: Session) -> Generator[BusinessUnitModel, None, None]:
-    """Create a dedicated business unit and clean all related import data after use."""
+def upload_import_fixture(client: TestClient):
+    """Return a small helper that uploads one CSV import fixture."""
 
-    business_unit = BusinessUnitModel(
-        code=f"test-{uuid4().hex[:8]}",
-        name="Integration Test Unit",
-        type="test",
-        is_active=True,
+    def _upload_import_fixture(
+        *,
+        business_unit_id,
+        import_type: str,
+        file_path: Path,
+    ):
+        with file_path.open("rb") as file_object:
+            response = client.post(
+                "/api/v1/imports/files",
+                data={
+                    "business_unit_id": str(business_unit_id),
+                    "import_type": import_type,
+                },
+                files={
+                    "file": (file_path.name, file_object, "text/csv"),
+                },
+            )
+
+        return response
+
+    return _upload_import_fixture
+
+
+@pytest.fixture
+def create_financial_transaction(db_session: Session):
+    """Create one finance transaction directly for read-side integration tests."""
+
+    def _create_financial_transaction(
+        *,
+        business_unit_id,
+        transaction_type: str,
+        source_type: str,
+        occurred_at: datetime,
+        amount: Decimal,
+        description: str,
+        direction: str = "inflow",
+        currency: str = "HUF",
+    ) -> FinancialTransactionModel:
+        transaction = FinancialTransactionModel(
+            business_unit_id=business_unit_id,
+            direction=direction,
+            transaction_type=transaction_type,
+            amount=amount,
+            currency=currency,
+            occurred_at=occurred_at,
+            description=description,
+            source_type=source_type,
+            source_id=uuid4(),
+        )
+        db_session.add(transaction)
+        db_session.commit()
+        db_session.refresh(transaction)
+        return transaction
+
+    return _create_financial_transaction
+
+
+@pytest.fixture
+def test_unit_of_measure(db_session: Session) -> Generator[UnitOfMeasureModel, None, None]:
+    """Create one temporary unit of measure for inventory tests."""
+
+    unit = UnitOfMeasureModel(
+        code=f"test-uom-{uuid4().hex[:8]}",
+        name="Test Unit Of Measure",
+        symbol="tu",
     )
-    db_session.add(business_unit)
+    db_session.add(unit)
     db_session.commit()
-    db_session.refresh(business_unit)
+    db_session.refresh(unit)
+
+    yield unit
+
+    db_session.rollback()
+    db_session.expire_all()
+    db_session.execute(delete(InventoryItemModel).where(InventoryItemModel.uom_id == unit.id))
+    db_session.execute(delete(UnitOfMeasureModel).where(UnitOfMeasureModel.id == unit.id))
+    db_session.commit()
+
+
+@pytest.fixture
+def create_inventory_item(db_session: Session):
+    """Create one inventory item directly for read-side integration tests."""
+
+    def _create_inventory_item(
+        *,
+        business_unit_id,
+        uom_id,
+        name: str,
+        item_type: str,
+        track_stock: bool = True,
+        is_active: bool = True,
+    ) -> InventoryItemModel:
+        item = InventoryItemModel(
+            business_unit_id=business_unit_id,
+            name=name,
+            item_type=item_type,
+            uom_id=uom_id,
+            track_stock=track_stock,
+            is_active=is_active,
+        )
+        db_session.add(item)
+        db_session.commit()
+        db_session.refresh(item)
+        return item
+
+    return _create_inventory_item
+
+
+@pytest.fixture
+def gourmand_business_unit(db_session: Session) -> BusinessUnitModel:
+    """Return the seeded Gourmand business unit."""
+
+    business_unit = db_session.scalar(
+        select(BusinessUnitModel).where(BusinessUnitModel.code == "gourmand")
+    )
+    if business_unit is None:
+        raise RuntimeError("Expected seeded 'gourmand' business unit to exist.")
+    return business_unit
+
+
+@pytest.fixture
+def pcs_unit_of_measure(db_session: Session) -> UnitOfMeasureModel:
+    """Return the seeded pcs unit of measure."""
+
+    unit = db_session.scalar(
+        select(UnitOfMeasureModel).where(UnitOfMeasureModel.code == "pcs")
+    )
+    if unit is None:
+        raise RuntimeError("Expected seeded 'pcs' unit of measure to exist.")
+    return unit
+
+
+@pytest.fixture
+def test_business_unit(db_session: Session) -> Generator[BusinessUnitModel, None, None]:
+    """Return one stable shared test business unit and clean only its test data."""
+
+    business_unit = db_session.scalar(
+        select(BusinessUnitModel).where(BusinessUnitModel.code == TEST_BUSINESS_UNIT_CODE)
+    )
+    if business_unit is None:
+        business_unit = BusinessUnitModel(
+            code=TEST_BUSINESS_UNIT_CODE,
+            name=TEST_BUSINESS_UNIT_NAME,
+            type=TEST_BUSINESS_UNIT_TYPE,
+            is_active=True,
+        )
+        db_session.add(business_unit)
+        db_session.commit()
+        db_session.refresh(business_unit)
+
+    legacy_test_business_unit_ids = [
+        business_unit_id
+        for business_unit_id, in db_session.execute(
+            select(BusinessUnitModel.id)
+            .where(BusinessUnitModel.type == TEST_BUSINESS_UNIT_TYPE)
+            .where(BusinessUnitModel.code != TEST_BUSINESS_UNIT_CODE)
+        ).all()
+    ]
+
+    legacy_file_paths = _cleanup_business_unit_data(
+        db_session,
+        business_unit_ids=legacy_test_business_unit_ids,
+    )
+    _delete_business_units(
+        db_session,
+        business_unit_ids=legacy_test_business_unit_ids,
+    )
+
+    current_file_paths = _cleanup_business_unit_data(
+        db_session,
+        business_unit_ids=[business_unit.id],
+    )
+
+    for file_path in [*legacy_file_paths, *current_file_paths]:
+        if file_path.exists():
+            file_path.unlink()
 
     yield business_unit
 
     db_session.rollback()
     db_session.expire_all()
 
-    file_paths = [
-        Path(stored_path)
-        for stored_path, in db_session.execute(
-            select(ImportFileModel.stored_path)
-            .join(ImportBatchModel, ImportFileModel.batch_id == ImportBatchModel.id)
-            .where(ImportBatchModel.business_unit_id == business_unit.id)
-        ).all()
-    ]
-    batch_ids = [
-        batch_id
-        for batch_id, in db_session.execute(
-            select(ImportBatchModel.id).where(
-                ImportBatchModel.business_unit_id == business_unit.id
-            )
-        ).all()
-    ]
-
-    if batch_ids:
-        db_session.execute(
-            delete(ImportRowErrorModel).where(ImportRowErrorModel.batch_id.in_(batch_ids))
-        )
-        db_session.execute(
-            delete(ImportRowModel).where(ImportRowModel.batch_id.in_(batch_ids))
-        )
-        db_session.execute(
-            delete(ImportFileModel).where(ImportFileModel.batch_id.in_(batch_ids))
-        )
-        db_session.execute(delete(ImportBatchModel).where(ImportBatchModel.id.in_(batch_ids)))
-
-    db_session.execute(
-        delete(BusinessUnitModel).where(BusinessUnitModel.id == business_unit.id)
+    file_paths = _cleanup_business_unit_data(
+        db_session,
+        business_unit_ids=[business_unit.id],
     )
-    db_session.commit()
-
     for file_path in file_paths:
         if file_path.exists():
             file_path.unlink()

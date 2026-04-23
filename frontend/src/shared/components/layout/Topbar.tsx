@@ -3,6 +3,14 @@ import { useLocation } from "react-router-dom";
 import { routes } from "../../constants/routes";
 
 function getTitle(pathname: string) {
+  if (pathname.startsWith(routes.finance)) {
+    return "Finance Transactions";
+  }
+
+  if (pathname.startsWith(routes.inventory)) {
+    return "Inventory Items";
+  }
+
   if (pathname.startsWith(routes.imports)) {
     return "Import Center";
   }

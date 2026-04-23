@@ -1,4 +1,6 @@
 # BizTracker Architecture
+Current status:
+- [CURRENT_STATUS.md](C:\BizTracker\docs\CURRENT_STATUS.md)
 
 Ez a dokumentum a BizTracker induló projektarchitektúráját rögzíti. A cél egy olyan stabil, moduláris alap kialakítása, amely alkalmas valós üzleti működés támogatására, de nem overengineerelt.
 

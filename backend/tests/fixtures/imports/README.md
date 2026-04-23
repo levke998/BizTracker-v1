@@ -6,6 +6,7 @@ Files:
 - `sample_pos_sales_clean.csv`: well-formed CSV with parsed rows only
 - `sample_pos_sales_with_issues.csv`: includes an empty row and an extra-column row to exercise `skipped` and `error` staging
 - `sample_pos_sales_missing_required_column.csv`: missing one required `pos_sales` column to exercise profile-level header validation
+- `sample_pos_sales_whitespace_values.csv`: whitespace-heavy row to exercise light field normalization
 
 Use them with the import upload endpoint:
 

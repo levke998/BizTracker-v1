@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,6 +51,62 @@ class PosSalesImportProfile:
                 "missing_headers": missing_headers,
             },
         )
+
+    def normalize_row(self, *, raw_payload: dict[str, Any]) -> dict[str, Any]:
+        """Apply light field-level normalization for later mapping steps."""
+
+        return {
+            "date": self._normalize_text(raw_payload.get("date")),
+            "receipt_no": self._normalize_text(raw_payload.get("receipt_no")),
+            "product_name": self._normalize_text(raw_payload.get("product_name")),
+            "quantity": self._normalize_number(raw_payload.get("quantity")),
+            "gross_amount": self._normalize_number(raw_payload.get("gross_amount")),
+            "payment_method": self._normalize_payment_method(
+                raw_payload.get("payment_method")
+            ),
+        }
+
+    @staticmethod
+    def _normalize_text(value: Any) -> str | None:
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            return str(value)
+
+        normalized = value.strip()
+        return normalized or None
+
+    def _normalize_payment_method(self, value: Any) -> str | None:
+        normalized = self._normalize_text(value)
+        if normalized is None:
+            return None
+        return normalized.lower()
+
+    @staticmethod
+    def _normalize_number(value: Any) -> int | float | str | None:
+        if value is None:
+            return None
+
+        if isinstance(value, (int, float)):
+            return value
+
+        if not isinstance(value, str):
+            return value
+
+        normalized = value.strip()
+        if not normalized:
+            return None
+
+        compact = normalized.replace(" ", "").replace(",", ".")
+
+        try:
+            numeric = float(compact)
+        except ValueError:
+            return normalized
+
+        if numeric.is_integer():
+            return int(numeric)
+        return numeric
 
 
 PROFILE_REGISTRY = {
