@@ -40,7 +40,7 @@ class SqlAlchemyImportBatchRepository:
         mime_type: str | None,
         size_bytes: int,
     ) -> ImportBatch:
-        with self._session.begin():
+        try:
             batch = ImportBatchModel(
                 business_unit_id=business_unit_id,
                 import_type=import_type,
@@ -60,6 +60,10 @@ class SqlAlchemyImportBatchRepository:
             self._session.flush()
 
             self._session.refresh(batch)
+            self._session.commit()
+        except Exception:
+            self._session.rollback()
+            raise
 
         statement: Select[tuple[ImportBatchModel]] = (
             select(ImportBatchModel)
@@ -143,7 +147,7 @@ class SqlAlchemyImportBatchRepository:
         ]
 
     def mark_parsing(self, batch_id: uuid.UUID) -> ImportBatch:
-        with self._session.begin():
+        try:
             batch = self._session.get(ImportBatchModel, batch_id)
             if batch is None:
                 raise ValueError(f"Import batch {batch_id} was not found.")
@@ -154,6 +158,10 @@ class SqlAlchemyImportBatchRepository:
             batch.total_rows = 0
             batch.parsed_rows = 0
             batch.error_rows = 0
+            self._session.commit()
+        except Exception:
+            self._session.rollback()
+            raise
 
         return self.get_batch(batch_id)  # type: ignore[return-value]
 
@@ -167,7 +175,7 @@ class SqlAlchemyImportBatchRepository:
         parsed_rows: int,
         error_rows: int,
     ) -> ImportBatch:
-        with self._session.begin():
+        try:
             batch = self._session.get(ImportBatchModel, batch_id)
             if batch is None:
                 raise ValueError(f"Import batch {batch_id} was not found.")
@@ -213,6 +221,10 @@ class SqlAlchemyImportBatchRepository:
             batch.total_rows = total_rows
             batch.parsed_rows = parsed_rows
             batch.error_rows = error_rows
+            self._session.commit()
+        except Exception:
+            self._session.rollback()
+            raise
 
         return self.get_batch(batch_id)  # type: ignore[return-value]
 
@@ -225,7 +237,7 @@ class SqlAlchemyImportBatchRepository:
         parsed_rows: int,
         error_rows: int,
     ) -> ImportBatch:
-        with self._session.begin():
+        try:
             batch = self._session.get(ImportBatchModel, batch_id)
             if batch is None:
                 raise ValueError(f"Import batch {batch_id} was not found.")
@@ -254,6 +266,10 @@ class SqlAlchemyImportBatchRepository:
             batch.total_rows = total_rows
             batch.parsed_rows = parsed_rows
             batch.error_rows = error_rows
+            self._session.commit()
+        except Exception:
+            self._session.rollback()
+            raise
 
         return self.get_batch(batch_id)  # type: ignore[return-value]
 

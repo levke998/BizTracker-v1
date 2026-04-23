@@ -69,6 +69,7 @@ class ParseImportBatchCommand:
                 result = self._parser.parse(
                     file_id=import_file.id,
                     file_path=import_file.stored_path,
+                    import_type=batch.import_type,
                 )
                 rows.extend(result.rows)
                 errors.extend(result.errors)

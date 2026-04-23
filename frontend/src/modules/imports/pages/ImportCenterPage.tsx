@@ -1,7 +1,7 @@
 import { Fragment, useRef, type FormEvent } from "react";
 
 import { useImportBatches } from "../hooks/useImportBatches";
-import type { ImportErrorPreview, ImportRowPreview } from "../types/imports";
+import type { ImportBatch, ImportErrorPreview, ImportRowPreview } from "../types/imports";
 
 function formatDateTime(value: string) {
   return new Intl.DateTimeFormat("hu-HU", {
@@ -33,9 +33,56 @@ function renderPayload(payload: Record<string, unknown> | null) {
   return <pre className="json-preview">{JSON.stringify(payload, null, 2)}</pre>;
 }
 
+function SummaryPreview({ batch }: { batch: ImportBatch }) {
+  const file = batch.files[0];
+
+  return (
+    <div className="summary-grid">
+      <div className="summary-item">
+        <span className="summary-label">Import type</span>
+        <strong>{batch.import_type}</strong>
+      </div>
+      <div className="summary-item">
+        <span className="summary-label">Status</span>
+        <strong>{batch.status}</strong>
+      </div>
+      <div className="summary-item">
+        <span className="summary-label">Created at</span>
+        <strong>{formatDateTime(batch.created_at)}</strong>
+      </div>
+      <div className="summary-item">
+        <span className="summary-label">Started at</span>
+        <strong>{formatDateTime(batch.started_at)}</strong>
+      </div>
+      <div className="summary-item">
+        <span className="summary-label">Finished at</span>
+        <strong>{batch.finished_at ? formatDateTime(batch.finished_at) : "-"}</strong>
+      </div>
+      <div className="summary-item">
+        <span className="summary-label">File</span>
+        <strong>{file?.original_name ?? "-"}</strong>
+      </div>
+      <div className="summary-item">
+        <span className="summary-label">Uploaded at</span>
+        <strong>{file ? formatDateTime(file.uploaded_at) : "-"}</strong>
+      </div>
+      <div className="summary-item">
+        <span className="summary-label">File size</span>
+        <strong>{file ? formatBytes(file.size_bytes) : "-"}</strong>
+      </div>
+      <div className="summary-item">
+        <span className="summary-label">Counters</span>
+        <strong>
+          {batch.total_rows} / {batch.parsed_rows} / {batch.error_rows}
+        </strong>
+      </div>
+    </div>
+  );
+}
+
 function RowsPreview({ rows }: { rows: ImportRowPreview[] }) {
   if (rows.length === 0) {
-    return <p className="empty-message">Nincs megjeleníthető staging sor.</p>;
+    return <p className="empty-message">Nincs megjelenitheto staging sor.</p>;
   }
 
   return (
@@ -66,7 +113,7 @@ function RowsPreview({ rows }: { rows: ImportRowPreview[] }) {
 
 function ErrorsPreview({ errors }: { errors: ImportErrorPreview[] }) {
   if (errors.length === 0) {
-    return <p className="empty-message">Nincs tárolt parse hiba.</p>;
+    return <p className="empty-message">Nincs tarolt parse hiba.</p>;
   }
 
   return (
@@ -227,7 +274,7 @@ export function ImportCenterPage() {
 
                   return (
                     <Fragment key={batch.id}>
-                      <tr key={batch.id}>
+                      <tr>
                         <td>{batch.import_type}</td>
                         <td>
                           <span className={`status-badge status-${batch.status}`}>
@@ -259,7 +306,7 @@ export function ImportCenterPage() {
                               className="secondary-button"
                               onClick={() => void toggleBatchDetails(batch.id)}
                             >
-                              {isExpanded ? "Részletek elrejtése" : "Részletek"}
+                              {isExpanded ? "Hide details" : "Details"}
                             </button>
                           </div>
                         </td>
@@ -269,6 +316,13 @@ export function ImportCenterPage() {
                         <tr className="details-row">
                           <td colSpan={7}>
                             <div className="details-grid">
+                              <section className="details-panel details-panel-wide">
+                                <div className="details-panel-header">
+                                  <h3>Overview</h3>
+                                </div>
+                                <SummaryPreview batch={batch} />
+                              </section>
+
                               <section className="details-panel">
                                 <div className="details-panel-header">
                                   <h3>Sorok</h3>
@@ -277,7 +331,7 @@ export function ImportCenterPage() {
                                   </span>
                                 </div>
                                 {isDetailsLoading ? (
-                                  <p className="info-message">Részletek betöltése...</p>
+                                  <p className="info-message">Reszletek betoltese...</p>
                                 ) : null}
                                 {!isDetailsLoading && detailsError ? (
                                   <p className="error-message">{detailsError}</p>
@@ -289,13 +343,13 @@ export function ImportCenterPage() {
 
                               <section className="details-panel">
                                 <div className="details-panel-header">
-                                  <h3>Hibák</h3>
+                                  <h3>Hibak</h3>
                                   <span className="panel-count">
                                     {details?.errors.length ?? 0}
                                   </span>
                                 </div>
                                 {isDetailsLoading ? (
-                                  <p className="info-message">Részletek betöltése...</p>
+                                  <p className="info-message">Reszletek betoltese...</p>
                                 ) : null}
                                 {!isDetailsLoading && detailsError ? (
                                   <p className="error-message">{detailsError}</p>

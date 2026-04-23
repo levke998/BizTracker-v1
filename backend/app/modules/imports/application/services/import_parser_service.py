@@ -8,6 +8,9 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from app.modules.imports.application.services.import_profiles import (
+    get_import_profile,
+)
 from app.modules.imports.domain.entities.import_batch import (
     NewImportRow,
     NewImportRowError,
@@ -18,7 +21,13 @@ from app.modules.imports.domain.entities.import_batch import (
 class CsvImportParser:
     """Parse one stored CSV file into staging rows and parse errors."""
 
-    def parse(self, *, file_id: uuid.UUID, file_path: str) -> ParsedImportFileResult:
+    def parse(
+        self,
+        *,
+        file_id: uuid.UUID,
+        file_path: str,
+        import_type: str,
+    ) -> ParsedImportFileResult:
         path = Path(file_path)
         try:
             with path.open("r", encoding="utf-8", newline="") as file_object:
@@ -49,6 +58,19 @@ class CsvImportParser:
                             "normalized_headers": normalized_headers,
                         },
                     )
+
+                profile = get_import_profile(import_type)
+                if profile is not None:
+                    validation_error = profile.validate_headers(
+                        normalized_headers=normalized_headers
+                    )
+                    if validation_error is not None:
+                        return self._file_error_result(
+                            file_id=file_id,
+                            error_code=validation_error.error_code,
+                            message=validation_error.message,
+                            raw_payload=validation_error.raw_payload,
+                        )
 
                 dict_reader = csv.DictReader(file_object, fieldnames=normalized_headers)
                 rows: list[NewImportRow] = []

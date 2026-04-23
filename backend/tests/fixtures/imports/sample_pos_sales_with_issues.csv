@@ -1,0 +1,5 @@
+Date,Receipt No,Product Name,Quantity,Gross Amount,Payment Method
+2026-04-22,RCPT-2001,Latte,1,890,card
+
+2026-04-22,RCPT-2002,Cheesecake Slice,2,2400,cash,unexpected_extra_value
+2026-04-22,RCPT-2003,Tea,1,650,card

@@ -1,0 +1,5 @@
+Date,Receipt No,Product Name,Quantity,Gross Amount,Payment Method
+2026-04-22,RCPT-1001,Croissant,2,1200,cash
+2026-04-22,RCPT-1002,Espresso,1,750,card
+2026-04-22,RCPT-1003,Macaron Box,1,3200,cash
+2026-04-22,RCPT-1004,Bagel,3,2100,card
