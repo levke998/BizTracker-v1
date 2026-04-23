@@ -2,11 +2,18 @@ import { useEffect, useMemo, useState } from "react";
 
 import { listBusinessUnits } from "../../masterData/api/masterDataApi";
 import {
+  getImportErrors,
+  getImportRows,
   listImportBatches,
   parseImportBatch,
   uploadImportFile,
 } from "../api/importsApi";
-import type { ImportBatch, UploadImportFilePayload } from "../types/imports";
+import type {
+  ImportBatch,
+  ImportErrorPreview,
+  ImportRowPreview,
+  UploadImportFilePayload,
+} from "../types/imports";
 import type { BusinessUnit } from "../../masterData/types/masterData";
 
 const DEFAULT_IMPORT_TYPES = [
@@ -15,6 +22,11 @@ const DEFAULT_IMPORT_TYPES = [
   "ticket_sales",
   "bar_sales",
 ];
+
+type BatchDetails = {
+  rows: ImportRowPreview[];
+  errors: ImportErrorPreview[];
+};
 
 type ImportCenterState = {
   businessUnits: BusinessUnit[];
@@ -27,10 +39,15 @@ type ImportCenterState = {
   isLoading: boolean;
   isUploading: boolean;
   parsingBatchId: string;
+  expandedBatchIds: Record<string, boolean>;
+  detailsByBatchId: Record<string, BatchDetails | undefined>;
+  detailLoadingByBatchId: Record<string, boolean>;
+  detailErrorByBatchId: Record<string, string>;
   errorMessage: string;
   successMessage: string;
   uploadFile: (file: File | null) => Promise<void>;
   parseBatch: (batchId: string) => Promise<void>;
+  toggleBatchDetails: (batchId: string) => Promise<void>;
   refresh: () => Promise<void>;
 };
 
@@ -42,6 +59,16 @@ export function useImportBatches(): ImportCenterState {
   const [isLoading, setIsLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
   const [parsingBatchId, setParsingBatchId] = useState("");
+  const [expandedBatchIds, setExpandedBatchIds] = useState<Record<string, boolean>>({});
+  const [detailsByBatchId, setDetailsByBatchId] = useState<
+    Record<string, BatchDetails | undefined>
+  >({});
+  const [detailLoadingByBatchId, setDetailLoadingByBatchId] = useState<
+    Record<string, boolean>
+  >({});
+  const [detailErrorByBatchId, setDetailErrorByBatchId] = useState<
+    Record<string, string>
+  >({});
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
 
@@ -98,6 +125,33 @@ export function useImportBatches(): ImportCenterState {
     }
   }
 
+  async function loadBatchDetails(batchId: string) {
+    setDetailLoadingByBatchId((current) => ({ ...current, [batchId]: true }));
+    setDetailErrorByBatchId((current) => ({ ...current, [batchId]: "" }));
+
+    try {
+      const [rows, errors] = await Promise.all([
+        getImportRows(batchId),
+        getImportErrors(batchId),
+      ]);
+
+      setDetailsByBatchId((current) => ({
+        ...current,
+        [batchId]: { rows, errors },
+      }));
+    } catch (error) {
+      setDetailErrorByBatchId((current) => ({
+        ...current,
+        [batchId]:
+          error instanceof Error
+            ? error.message
+            : "Failed to load batch details.",
+      }));
+    } finally {
+      setDetailLoadingByBatchId((current) => ({ ...current, [batchId]: false }));
+    }
+  }
+
   useEffect(() => {
     void refresh();
   }, [selectedBusinessUnitId]);
@@ -144,13 +198,33 @@ export function useImportBatches(): ImportCenterState {
     try {
       await parseImportBatch(batchId);
       setSuccessMessage("Batch parsed successfully.");
+      setDetailsByBatchId((current) => ({ ...current, [batchId]: undefined }));
+      setDetailErrorByBatchId((current) => ({ ...current, [batchId]: "" }));
       await refresh();
+
+      if (expandedBatchIds[batchId]) {
+        await loadBatchDetails(batchId);
+      }
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : "Failed to parse import batch.",
       );
     } finally {
       setParsingBatchId("");
+    }
+  }
+
+  async function toggleBatchDetails(batchId: string) {
+    const isExpanded = expandedBatchIds[batchId] ?? false;
+    if (isExpanded) {
+      setExpandedBatchIds((current) => ({ ...current, [batchId]: false }));
+      return;
+    }
+
+    setExpandedBatchIds((current) => ({ ...current, [batchId]: true }));
+
+    if (!detailsByBatchId[batchId] && !detailLoadingByBatchId[batchId]) {
+      await loadBatchDetails(batchId);
     }
   }
 
@@ -165,10 +239,15 @@ export function useImportBatches(): ImportCenterState {
     isLoading,
     isUploading,
     parsingBatchId,
+    expandedBatchIds,
+    detailsByBatchId,
+    detailLoadingByBatchId,
+    detailErrorByBatchId,
     errorMessage,
     successMessage,
     uploadFile,
     parseBatch,
+    toggleBatchDetails,
     refresh,
   };
 }

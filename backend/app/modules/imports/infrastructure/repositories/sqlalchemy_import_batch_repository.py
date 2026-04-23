@@ -84,6 +84,64 @@ class SqlAlchemyImportBatchRepository:
             return None
         return self._to_entity(model)
 
+    def list_rows(
+        self,
+        *,
+        batch_id: uuid.UUID,
+        limit: int = 20,
+    ) -> list[ImportRow]:
+        statement: Select[tuple[ImportRowModel]] = (
+            select(ImportRowModel)
+            .where(ImportRowModel.batch_id == batch_id)
+            .order_by(ImportRowModel.row_number.asc())
+            .limit(limit)
+        )
+        items = self._session.scalars(statement).all()
+        return [
+            ImportRow(
+                id=row.id,
+                batch_id=row.batch_id,
+                file_id=row.file_id,
+                row_number=row.row_number,
+                raw_payload=row.raw_payload,
+                normalized_payload=row.normalized_payload,
+                parse_status=row.parse_status,
+                created_at=row.created_at,
+            )
+            for row in items
+        ]
+
+    def list_errors(
+        self,
+        *,
+        batch_id: uuid.UUID,
+        limit: int = 20,
+    ) -> list[ImportRowError]:
+        statement: Select[tuple[ImportRowErrorModel]] = (
+            select(ImportRowErrorModel)
+            .where(ImportRowErrorModel.batch_id == batch_id)
+            .order_by(
+                ImportRowErrorModel.row_number.asc().nulls_last(),
+                ImportRowErrorModel.created_at.asc(),
+            )
+            .limit(limit)
+        )
+        items = self._session.scalars(statement).all()
+        return [
+            ImportRowError(
+                id=error.id,
+                batch_id=error.batch_id,
+                file_id=error.file_id,
+                row_number=error.row_number,
+                field_name=error.field_name,
+                error_code=error.error_code,
+                message=error.message,
+                raw_payload=error.raw_payload,
+                created_at=error.created_at,
+            )
+            for error in items
+        ]
+
     def mark_parsing(self, batch_id: uuid.UUID) -> ImportBatch:
         with self._session.begin():
             batch = self._session.get(ImportBatchModel, batch_id)

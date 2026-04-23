@@ -1,6 +1,7 @@
-import { useRef, type FormEvent } from "react";
+import { Fragment, useRef, type FormEvent } from "react";
 
 import { useImportBatches } from "../hooks/useImportBatches";
+import type { ImportErrorPreview, ImportRowPreview } from "../types/imports";
 
 function formatDateTime(value: string) {
   return new Intl.DateTimeFormat("hu-HU", {
@@ -24,6 +25,76 @@ function formatBytes(value: number) {
   return `${(value / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function renderPayload(payload: Record<string, unknown> | null) {
+  if (!payload) {
+    return "-";
+  }
+
+  return <pre className="json-preview">{JSON.stringify(payload, null, 2)}</pre>;
+}
+
+function RowsPreview({ rows }: { rows: ImportRowPreview[] }) {
+  if (rows.length === 0) {
+    return <p className="empty-message">Nincs megjeleníthető staging sor.</p>;
+  }
+
+  return (
+    <div className="table-wrap">
+      <table className="data-table details-table">
+        <thead>
+          <tr>
+            <th>Row</th>
+            <th>Status</th>
+            <th>Raw payload</th>
+            <th>Normalized payload</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={`${row.row_number}-${row.parse_status}`}>
+              <td>{row.row_number}</td>
+              <td>{row.parse_status}</td>
+              <td>{renderPayload(row.raw_payload)}</td>
+              <td>{renderPayload(row.normalized_payload)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function ErrorsPreview({ errors }: { errors: ImportErrorPreview[] }) {
+  if (errors.length === 0) {
+    return <p className="empty-message">Nincs tárolt parse hiba.</p>;
+  }
+
+  return (
+    <div className="table-wrap">
+      <table className="data-table details-table">
+        <thead>
+          <tr>
+            <th>Row</th>
+            <th>Error code</th>
+            <th>Message</th>
+            <th>Raw payload</th>
+          </tr>
+        </thead>
+        <tbody>
+          {errors.map((error, index) => (
+            <tr key={`${error.error_code}-${error.row_number ?? "na"}-${index}`}>
+              <td>{error.row_number ?? "-"}</td>
+              <td>{error.error_code}</td>
+              <td>{error.message}</td>
+              <td>{renderPayload(error.raw_payload)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export function ImportCenterPage() {
   const {
     businessUnits,
@@ -36,10 +107,15 @@ export function ImportCenterPage() {
     isLoading,
     isUploading,
     parsingBatchId,
+    expandedBatchIds,
+    detailsByBatchId,
+    detailLoadingByBatchId,
+    detailErrorByBatchId,
     errorMessage,
     successMessage,
     uploadFile,
     parseBatch,
+    toggleBatchDetails,
   } = useImportBatches();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -144,36 +220,95 @@ export function ImportCenterPage() {
                   const file = batch.files[0];
                   const isUploaded = batch.status === "uploaded";
                   const isParsing = parsingBatchId === batch.id;
+                  const isExpanded = expandedBatchIds[batch.id] ?? false;
+                  const isDetailsLoading = detailLoadingByBatchId[batch.id] ?? false;
+                  const details = detailsByBatchId[batch.id];
+                  const detailsError = detailErrorByBatchId[batch.id];
 
                   return (
-                    <tr key={batch.id}>
-                      <td>{batch.import_type}</td>
-                      <td>
-                        <span className={`status-badge status-${batch.status}`}>
-                          {batch.status}
-                        </span>
-                      </td>
-                      <td>
-                        <div className="metric-stack">
-                          <span>Total: {batch.total_rows}</span>
-                          <span>Parsed: {batch.parsed_rows}</span>
-                          <span>Errors: {batch.error_rows}</span>
-                        </div>
-                      </td>
-                      <td>{formatDateTime(batch.created_at)}</td>
-                      <td>{file?.original_name ?? "-"}</td>
-                      <td>{file ? formatBytes(file.size_bytes) : "-"}</td>
-                      <td>
-                        <button
-                          type="button"
-                          className="secondary-button"
-                          onClick={() => void parseBatch(batch.id)}
-                          disabled={!isUploaded || isParsing}
-                        >
-                          {isParsing ? "Parsing..." : "Parse"}
-                        </button>
-                      </td>
-                    </tr>
+                    <Fragment key={batch.id}>
+                      <tr key={batch.id}>
+                        <td>{batch.import_type}</td>
+                        <td>
+                          <span className={`status-badge status-${batch.status}`}>
+                            {batch.status}
+                          </span>
+                        </td>
+                        <td>
+                          <div className="metric-stack">
+                            <span>Total: {batch.total_rows}</span>
+                            <span>Parsed: {batch.parsed_rows}</span>
+                            <span>Errors: {batch.error_rows}</span>
+                          </div>
+                        </td>
+                        <td>{formatDateTime(batch.created_at)}</td>
+                        <td>{file?.original_name ?? "-"}</td>
+                        <td>{file ? formatBytes(file.size_bytes) : "-"}</td>
+                        <td>
+                          <div className="inline-actions">
+                            <button
+                              type="button"
+                              className="secondary-button"
+                              onClick={() => void parseBatch(batch.id)}
+                              disabled={!isUploaded || isParsing}
+                            >
+                              {isParsing ? "Parsing..." : "Parse"}
+                            </button>
+                            <button
+                              type="button"
+                              className="secondary-button"
+                              onClick={() => void toggleBatchDetails(batch.id)}
+                            >
+                              {isExpanded ? "Részletek elrejtése" : "Részletek"}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+
+                      {isExpanded ? (
+                        <tr className="details-row">
+                          <td colSpan={7}>
+                            <div className="details-grid">
+                              <section className="details-panel">
+                                <div className="details-panel-header">
+                                  <h3>Sorok</h3>
+                                  <span className="panel-count">
+                                    {details?.rows.length ?? 0}
+                                  </span>
+                                </div>
+                                {isDetailsLoading ? (
+                                  <p className="info-message">Részletek betöltése...</p>
+                                ) : null}
+                                {!isDetailsLoading && detailsError ? (
+                                  <p className="error-message">{detailsError}</p>
+                                ) : null}
+                                {!isDetailsLoading && !detailsError ? (
+                                  <RowsPreview rows={details?.rows ?? []} />
+                                ) : null}
+                              </section>
+
+                              <section className="details-panel">
+                                <div className="details-panel-header">
+                                  <h3>Hibák</h3>
+                                  <span className="panel-count">
+                                    {details?.errors.length ?? 0}
+                                  </span>
+                                </div>
+                                {isDetailsLoading ? (
+                                  <p className="info-message">Részletek betöltése...</p>
+                                ) : null}
+                                {!isDetailsLoading && detailsError ? (
+                                  <p className="error-message">{detailsError}</p>
+                                ) : null}
+                                {!isDetailsLoading && !detailsError ? (
+                                  <ErrorsPreview errors={details?.errors ?? []} />
+                                ) : null}
+                              </section>
+                            </div>
+                          </td>
+                        </tr>
+                      ) : null}
+                    </Fragment>
                   );
                 })}
               </tbody>

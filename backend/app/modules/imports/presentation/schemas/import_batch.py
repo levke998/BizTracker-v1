@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
@@ -41,3 +42,21 @@ class ImportBatchResponse(ImportSchemaBase):
     created_at: datetime
     updated_at: datetime
     files: list[ImportFileResponse]
+
+
+class ImportRowResponse(ImportSchemaBase):
+    """Preview payload for one staged import row."""
+
+    row_number: int
+    parse_status: str
+    raw_payload: dict[str, Any]
+    normalized_payload: dict[str, Any] | None
+
+
+class ImportRowErrorResponse(ImportSchemaBase):
+    """Preview payload for one stored parse error."""
+
+    row_number: int | None
+    error_code: str
+    message: str
+    raw_payload: dict[str, Any] | None

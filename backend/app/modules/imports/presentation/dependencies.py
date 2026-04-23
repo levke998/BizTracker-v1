@@ -18,6 +18,12 @@ from app.modules.imports.application.commands.parse_import_batch import (
 from app.modules.imports.application.queries.list_import_batches import (
     ListImportBatchesQuery,
 )
+from app.modules.imports.application.queries.list_import_errors import (
+    ListImportErrorsQuery,
+)
+from app.modules.imports.application.queries.list_import_rows import (
+    ListImportRowsQuery,
+)
 from app.modules.imports.application.services.import_parser_service import (
     CsvImportParser,
 )
@@ -44,6 +50,20 @@ def get_list_import_batches_query(session: DbSession) -> ListImportBatchesQuery:
 
     repository = SqlAlchemyImportBatchRepository(session)
     return ListImportBatchesQuery(repository)
+
+
+def get_list_import_rows_query(session: DbSession) -> ListImportRowsQuery:
+    """Wire the staging rows query to its repository."""
+
+    repository = SqlAlchemyImportBatchRepository(session)
+    return ListImportRowsQuery(repository)
+
+
+def get_list_import_errors_query(session: DbSession) -> ListImportErrorsQuery:
+    """Wire the parse errors query to its repository."""
+
+    repository = SqlAlchemyImportBatchRepository(session)
+    return ListImportErrorsQuery(repository)
 
 
 def get_parse_import_batch_command(session: DbSession) -> ParseImportBatchCommand:

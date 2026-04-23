@@ -23,6 +23,20 @@ export type ImportBatch = {
   files: ImportFile[];
 };
 
+export type ImportRowPreview = {
+  row_number: number;
+  parse_status: string;
+  raw_payload: Record<string, unknown>;
+  normalized_payload: Record<string, unknown> | null;
+};
+
+export type ImportErrorPreview = {
+  row_number: number | null;
+  error_code: string;
+  message: string;
+  raw_payload: Record<string, unknown> | null;
+};
+
 export type UploadImportFilePayload = {
   businessUnitId: string;
   importType: string;

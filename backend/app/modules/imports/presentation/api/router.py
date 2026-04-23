@@ -19,12 +19,26 @@ from app.modules.imports.application.commands.upload_import_file import (
 from app.modules.imports.application.queries.list_import_batches import (
     ListImportBatchesQuery,
 )
+from app.modules.imports.application.queries.list_import_errors import (
+    ImportBatchErrorsNotFoundError,
+    ListImportErrorsQuery,
+)
+from app.modules.imports.application.queries.list_import_rows import (
+    ImportBatchRowsNotFoundError,
+    ListImportRowsQuery,
+)
 from app.modules.imports.presentation.dependencies import (
     get_list_import_batches_query,
+    get_list_import_errors_query,
+    get_list_import_rows_query,
     get_parse_import_batch_command,
     get_upload_import_file_command,
 )
-from app.modules.imports.presentation.schemas.import_batch import ImportBatchResponse
+from app.modules.imports.presentation.schemas.import_batch import (
+    ImportBatchResponse,
+    ImportRowErrorResponse,
+    ImportRowResponse,
+)
 
 router = APIRouter(prefix="/imports", tags=["imports"])
 
@@ -59,6 +73,38 @@ def list_import_batches(
 
     batches = query.execute(business_unit_id=business_unit_id)
     return [ImportBatchResponse.model_validate(batch) for batch in batches]
+
+
+@router.get("/batches/{batch_id}/rows", response_model=list[ImportRowResponse])
+def list_import_rows(
+    batch_id: uuid.UUID,
+    query: Annotated[ListImportRowsQuery, Depends(get_list_import_rows_query)],
+    limit: int = Query(default=20, ge=1, le=100),
+) -> list[ImportRowResponse]:
+    """Return the first staged rows for one batch."""
+
+    try:
+        items = query.execute(batch_id=batch_id, limit=limit)
+    except ImportBatchRowsNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+    return [ImportRowResponse.model_validate(item) for item in items]
+
+
+@router.get("/batches/{batch_id}/errors", response_model=list[ImportRowErrorResponse])
+def list_import_errors(
+    batch_id: uuid.UUID,
+    query: Annotated[ListImportErrorsQuery, Depends(get_list_import_errors_query)],
+    limit: int = Query(default=20, ge=1, le=100),
+) -> list[ImportRowErrorResponse]:
+    """Return the first stored parse errors for one batch."""
+
+    try:
+        items = query.execute(batch_id=batch_id, limit=limit)
+    except ImportBatchErrorsNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+    return [ImportRowErrorResponse.model_validate(item) for item in items]
 
 
 @router.post("/batches/{batch_id}/parse", response_model=ImportBatchResponse)

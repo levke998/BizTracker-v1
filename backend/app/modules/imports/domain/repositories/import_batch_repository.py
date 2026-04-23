@@ -7,6 +7,8 @@ from typing import Protocol
 
 from app.modules.imports.domain.entities.import_batch import (
     ImportBatch,
+    ImportRow,
+    ImportRowError,
     NewImportRow,
     NewImportRowError,
 )
@@ -36,6 +38,22 @@ class ImportBatchRepository(Protocol):
 
     def get_batch(self, batch_id: uuid.UUID) -> ImportBatch | None:
         """Return one import batch with its file metadata."""
+
+    def list_rows(
+        self,
+        *,
+        batch_id: uuid.UUID,
+        limit: int = 20,
+    ) -> list[ImportRow]:
+        """Return the first staging rows for one batch."""
+
+    def list_errors(
+        self,
+        *,
+        batch_id: uuid.UUID,
+        limit: int = 20,
+    ) -> list[ImportRowError]:
+        """Return the first parse errors for one batch."""
 
     def mark_parsing(self, batch_id: uuid.UUID) -> ImportBatch:
         """Move a batch to parsing status and reset parse counters."""
