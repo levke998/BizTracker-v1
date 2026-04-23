@@ -27,6 +27,9 @@ from app.modules.imports.infrastructure.orm.import_row_model import ImportRowMod
 from app.modules.inventory.infrastructure.orm.inventory_item_model import (
     InventoryItemModel,
 )
+from app.modules.inventory.infrastructure.orm.inventory_movement_model import (
+    InventoryMovementModel,
+)
 from app.modules.master_data.infrastructure.orm.business_unit_model import (
     BusinessUnitModel,
 )
@@ -85,6 +88,11 @@ def _cleanup_business_unit_data(
     db_session.execute(
         delete(FinancialTransactionModel).where(
             FinancialTransactionModel.business_unit_id.in_(business_unit_ids)
+        )
+    )
+    db_session.execute(
+        delete(InventoryMovementModel).where(
+            InventoryMovementModel.business_unit_id.in_(business_unit_ids)
         )
     )
     db_session.execute(
@@ -228,6 +236,21 @@ def test_unit_of_measure(db_session: Session) -> Generator[UnitOfMeasureModel, N
 
     db_session.rollback()
     db_session.expire_all()
+    db_session.execute(
+        delete(InventoryMovementModel).where(InventoryMovementModel.uom_id == unit.id)
+    )
+    item_ids = [
+        item_id
+        for item_id, in db_session.execute(
+            select(InventoryItemModel.id).where(InventoryItemModel.uom_id == unit.id)
+        ).all()
+    ]
+    if item_ids:
+        db_session.execute(
+            delete(InventoryMovementModel).where(
+                InventoryMovementModel.inventory_item_id.in_(item_ids)
+            )
+        )
     db_session.execute(delete(InventoryItemModel).where(InventoryItemModel.uom_id == unit.id))
     db_session.execute(delete(UnitOfMeasureModel).where(UnitOfMeasureModel.id == unit.id))
     db_session.commit()
@@ -260,6 +283,39 @@ def create_inventory_item(db_session: Session):
         return item
 
     return _create_inventory_item
+
+
+@pytest.fixture
+def create_inventory_movement(db_session: Session):
+    """Create one inventory movement directly for stock-level integration tests."""
+
+    def _create_inventory_movement(
+        *,
+        business_unit_id,
+        inventory_item_id,
+        uom_id,
+        movement_type: str,
+        quantity: Decimal,
+        occurred_at: datetime,
+        unit_cost: Decimal | None = None,
+        note: str | None = None,
+    ) -> InventoryMovementModel:
+        movement = InventoryMovementModel(
+            business_unit_id=business_unit_id,
+            inventory_item_id=inventory_item_id,
+            movement_type=movement_type,
+            quantity=quantity,
+            uom_id=uom_id,
+            unit_cost=unit_cost,
+            note=note,
+            occurred_at=occurred_at,
+        )
+        db_session.add(movement)
+        db_session.commit()
+        db_session.refresh(movement)
+        return movement
+
+    return _create_inventory_movement
 
 
 @pytest.fixture

@@ -108,7 +108,7 @@ def test_create_inventory_item_allows_same_name_in_different_business_units(
     gourmand_business_unit: BusinessUnitModel,
     pcs_unit_of_measure: UnitOfMeasureModel,
 ) -> None:
-    shared_name = "Reusable Demo Item"
+    shared_name = f"Reusable Demo Item {uuid4().hex[:8]}"
 
     first_response = client.post(
         f"{API_PREFIX}/items",

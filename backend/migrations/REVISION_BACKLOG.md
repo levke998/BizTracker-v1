@@ -24,6 +24,10 @@ Ez a fájl a tervezett első Alembic revisionök sorrendjét rögzíti. A cél, 
    - create `core.inventory_item`
 10. `010_inventory_item_name_uq`
    - add unique constraint for `core.inventory_item (business_unit_id, name)`
+11. `011_core_inventory_movement`
+   - create `core.inventory_movement`
+12. `012_inventory_movement_note`
+   - add nullable `note` to `core.inventory_movement`
 
 ## Dependencies
 
@@ -36,6 +40,8 @@ Ez a fájl a tervezett első Alembic revisionök sorrendjét rögzíti. A cél, 
 - `008_core_financial_tx_currency` depends on `007_core_financial_tx_base`
 - `009_core_inventory_item_base` depends on `008_core_financial_tx_currency`
 - `010_inventory_item_name_uq` depends on `009_core_inventory_item_base`
+- `011_core_inventory_movement` depends on `010_inventory_item_name_uq`
+- `012_inventory_movement_note` depends on `011_core_inventory_movement`
 
 ## Notes
 

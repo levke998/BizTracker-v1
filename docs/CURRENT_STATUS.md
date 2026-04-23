@@ -4,6 +4,7 @@ Ez a dokumentum a projekt jelenlegi, valos allapotat foglalja ossze. Ha valaki g
 
 Kapcsolodo dokumentumok:
 - [PROJECT_DESCRIPTION.md](C:\BizTracker\PROJECT_DESCRIPTION.md)
+- [ACCOUNTING_AND_CONTROLLING_MODEL.md](C:\BizTracker\docs\ACCOUNTING_AND_CONTROLLING_MODEL.md)
 - [ARCHITECTURE.md](C:\BizTracker\docs\ARCHITECTURE.md)
 - [MVP_IMPLEMENTATION_PLAN.md](C:\BizTracker\docs\MVP_IMPLEMENTATION_PLAN.md)
 - [MIGRATION_PLAN.md](C:\BizTracker\docs\MIGRATION_PLAN.md)
@@ -56,9 +57,19 @@ flowchart LR
 - `pos_sales` batch -> `financial_transaction` mapping MVP
 - egyszeru source reference alapu duplicate vedes
 - `core.financial_transaction` tabla
+- `GET /api/v1/finance/transactions`
+- `Finance Transactions` frontend oldal
+
+### Inventory
+- `GET /api/v1/inventory/items`
+- `POST /api/v1/inventory/items`
+- inventory reference data bootstrap
+- `Inventory Items` frontend oldal
 
 ### Frontend
 - `Master Data Viewer`
+- `Finance Transactions`
+- `Inventory Items`
 - `Import Center`
 - batch lista
 - batch reszletek
@@ -72,6 +83,9 @@ flowchart LR
 - `GET /api/v1/master-data/units-of-measure`
 - `GET /api/v1/master-data/categories`
 - `GET /api/v1/master-data/products`
+- `GET /api/v1/finance/transactions`
+- `GET /api/v1/inventory/items`
+- `POST /api/v1/inventory/items`
 - `POST /api/v1/imports/files`
 - `GET /api/v1/imports/batches`
 - `POST /api/v1/imports/batches/{batch_id}/parse`
@@ -82,7 +96,7 @@ flowchart LR
 ## 4. Jelenlegi adatbazis allapot
 
 Aktualis Alembic head:
-- `007_core_financial_tx_base`
+- `010_inventory_item_name_uq`
 
 Eddig letrehozott schema-k:
 - `auth`
@@ -102,6 +116,7 @@ Kulcs taborok:
 - `core.category`
 - `core.product`
 - `core.financial_transaction`
+- `core.inventory_item`
 - `ingest.import_batch`
 - `ingest.import_file`
 - `ingest.import_row`
@@ -111,8 +126,8 @@ Kulcs taborok:
 
 - identity login / token flow
 - role-based auth guardok az API-n
-- finance read endpointok es frontend oldalak
-- inventory operativ flow
+- inventory movement logika
+- stock level read model
 - procurement flow
 - production flow
 - events flow
@@ -122,8 +137,8 @@ Kulcs taborok:
 ## 6. Javasolt kovetkezo lepesek
 
 1. identity auth MVP
-2. finance read API
-3. inventory MVP
+2. inventory movement write alap
+3. stock level read modell
 4. procurement MVP
 5. analytics dashboard alapok
 
@@ -140,4 +155,3 @@ Frontend:
 cd C:\BizTracker\frontend
 npm.cmd run dev
 ```
-

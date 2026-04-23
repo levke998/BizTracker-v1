@@ -8,11 +8,17 @@ from fastapi import Depends
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db_session
+from app.modules.inventory.application.commands.create_inventory_movement import (
+    CreateInventoryMovementCommand,
+)
 from app.modules.inventory.application.commands.create_inventory_item import (
     CreateInventoryItemCommand,
 )
 from app.modules.inventory.application.queries.list_inventory_items import (
     ListInventoryItemsQuery,
+)
+from app.modules.inventory.application.queries.list_stock_levels import (
+    ListInventoryStockLevelsQuery,
 )
 from app.modules.inventory.infrastructure.repositories.sqlalchemy_inventory_item_repository import (
     SqlAlchemyInventoryItemRepository,
@@ -28,8 +34,26 @@ def get_list_inventory_items_query(session: DbSession) -> ListInventoryItemsQuer
     return ListInventoryItemsQuery(repository=repository)
 
 
+def get_list_inventory_stock_levels_query(
+    session: DbSession,
+) -> ListInventoryStockLevelsQuery:
+    """Wire the stock level query to its repository."""
+
+    repository = SqlAlchemyInventoryItemRepository(session)
+    return ListInventoryStockLevelsQuery(repository=repository)
+
+
 def get_create_inventory_item_command(session: DbSession) -> CreateInventoryItemCommand:
     """Wire the inventory create command to its repository."""
 
     repository = SqlAlchemyInventoryItemRepository(session)
     return CreateInventoryItemCommand(repository=repository)
+
+
+def get_create_inventory_movement_command(
+    session: DbSession,
+) -> CreateInventoryMovementCommand:
+    """Wire the inventory movement command to its repository."""
+
+    repository = SqlAlchemyInventoryItemRepository(session)
+    return CreateInventoryMovementCommand(repository=repository)

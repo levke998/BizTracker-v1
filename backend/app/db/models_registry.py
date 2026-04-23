@@ -20,6 +20,9 @@ from app.modules.imports.infrastructure.orm.import_row_error_model import (
     ImportRowErrorModel,
 )
 from app.modules.imports.infrastructure.orm.import_row_model import ImportRowModel
+from app.modules.inventory.infrastructure.orm.inventory_movement_model import (
+    InventoryMovementModel,
+)
 from app.modules.inventory.infrastructure.orm.inventory_item_model import InventoryItemModel
 from app.modules.master_data.infrastructure.orm.business_unit_model import (
     BusinessUnitModel,
@@ -40,6 +43,7 @@ __all__ = [
     "ImportRowErrorModel",
     "ImportRowModel",
     "InventoryItemModel",
+    "InventoryMovementModel",
     "LocationModel",
     "PermissionModel",
     "ProductModel",

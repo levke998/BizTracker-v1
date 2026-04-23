@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
+from decimal import Decimal
 from datetime import datetime
 
 
@@ -32,3 +33,49 @@ class NewInventoryItem:
     uom_id: uuid.UUID
     track_stock: bool
     is_active: bool
+
+
+@dataclass(frozen=True, slots=True)
+class InventoryMovement:
+    """Represents one persisted inventory movement log entry."""
+
+    id: uuid.UUID
+    business_unit_id: uuid.UUID
+    inventory_item_id: uuid.UUID
+    movement_type: str
+    quantity: Decimal
+    uom_id: uuid.UUID
+    unit_cost: Decimal | None
+    note: str | None
+    occurred_at: datetime
+    created_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class NewInventoryMovement:
+    """Draft inventory movement before persistence."""
+
+    business_unit_id: uuid.UUID
+    inventory_item_id: uuid.UUID
+    movement_type: str
+    quantity: Decimal
+    uom_id: uuid.UUID
+    unit_cost: Decimal | None
+    note: str | None
+    occurred_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class InventoryStockLevel:
+    """Aggregated actual stock level derived from movement logs."""
+
+    inventory_item_id: uuid.UUID
+    business_unit_id: uuid.UUID
+    name: str
+    item_type: str
+    uom_id: uuid.UUID
+    track_stock: bool
+    is_active: bool
+    current_quantity: Decimal
+    last_movement_at: datetime | None
+    movement_count: int
