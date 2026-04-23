@@ -79,3 +79,22 @@ class InventoryStockLevel:
     current_quantity: Decimal
     last_movement_at: datetime | None
     movement_count: int
+
+
+@dataclass(frozen=True, slots=True)
+class InventoryTheoreticalStock:
+    """Projected stock read model with explicit estimation readiness markers."""
+
+    inventory_item_id: uuid.UUID
+    business_unit_id: uuid.UUID
+    name: str
+    item_type: str
+    uom_id: uuid.UUID
+    track_stock: bool
+    is_active: bool
+    actual_quantity: Decimal
+    theoretical_quantity: Decimal | None
+    variance_quantity: Decimal | None
+    last_actual_movement_at: datetime | None
+    last_estimated_event_at: datetime | None
+    estimation_basis: str

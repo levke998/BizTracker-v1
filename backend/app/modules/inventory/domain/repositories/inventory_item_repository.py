@@ -29,8 +29,33 @@ class InventoryItemRepository(Protocol):
     def create(self, item: NewInventoryItem) -> InventoryItem:
         """Create one inventory item."""
 
+    def update(
+        self,
+        *,
+        inventory_item_id: uuid.UUID,
+        name: str,
+        item_type: str,
+        uom_id: uuid.UUID,
+        track_stock: bool,
+        is_active: bool,
+    ) -> InventoryItem:
+        """Update one inventory item."""
+
+    def archive(self, inventory_item_id: uuid.UUID) -> InventoryItem:
+        """Archive one inventory item by setting it inactive."""
+
     def create_movement(self, movement: NewInventoryMovement) -> InventoryMovement:
         """Create one inventory movement log entry."""
+
+    def list_movements(
+        self,
+        *,
+        business_unit_id: uuid.UUID | None = None,
+        inventory_item_id: uuid.UUID | None = None,
+        movement_type: str | None = None,
+        limit: int = 50,
+    ) -> list[InventoryMovement]:
+        """List inventory movement log entries with lightweight filters."""
 
     def business_unit_exists(self, business_unit_id: uuid.UUID) -> bool:
         """Return whether the referenced business unit exists."""
@@ -43,6 +68,7 @@ class InventoryItemRepository(Protocol):
         *,
         business_unit_id: uuid.UUID,
         name: str,
+        exclude_inventory_item_id: uuid.UUID | None = None,
     ) -> bool:
         """Return whether an item with the same name already exists in the business unit."""
 

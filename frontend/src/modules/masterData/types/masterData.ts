@@ -14,6 +14,13 @@ export type Location = {
   is_active: boolean;
 };
 
+export type UnitOfMeasure = {
+  id: string;
+  code: string;
+  name: string;
+  symbol: string | null;
+};
+
 export type Category = {
   id: string;
   business_unit_id: string;

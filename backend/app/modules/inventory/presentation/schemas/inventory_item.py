@@ -21,6 +21,16 @@ class InventoryItemCreateRequest(BaseModel):
     is_active: bool = True
 
 
+class InventoryItemUpdateRequest(BaseModel):
+    """Update request for one inventory item."""
+
+    name: str = Field(min_length=1, max_length=150)
+    item_type: str = Field(min_length=1, max_length=50)
+    uom_id: uuid.UUID
+    track_stock: bool
+    is_active: bool = True
+
+
 class InventoryItemResponse(BaseModel):
     """Read model for one inventory item."""
 
@@ -65,6 +75,7 @@ class InventoryMovementResponse(BaseModel):
     quantity: Decimal
     uom_id: uuid.UUID
     unit_cost: Decimal | None
+    note: str | None
     occurred_at: datetime
     created_at: datetime
 
@@ -84,3 +95,23 @@ class InventoryStockLevelResponse(BaseModel):
     current_quantity: Decimal
     last_movement_at: datetime | None
     movement_count: int
+
+
+class InventoryTheoreticalStockResponse(BaseModel):
+    """Read model for one theoretical stock row."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    inventory_item_id: uuid.UUID
+    business_unit_id: uuid.UUID
+    name: str
+    item_type: str
+    uom_id: uuid.UUID
+    track_stock: bool
+    is_active: bool
+    actual_quantity: Decimal
+    theoretical_quantity: Decimal | None
+    variance_quantity: Decimal | None
+    last_actual_movement_at: datetime | None
+    last_estimated_event_at: datetime | None
+    estimation_basis: str

@@ -36,6 +36,13 @@ from app.modules.master_data.infrastructure.orm.business_unit_model import (
 from app.modules.master_data.infrastructure.orm.unit_of_measure_model import (
     UnitOfMeasureModel,
 )
+from app.modules.procurement.infrastructure.orm.supplier_model import SupplierModel
+from app.modules.procurement.infrastructure.orm.purchase_invoice_model import (
+    PurchaseInvoiceModel,
+)
+from app.modules.procurement.infrastructure.orm.purchase_invoice_line_model import (
+    PurchaseInvoiceLineModel,
+)
 
 TEST_BUSINESS_UNIT_CODE = "test-integration"
 TEST_BUSINESS_UNIT_NAME = "Integration Test Unit"
@@ -95,10 +102,30 @@ def _cleanup_business_unit_data(
             InventoryMovementModel.business_unit_id.in_(business_unit_ids)
         )
     )
+    invoice_ids = [
+        invoice_id
+        for invoice_id, in db_session.execute(
+            select(PurchaseInvoiceModel.id).where(
+                PurchaseInvoiceModel.business_unit_id.in_(business_unit_ids)
+            )
+        ).all()
+    ]
+    if invoice_ids:
+        db_session.execute(
+            delete(PurchaseInvoiceLineModel).where(
+                PurchaseInvoiceLineModel.invoice_id.in_(invoice_ids)
+            )
+        )
+        db_session.execute(
+            delete(PurchaseInvoiceModel).where(PurchaseInvoiceModel.id.in_(invoice_ids))
+        )
     db_session.execute(
         delete(InventoryItemModel).where(
             InventoryItemModel.business_unit_id.in_(business_unit_ids)
         )
+    )
+    db_session.execute(
+        delete(SupplierModel).where(SupplierModel.business_unit_id.in_(business_unit_ids))
     )
 
     if batch_ids:
@@ -251,6 +278,26 @@ def test_unit_of_measure(db_session: Session) -> Generator[UnitOfMeasureModel, N
                 InventoryMovementModel.inventory_item_id.in_(item_ids)
             )
         )
+    purchase_invoice_line_filters = [PurchaseInvoiceLineModel.uom_id == unit.id]
+    if item_ids:
+        purchase_invoice_line_filters.append(
+            PurchaseInvoiceLineModel.inventory_item_id.in_(item_ids)
+        )
+    invoice_ids = [
+        invoice_id
+        for invoice_id, in db_session.execute(
+            select(PurchaseInvoiceLineModel.invoice_id).where(*purchase_invoice_line_filters)
+        ).all()
+    ]
+    if invoice_ids:
+        db_session.execute(
+            delete(PurchaseInvoiceLineModel).where(
+                PurchaseInvoiceLineModel.invoice_id.in_(invoice_ids)
+            )
+        )
+        db_session.execute(
+            delete(PurchaseInvoiceModel).where(PurchaseInvoiceModel.id.in_(invoice_ids))
+        )
     db_session.execute(delete(InventoryItemModel).where(InventoryItemModel.uom_id == unit.id))
     db_session.execute(delete(UnitOfMeasureModel).where(UnitOfMeasureModel.id == unit.id))
     db_session.commit()
@@ -316,6 +363,82 @@ def create_inventory_movement(db_session: Session):
         return movement
 
     return _create_inventory_movement
+
+
+@pytest.fixture
+def create_supplier(db_session: Session):
+    """Create one supplier directly for procurement integration tests."""
+
+    def _create_supplier(
+        *,
+        business_unit_id,
+        name: str,
+        tax_id: str | None = None,
+        contact_name: str | None = None,
+        email: str | None = None,
+        phone: str | None = None,
+        notes: str | None = None,
+        is_active: bool = True,
+    ) -> SupplierModel:
+        supplier = SupplierModel(
+            business_unit_id=business_unit_id,
+            name=name,
+            tax_id=tax_id,
+            contact_name=contact_name,
+            email=email,
+            phone=phone,
+            notes=notes,
+            is_active=is_active,
+        )
+        db_session.add(supplier)
+        db_session.commit()
+        db_session.refresh(supplier)
+        return supplier
+
+    return _create_supplier
+
+
+@pytest.fixture
+def create_purchase_invoice(db_session: Session):
+    """Create one purchase invoice directly for procurement integration tests."""
+
+    def _create_purchase_invoice(
+        *,
+        business_unit_id,
+        supplier_id,
+        invoice_number: str,
+        invoice_date,
+        currency: str,
+        gross_total,
+        notes: str | None = None,
+        lines: list[dict],
+    ) -> PurchaseInvoiceModel:
+        invoice = PurchaseInvoiceModel(
+            business_unit_id=business_unit_id,
+            supplier_id=supplier_id,
+            invoice_number=invoice_number,
+            invoice_date=invoice_date,
+            currency=currency,
+            gross_total=gross_total,
+            notes=notes,
+            lines=[
+                PurchaseInvoiceLineModel(
+                    inventory_item_id=line.get("inventory_item_id"),
+                    description=line["description"],
+                    quantity=line["quantity"],
+                    uom_id=line["uom_id"],
+                    unit_net_amount=line["unit_net_amount"],
+                    line_net_amount=line["line_net_amount"],
+                )
+                for line in lines
+            ],
+        )
+        db_session.add(invoice)
+        db_session.commit()
+        db_session.refresh(invoice)
+        return invoice
+
+    return _create_purchase_invoice
 
 
 @pytest.fixture

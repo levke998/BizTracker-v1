@@ -6,6 +6,7 @@ Kapcsolodo dokumentumok:
 - [PROJECT_DESCRIPTION.md](C:\BizTracker\PROJECT_DESCRIPTION.md)
 - [ARCHITECTURE.md](C:\BizTracker\docs\ARCHITECTURE.md)
 - [CURRENT_STATUS.md](C:\BizTracker\docs\CURRENT_STATUS.md)
+- [BUSINESS_DIRECTION.md](C:\BizTracker\docs\BUSINESS_DIRECTION.md)
 - [IMPORT_PROFILES.md](C:\BizTracker\docs\IMPORT_PROFILES.md)
 
 ## 1. A rendszer alapelve
@@ -219,6 +220,15 @@ Tehat:
 - az eladas teny
 - a felhasznalas recept alapu becsles
 - ebbol szamolhato az estimated COGS
+
+Fontos gyakorlati pontositas:
+- nem biztos, hogy pontosan tudjuk, mennyi kesztermek keszul el
+- amit biztosan tudunk, az az eladas
+
+Ezert a Gourmand oldalon a rendszernek sales-driven inventory szemleletre kell epulnie:
+- a kassza forgalom eros truth source
+- a kesobbi theoretical stock es estimated consumption erre epul
+- de a modell maradjon nyitott arra, hogy ha kesobb pontosabb kesztermek vagy realtime ellenorzes jon, azt be tudjuk fogadni
 
 ### Estimated COGS
 
@@ -455,6 +465,7 @@ Kesobb bovitheto:
 - batch-level inventory valuation
 - pontosabb purchase cost lekovetes
 - inventory adjustment modellek
+- PDF es manualis beszerzesi workflow-k strukturaltabb bekotese
 
 Kulcselv:
 - az MVP-ben egyszeru
@@ -468,6 +479,7 @@ Rovid, de logikus kovetkezo iranyok:
 - FIFO costing
 - event settlement finomitas
 - weather-based es sales-based predikcio
+- POS API kapcsolat, ha az eleres konkretan rendelkezesre all
 
 Ezeket most nem kell tulreszletezni. A lenyeg, hogy a mostani modell ne allja utjukat.
 
@@ -488,4 +500,3 @@ A kovetkezo implementacios fokusz:
 - inventory movement write alap
 - erre epulve stock level szemlelet
 - kesobb recipe es pontosabb estimated consumption
-

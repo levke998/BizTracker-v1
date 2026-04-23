@@ -70,6 +70,41 @@ class SqlAlchemyInventoryItemRepository:
         self._session.refresh(model)
         return self._to_entity(model)
 
+    def update(
+        self,
+        *,
+        inventory_item_id: uuid.UUID,
+        name: str,
+        item_type: str,
+        uom_id: uuid.UUID,
+        track_stock: bool,
+        is_active: bool,
+    ) -> InventoryItem:
+        model = self._session.get(InventoryItemModel, inventory_item_id)
+        if model is None:
+            raise ValueError(f"Inventory item {inventory_item_id} was not found.")
+
+        model.name = name
+        model.item_type = item_type
+        model.uom_id = uom_id
+        model.track_stock = track_stock
+        model.is_active = is_active
+
+        self._session.commit()
+        self._session.refresh(model)
+        return self._to_entity(model)
+
+    def archive(self, inventory_item_id: uuid.UUID) -> InventoryItem:
+        model = self._session.get(InventoryItemModel, inventory_item_id)
+        if model is None:
+            raise ValueError(f"Inventory item {inventory_item_id} was not found.")
+
+        model.is_active = False
+
+        self._session.commit()
+        self._session.refresh(model)
+        return self._to_entity(model)
+
     def create_movement(self, movement: NewInventoryMovement) -> InventoryMovement:
         model = InventoryMovementModel(
             business_unit_id=movement.business_unit_id,
@@ -85,6 +120,37 @@ class SqlAlchemyInventoryItemRepository:
         self._session.commit()
         self._session.refresh(model)
         return self._to_movement_entity(model)
+
+    def list_movements(
+        self,
+        *,
+        business_unit_id: uuid.UUID | None = None,
+        inventory_item_id: uuid.UUID | None = None,
+        movement_type: str | None = None,
+        limit: int = 50,
+    ) -> list[InventoryMovement]:
+        statement = select(InventoryMovementModel)
+
+        if business_unit_id is not None:
+            statement = statement.where(
+                InventoryMovementModel.business_unit_id == business_unit_id
+            )
+        if inventory_item_id is not None:
+            statement = statement.where(
+                InventoryMovementModel.inventory_item_id == inventory_item_id
+            )
+        if movement_type is not None:
+            statement = statement.where(
+                InventoryMovementModel.movement_type == movement_type
+            )
+
+        statement = statement.order_by(
+            InventoryMovementModel.occurred_at.desc(),
+            InventoryMovementModel.created_at.desc(),
+        ).limit(limit)
+
+        models = self._session.scalars(statement).all()
+        return [self._to_movement_entity(model) for model in models]
 
     def business_unit_exists(self, business_unit_id: uuid.UUID) -> bool:
         count = self._session.scalar(
@@ -107,13 +173,18 @@ class SqlAlchemyInventoryItemRepository:
         *,
         business_unit_id: uuid.UUID,
         name: str,
+        exclude_inventory_item_id: uuid.UUID | None = None,
     ) -> bool:
-        count = self._session.scalar(
+        statement = (
             select(func.count())
             .select_from(InventoryItemModel)
             .where(InventoryItemModel.business_unit_id == business_unit_id)
             .where(InventoryItemModel.name == name)
         )
+        if exclude_inventory_item_id is not None:
+            statement = statement.where(InventoryItemModel.id != exclude_inventory_item_id)
+
+        count = self._session.scalar(statement)
         return bool(count)
 
     def get_by_id(self, inventory_item_id: uuid.UUID) -> InventoryItem | None:

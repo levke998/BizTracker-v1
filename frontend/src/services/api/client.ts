@@ -72,6 +72,64 @@ export async function apiPost<T>(path: string): Promise<T> {
   return (await response.json()) as T;
 }
 
+export async function apiPostJson<TBody extends object, TResponse>(
+  path: string,
+  body: TBody,
+): Promise<TResponse> {
+  const response = await fetch(buildUrl(path), {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const message = await extractErrorMessage(response);
+    throw new Error(message || `Request failed with status ${response.status}`);
+  }
+
+  return (await response.json()) as TResponse;
+}
+
+export async function apiPatchJson<TBody extends object, TResponse>(
+  path: string,
+  body: TBody,
+): Promise<TResponse> {
+  const response = await fetch(buildUrl(path), {
+    method: "PATCH",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const message = await extractErrorMessage(response);
+    throw new Error(message || `Request failed with status ${response.status}`);
+  }
+
+  return (await response.json()) as TResponse;
+}
+
+export async function apiDelete<T>(path: string): Promise<T> {
+  const response = await fetch(buildUrl(path), {
+    method: "DELETE",
+    headers: {
+      Accept: "application/json",
+    },
+  });
+
+  if (!response.ok) {
+    const message = await extractErrorMessage(response);
+    throw new Error(message || `Request failed with status ${response.status}`);
+  }
+
+  return (await response.json()) as T;
+}
+
 async function extractErrorMessage(response: Response): Promise<string> {
   const contentType = response.headers.get("content-type") ?? "";
 

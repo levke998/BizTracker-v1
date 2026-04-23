@@ -4,6 +4,7 @@ import type {
   Category,
   Location,
   Product,
+  UnitOfMeasure,
 } from "../types/masterData";
 
 export function listBusinessUnits() {
@@ -14,6 +15,10 @@ export function listLocations(businessUnitId: string) {
   return apiGet<Location[]>("master-data/locations", {
     business_unit_id: businessUnitId,
   });
+}
+
+export function listUnitsOfMeasure() {
+  return apiGet<UnitOfMeasure[]>("master-data/units-of-measure");
 }
 
 export function listCategories(businessUnitId: string) {

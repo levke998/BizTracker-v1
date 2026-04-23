@@ -1,30 +1,37 @@
 # BizTracker Current Status
 
-Ez a dokumentum a projekt jelenlegi, valos allapotat foglalja ossze. Ha valaki gyorsan meg akarja erteni, hol tartunk most, mit tud mar a rendszer, es mi hianyzik meg, ezt a fajlt erdemes elolvasni eloszor.
+Ez a dokumentum a projekt tenyleges jelenlegi allapotat foglalja ossze. Ha gyorsan at akarjuk latni, hol tartunk, mi mukodik mar, mi hianyzik meg, es mi legyen a kovetkezo implementacios fokusz, ezt a fajlt erdemes elolvasni eloszor.
 
 Kapcsolodo dokumentumok:
 - [PROJECT_DESCRIPTION.md](C:\BizTracker\PROJECT_DESCRIPTION.md)
-- [ACCOUNTING_AND_CONTROLLING_MODEL.md](C:\BizTracker\docs\ACCOUNTING_AND_CONTROLLING_MODEL.md)
 - [ARCHITECTURE.md](C:\BizTracker\docs\ARCHITECTURE.md)
-- [MVP_IMPLEMENTATION_PLAN.md](C:\BizTracker\docs\MVP_IMPLEMENTATION_PLAN.md)
-- [MIGRATION_PLAN.md](C:\BizTracker\docs\MIGRATION_PLAN.md)
-- [INITIAL_STRUCTURE.md](C:\BizTracker\docs\INITIAL_STRUCTURE.md)
+- [ACCOUNTING_AND_CONTROLLING_MODEL.md](C:\BizTracker\docs\ACCOUNTING_AND_CONTROLLING_MODEL.md)
+- [BUSINESS_DIRECTION.md](C:\BizTracker\docs\BUSINESS_DIRECTION.md)
+- [INVENTORY_DIRECTION.md](C:\BizTracker\docs\INVENTORY_DIRECTION.md)
+- [THEORETICAL_STOCK_PREPARATION.md](C:\BizTracker\docs\THEORETICAL_STOCK_PREPARATION.md)
+- [ROADMAP.md](C:\BizTracker\docs\ROADMAP.md)
 
-## 1. Jelenlegi workflow
+## 1. Hol tartunk most
 
-```mermaid
-flowchart LR
-  A["CSV file upload"] --> B["ingest.import_batch + ingest.import_file"]
-  B --> C["POST /api/v1/imports/batches/{batch_id}/parse"]
-  C --> D["CSV technical parsing"]
-  D --> E["ingest.import_row"]
-  D --> F["ingest.import_row_error"]
-  E --> G["GET /api/v1/imports/batches/{batch_id}/rows"]
-  F --> H["GET /api/v1/imports/batches/{batch_id}/errors"]
-  E --> I["pos_sales profile normalization"]
-  I --> J["POST /api/v1/imports/batches/{batch_id}/map/financial-transactions"]
-  J --> K["core.financial_transaction"]
-```
+A projekt mar tul van a tiszta foundation fazison, es mar tobb valodi, vegponttol frontend oldalig lefuto MVP szelet mukodik:
+- master data read
+- import upload, parse, batch detail
+- pos_sales import profil es finance mapping MVP
+- finance read API es frontend oldal
+- inventory item CRUD alap
+- inventory movement write/read
+- actual stock level read
+- theoretical stock read readiness modell
+- inventory frontend read es torzsadat kezelo oldalak
+- procurement supplier foundation
+- procurement purchase invoice foundation
+
+Ez mar nem csak scaffold, hanem valodi, hasznalhato belso alkalmazas alap.
+
+Uzleti szintu irany:
+- a rendszer fo celja tovabbra is a `Gourmand` es a `Flow Music Club` uzleti elemzese
+- az inventory, finance, import es kesobbi predikcio ezt tamogatja
+- a jelenlegi pontositott uzleti iranyt a [BUSINESS_DIRECTION.md](C:\BizTracker\docs\BUSINESS_DIRECTION.md) rogziti
 
 ## 2. Ami mar mukodik
 
@@ -32,8 +39,10 @@ flowchart LR
 - FastAPI backend
 - PostgreSQL adatbazis
 - Alembic migration pipeline
-- env-alapu config
-- CORS fejlesztoi hasznalatra
+- env alapu config
+- SQLAlchemy 2 stilusu repository wiring
+- React + TypeScript + Vite frontend
+- TanStack Query alap
 
 ### Master data
 - `GET /api/v1/master-data/business-units`
@@ -44,48 +53,131 @@ flowchart LR
 - idempotens reference data bootstrap
 
 ### Imports
-- file upload
-- import batch es file metadata tarolas
-- CSV parse pipeline
-- staging sorok tarolasa
-- parse hibak tarolasa
-- batch rows es errors detail endpointok
+- `POST /api/v1/imports/files`
+- `GET /api/v1/imports/batches`
+- `POST /api/v1/imports/batches/{batch_id}/parse`
+- `GET /api/v1/imports/batches/{batch_id}/rows`
+- `GET /api/v1/imports/batches/{batch_id}/errors`
+- fajlfeltoltes
+- import batch es file metadata
+- CSV technikai parsing
+- staging sorok es parse hibak tarolasa
 - `pos_sales` profil
-- minimal mezoszintu normalizalas
+- konnyu mezoszintu normalizalas
 
 ### Finance
-- `pos_sales` batch -> `financial_transaction` mapping MVP
-- egyszeru source reference alapu duplicate vedes
-- `core.financial_transaction` tabla
+- `POST /api/v1/imports/batches/{batch_id}/map/financial-transactions`
 - `GET /api/v1/finance/transactions`
+- `core.financial_transaction` tabla
+- `pos_sales` import -> financial transaction mapping MVP
+- egyszeru source reference alapu duplicate vedelem
 - `Finance Transactions` frontend oldal
 
-### Inventory
+### Inventory backend
 - `GET /api/v1/inventory/items`
 - `POST /api/v1/inventory/items`
+- `PATCH /api/v1/inventory/items/{item_id}`
+- `DELETE /api/v1/inventory/items/{item_id}`
+- `GET /api/v1/inventory/movements`
+- `POST /api/v1/inventory/movements`
+- `GET /api/v1/inventory/stock-levels`
+- `GET /api/v1/inventory/theoretical-stock`
 - inventory reference data bootstrap
-- `Inventory Items` frontend oldal
+- movement log
+- actual stock level aggregacio movement log alapjan
+- theoretical stock elso read modell explicit `not_configured` estimation basis jelolessel
 
-### Frontend
+### Inventory frontend
+- `Dashboard` vizualis referenciaoldal
+- `Inventory Overview`
+- `Inventory Items`
+- `Inventory Movements`
+- `Stock Levels`
+- `Theoretical Stock`
+- inventory item create flow
+- inventory item edit flow
+- inventory item archive flow
+- inventory movement create flow
+
+### Procurement
+- `GET /api/v1/procurement/suppliers`
+- `POST /api/v1/procurement/suppliers`
+- `GET /api/v1/procurement/purchase-invoices`
+- `POST /api/v1/procurement/purchase-invoices`
+- `core.supplier` tabla
+- `core.supplier_invoice`
+- `core.supplier_invoice_line`
+- supplier list es create backend flow
+- manual purchase invoice list es create backend flow
+- `Suppliers` frontend oldal
+- `Purchase Invoices` frontend oldal
+
+### Frontend oldalak
+- `Dashboard`
 - `Master Data Viewer`
 - `Finance Transactions`
+- `Inventory Overview`
 - `Inventory Items`
+- `Inventory Movements`
+- `Stock Levels`
+- `Theoretical Stock`
+- `Suppliers`
+- `Purchase Invoices`
 - `Import Center`
-- batch lista
-- batch reszletek
-- parse inditas
 
-## 3. Jelenlegi API felulet
+## 3. Jelenlegi inventory workflow
 
+```mermaid
+flowchart LR
+  A["Inventory Item"] --> B["POST /inventory/items"]
+  B --> C["core.inventory_item"]
+  C --> D["POST /inventory/movements"]
+  D --> E["core.inventory_movement"]
+  E --> F["GET /inventory/movements"]
+  E --> G["GET /inventory/stock-levels"]
+  G --> H["GET /inventory/theoretical-stock"]
+```
+
+Jelenlegi jelentese:
+- `Inventory Overview` = inventory landing es gyors operativ osszkep
+- `Inventory Items` = torzsadat
+- `Inventory Movements` = actual operational log
+- `Stock Levels` = actual aggregated stock view
+- `Theoretical Stock` = estimated reteg elso read-only readiness modellje
+
+Uzleti ertelmezes:
+- a jelenlegi inventory oldalcsalad az operativ es controlling alapot epiti
+- a vegcel egy dashboard es drill-down alapu business analysis rendszer
+- a jelenlegi UI mar tartalmaz egy kulon `Dashboard` vizualis referenciaoldalt is
+
+Ez jo alap, de UI szinten meg kell erositeni az egyertelmu szerepkor-szetvalasztast. Ennek iranyat a [INVENTORY_DIRECTION.md](C:\BizTracker\docs\INVENTORY_DIRECTION.md) rogziti.
+
+## 4. Jelenlegi API felulet
+
+### Health
 - `GET /api/v1/health`
+
+### Master data
 - `GET /api/v1/master-data/business-units`
 - `GET /api/v1/master-data/locations`
 - `GET /api/v1/master-data/units-of-measure`
 - `GET /api/v1/master-data/categories`
 - `GET /api/v1/master-data/products`
+
+### Finance
 - `GET /api/v1/finance/transactions`
+
+### Inventory
+- `GET /api/v1/inventory/theoretical-stock`
 - `GET /api/v1/inventory/items`
 - `POST /api/v1/inventory/items`
+- `PATCH /api/v1/inventory/items/{item_id}`
+- `DELETE /api/v1/inventory/items/{item_id}`
+- `GET /api/v1/inventory/movements`
+- `POST /api/v1/inventory/movements`
+- `GET /api/v1/inventory/stock-levels`
+
+### Imports
 - `POST /api/v1/imports/files`
 - `GET /api/v1/imports/batches`
 - `POST /api/v1/imports/batches/{batch_id}/parse`
@@ -93,18 +185,24 @@ flowchart LR
 - `GET /api/v1/imports/batches/{batch_id}/errors`
 - `POST /api/v1/imports/batches/{batch_id}/map/financial-transactions`
 
-## 4. Jelenlegi adatbazis allapot
+### Procurement
+- `GET /api/v1/procurement/suppliers`
+- `POST /api/v1/procurement/suppliers`
+- `GET /api/v1/procurement/purchase-invoices`
+- `POST /api/v1/procurement/purchase-invoices`
+
+## 5. Jelenlegi adatbazis allapot
 
 Aktualis Alembic head:
-- `010_inventory_item_name_uq`
+- `014_core_supplier_invoice_base`
 
-Eddig letrehozott schema-k:
+Schema-k:
 - `auth`
 - `core`
 - `ingest`
 - `analytics`
 
-Kulcs taborok:
+Fo tablak:
 - `auth.user`
 - `auth.role`
 - `auth.permission`
@@ -117,32 +215,98 @@ Kulcs taborok:
 - `core.product`
 - `core.financial_transaction`
 - `core.inventory_item`
+- `core.inventory_movement`
+- `core.supplier`
+- `core.supplier_invoice`
+- `core.supplier_invoice_line`
 - `ingest.import_batch`
 - `ingest.import_file`
 - `ingest.import_row`
 - `ingest.import_row_error`
 
-## 5. Mi hianyzik meg
+## 6. Mi hianyzik meg
 
-- identity login / token flow
-- role-based auth guardok az API-n
-- inventory movement logika
-- stock level read model
-- procurement flow
-- production flow
-- events flow
-- analytics dashboardok es aggregatumok
-- import_type-specifikus tovabbi profilok
+### Inventory
+- movement create/edit UX finomitas
+- theoretical / estimated stock valodi becslesi logikaja
+- inventory valuation
+- FIFO kompatibilis costing reteg
 
-## 6. Javasolt kovetkezo lepesek
+### Upload / procurement / source data
+- PDF alapu szamla workflow
+- manualis teteles beszerzes felvitel
+- supplier invoice / purchase alap kesz
+- purchase invoice -> inventory movement kapcsolat
+- purchase invoice -> finance cost kapcsolat
+- forgalmi CSV/Excel upload tovabbfejlesztese
+- kesobbi POS API connector
 
-1. identity auth MVP
-2. inventory movement write alap
-3. stock level read modell
-4. procurement MVP
-5. analytics dashboard alapok
+### Dashboard / analytics direction
+- `Overall` osszesito dashboard
+- kulon `Flow` business view
+- kulon `Gourmand` business view
+- interaktiv KPI, chart es drill-down workflow
+- idojaras alapu elemzesi reteg elokeszitese
 
-## 7. Gyors lokal futtatas
+### Finance
+- finance write workflow
+- finance dashboard / KPI szint
+- koltseg oldali strukturalt mapping
+
+### Imports
+- tovabbi import_type profilok
+- procurement iranyu importok
+- finomabb parse validacio
+
+### Identity
+- login
+- token flow
+- role based auth guardok
+
+### Procurement / Production / Events
+- procurement supplier es purchase invoice foundation utan mapping MVP
+- recipe es production MVP
+- events settlement MVP
+
+### Analytics
+- dashboard aggregatumok
+- actual vs estimated nezetek
+- drill downos KPI workflow
+
+## 7. Nyitott iranydontesek
+
+### Inventory menu es informacioarchitektura
+Jelenleg van:
+- `Inventory Overview`
+- `Inventory Items`
+- `Inventory Movements`
+- `Stock Levels`
+- `Theoretical Stock` backend read modell
+
+Ez domain szinten jo iranyba rendezett, de UX szinten a kovetkezo korben tovabb kell tisztazni:
+- actual es estimated inventory nezetek szeparalasat
+- az overview oldalra epulo gyors navigaciot
+- a movement create workflow helyet az inventory UX-ben
+
+Ez nincs elsietve, de mar most tudatosan kell kezelni. A celirany a [INVENTORY_DIRECTION.md](C:\BizTracker\docs\INVENTORY_DIRECTION.md) szerint legyen.
+
+### Theoretical / estimated stock
+Mar van egy elso backend read modell, de ez meg tudatosan nem szamol estimated fogyast. A mostani szerepe:
+- kulon read szerzodest adjon az estimated retegnek
+- expliciten jelezze, hogy az estimation basis meg `not_configured`
+- ne keverje ossze az actual es estimated mennyisegeket
+
+A kovetkezo fazisban erre lehet raepiteni az elso valodi consumption / recipe alapu logikat. Az elokesziteset a [THEORETICAL_STOCK_PREPARATION.md](C:\BizTracker\docs\THEORETICAL_STOCK_PREPARATION.md) rogziti.
+
+## 8. Javasolt kovetkezo fokusz
+
+1. Procurement invoice -> inventory / finance mapping alap
+2. Identity auth MVP
+3. Inventory valuation es FIFO kompatibilis reteg elokeszitese
+4. Overall / business dashboard kovetkezo valodi adatos szelete
+5. Theoretical stock valodi becslesi alapjanak letetele
+
+## 9. Gyors lokal futtatas
 
 Backend:
 ```powershell

@@ -136,6 +136,157 @@ def test_create_inventory_item_allows_same_name_in_different_business_units(
     assert first_response.json()["business_unit_id"] != second_response.json()["business_unit_id"]
 
 
+def test_update_inventory_item_succeeds(
+    client: TestClient,
+    create_inventory_item,
+    test_business_unit: BusinessUnitModel,
+    test_unit_of_measure: UnitOfMeasureModel,
+    pcs_unit_of_measure: UnitOfMeasureModel,
+) -> None:
+    item = create_inventory_item(
+        business_unit_id=test_business_unit.id,
+        uom_id=test_unit_of_measure.id,
+        name="Flour",
+        item_type="raw_material",
+        track_stock=True,
+        is_active=True,
+    )
+
+    response = client.patch(
+        f"{API_PREFIX}/items/{item.id}",
+        json={
+            "name": "Flour Premium",
+            "item_type": "finished_good",
+            "uom_id": str(pcs_unit_of_measure.id),
+            "track_stock": False,
+            "is_active": True,
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["id"] == str(item.id)
+    assert payload["name"] == "Flour Premium"
+    assert payload["item_type"] == "finished_good"
+    assert payload["uom_id"] == str(pcs_unit_of_measure.id)
+    assert payload["track_stock"] is False
+    assert payload["is_active"] is True
+
+
+def test_update_inventory_item_with_invalid_id_returns_not_found(
+    client: TestClient,
+    pcs_unit_of_measure: UnitOfMeasureModel,
+) -> None:
+    response = client.patch(
+        f"{API_PREFIX}/items/{uuid4()}",
+        json={
+            "name": "Updated Item",
+            "item_type": "raw_material",
+            "uom_id": str(pcs_unit_of_measure.id),
+            "track_stock": True,
+            "is_active": True,
+        },
+    )
+
+    assert response.status_code == 404
+    assert "Inventory item" in response.json()["detail"]
+
+
+def test_update_inventory_item_with_invalid_uom_returns_not_found(
+    client: TestClient,
+    create_inventory_item,
+    test_business_unit: BusinessUnitModel,
+    test_unit_of_measure: UnitOfMeasureModel,
+) -> None:
+    item = create_inventory_item(
+        business_unit_id=test_business_unit.id,
+        uom_id=test_unit_of_measure.id,
+        name="Milk",
+        item_type="raw_material",
+    )
+
+    response = client.patch(
+        f"{API_PREFIX}/items/{item.id}",
+        json={
+            "name": "Milk Updated",
+            "item_type": "raw_material",
+            "uom_id": str(uuid4()),
+            "track_stock": True,
+            "is_active": True,
+        },
+    )
+
+    assert response.status_code == 404
+    assert "Unit of measure" in response.json()["detail"]
+
+
+def test_update_inventory_item_rejects_duplicate_name_in_same_business_unit(
+    client: TestClient,
+    create_inventory_item,
+    test_business_unit: BusinessUnitModel,
+    test_unit_of_measure: UnitOfMeasureModel,
+) -> None:
+    first_item = create_inventory_item(
+        business_unit_id=test_business_unit.id,
+        uom_id=test_unit_of_measure.id,
+        name="Butter",
+        item_type="raw_material",
+    )
+    second_item = create_inventory_item(
+        business_unit_id=test_business_unit.id,
+        uom_id=test_unit_of_measure.id,
+        name="Sugar",
+        item_type="raw_material",
+    )
+
+    response = client.patch(
+        f"{API_PREFIX}/items/{second_item.id}",
+        json={
+            "name": first_item.name,
+            "item_type": "raw_material",
+            "uom_id": str(test_unit_of_measure.id),
+            "track_stock": True,
+            "is_active": True,
+        },
+    )
+
+    assert response.status_code == 409
+    assert "same name already exists" in response.json()["detail"]
+
+
+def test_archive_inventory_item_marks_item_inactive(
+    client: TestClient,
+    create_inventory_item,
+    test_business_unit: BusinessUnitModel,
+    test_unit_of_measure: UnitOfMeasureModel,
+) -> None:
+    item = create_inventory_item(
+        business_unit_id=test_business_unit.id,
+        uom_id=test_unit_of_measure.id,
+        name="Archive Demo Item",
+        item_type="packaging",
+        is_active=True,
+    )
+
+    response = client.delete(f"{API_PREFIX}/items/{item.id}")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["id"] == str(item.id)
+    assert payload["is_active"] is False
+
+    list_response = client.get(
+        f"{API_PREFIX}/items",
+        params={"business_unit_id": str(test_business_unit.id)},
+    )
+
+    assert list_response.status_code == 200
+    rows = list_response.json()
+    assert len(rows) == 1
+    assert rows[0]["id"] == str(item.id)
+    assert rows[0]["is_active"] is False
+
+
 def test_list_inventory_items_returns_successful_result(
     client: TestClient,
     create_inventory_item,

@@ -33,6 +33,13 @@ from app.modules.master_data.infrastructure.orm.product_model import ProductMode
 from app.modules.master_data.infrastructure.orm.unit_of_measure_model import (
     UnitOfMeasureModel,
 )
+from app.modules.procurement.infrastructure.orm.supplier_model import SupplierModel
+from app.modules.procurement.infrastructure.orm.purchase_invoice_model import (
+    PurchaseInvoiceModel,
+)
+from app.modules.procurement.infrastructure.orm.purchase_invoice_line_model import (
+    PurchaseInvoiceLineModel,
+)
 
 __all__ = [
     "BusinessUnitModel",
@@ -46,9 +53,12 @@ __all__ = [
     "InventoryMovementModel",
     "LocationModel",
     "PermissionModel",
+    "PurchaseInvoiceLineModel",
+    "PurchaseInvoiceModel",
     "ProductModel",
     "RoleModel",
     "RolePermissionModel",
+    "SupplierModel",
     "UnitOfMeasureModel",
     "UserModel",
     "UserRoleModel",
