@@ -1,0 +1,2 @@
+"""Procurement ORM model placeholder."""
+

@@ -1,0 +1,2 @@
+"""Finance ORM model placeholder."""
+

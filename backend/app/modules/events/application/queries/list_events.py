@@ -1,0 +1,2 @@
+"""List events query placeholder."""
+

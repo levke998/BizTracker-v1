@@ -1,0 +1,2 @@
+"""Events API router placeholder."""
+

@@ -1,0 +1,2 @@
+"""Production ORM model placeholder."""
+

@@ -1,0 +1,2 @@
+"""Inventory ORM model placeholder."""
+

@@ -1,0 +1,2 @@
+"""Production domain entity placeholder."""
+

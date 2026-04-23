@@ -1,0 +1,2 @@
+"""Identity repository contract placeholder."""
+

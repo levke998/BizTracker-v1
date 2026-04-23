@@ -1,0 +1,2 @@
+"""Analytics repository contract placeholder."""
+

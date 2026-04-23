@@ -1,0 +1,2 @@
+"""Events ORM model placeholder."""
+

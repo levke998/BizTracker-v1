@@ -1,0 +1,2 @@
+"""Events domain entity placeholder."""
+

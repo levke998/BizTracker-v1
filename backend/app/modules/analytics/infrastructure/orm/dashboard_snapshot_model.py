@@ -1,0 +1,2 @@
+"""Analytics ORM model placeholder."""
+

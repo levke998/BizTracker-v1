@@ -1,0 +1,2 @@
+"""Procurement repository contract placeholder."""
+

@@ -1,0 +1,2 @@
+"""Inventory schema placeholder."""
+

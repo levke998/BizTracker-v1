@@ -1,0 +1,2 @@
+"""Inventory repository contract placeholder."""
+

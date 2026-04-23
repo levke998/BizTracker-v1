@@ -1,0 +1,2 @@
+"""Procurement SQLAlchemy repository placeholder."""
+

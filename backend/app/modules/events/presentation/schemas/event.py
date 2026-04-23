@@ -1,0 +1,2 @@
+"""Events schema placeholder."""
+

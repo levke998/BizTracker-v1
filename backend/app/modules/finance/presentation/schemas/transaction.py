@@ -1,0 +1,2 @@
+"""Finance schema placeholder."""
+

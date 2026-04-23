@@ -1,0 +1,2 @@
+"""List suppliers query placeholder."""
+

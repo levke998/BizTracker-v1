@@ -1,0 +1,2 @@
+"""Finance SQLAlchemy repository placeholder."""
+

@@ -1,0 +1,2 @@
+"""Procurement presentation dependency placeholder."""
+

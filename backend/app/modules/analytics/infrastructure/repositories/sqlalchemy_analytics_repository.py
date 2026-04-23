@@ -1,0 +1,2 @@
+"""Analytics SQLAlchemy repository placeholder."""
+

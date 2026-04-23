@@ -1,0 +1,2 @@
+"""Analytics API router placeholder."""
+

@@ -1,0 +1,2 @@
+export type ProductionPlaceholder = unknown;
+

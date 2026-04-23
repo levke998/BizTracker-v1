@@ -1,0 +1,2 @@
+"""Procurement domain entity placeholder."""
+

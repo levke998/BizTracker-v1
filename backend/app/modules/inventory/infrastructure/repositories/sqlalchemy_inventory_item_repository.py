@@ -1,0 +1,2 @@
+"""Inventory SQLAlchemy repository placeholder."""
+

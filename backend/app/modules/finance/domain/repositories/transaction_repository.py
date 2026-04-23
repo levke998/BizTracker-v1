@@ -1,0 +1,2 @@
+"""Finance repository contract placeholder."""
+

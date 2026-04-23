@@ -1,0 +1,2 @@
+"""Finance presentation dependency placeholder."""
+

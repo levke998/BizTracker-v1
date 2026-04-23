@@ -1,0 +1,2 @@
+"""Finance domain entity placeholder."""
+

@@ -1,0 +1,2 @@
+"""Events SQLAlchemy repository placeholder."""
+

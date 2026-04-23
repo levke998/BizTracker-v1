@@ -1,0 +1,2 @@
+"""Events repository contract placeholder."""
+

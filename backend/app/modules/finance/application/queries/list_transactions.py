@@ -1,0 +1,2 @@
+"""List transactions query placeholder."""
+

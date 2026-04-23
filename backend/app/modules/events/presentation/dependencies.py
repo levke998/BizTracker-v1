@@ -1,0 +1,2 @@
+"""Events presentation dependency placeholder."""
+

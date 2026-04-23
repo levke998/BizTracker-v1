@@ -1,0 +1,2 @@
+"""Identity SQLAlchemy repository placeholder."""
+

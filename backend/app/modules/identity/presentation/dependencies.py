@@ -1,0 +1,2 @@
+"""Identity presentation dependency placeholder."""
+
