@@ -61,6 +61,21 @@ class PurchaseInvoiceResponse(BaseModel):
     currency: str
     gross_total: Decimal
     notes: str | None
+    is_posted: bool
+    posted_to_finance: bool
+    posted_inventory_movement_count: int
     created_at: datetime
     updated_at: datetime
     lines: list[PurchaseInvoiceLineResponse]
+
+
+class PurchaseInvoicePostingResponse(BaseModel):
+    """Summary response for posting a purchase invoice to downstream actuals."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    purchase_invoice_id: uuid.UUID
+    created_financial_transactions: int
+    created_inventory_movements: int
+    finance_source_type: str
+    inventory_source_type: str

@@ -18,9 +18,15 @@ class InventoryMovementModel(UUIDPrimaryKeyMixin, Base):
 
     __tablename__ = "inventory_movement"
     __table_args__ = (
+        sa.UniqueConstraint(
+            "source_type",
+            "source_id",
+            name="uq_core_inventory_movement_source_ref",
+        ),
         sa.Index("ix_core_inventory_movement_business_unit_id", "business_unit_id"),
         sa.Index("ix_core_inventory_movement_inventory_item_id", "inventory_item_id"),
         sa.Index("ix_core_inventory_movement_occurred_at", "occurred_at"),
+        sa.Index("ix_core_inventory_movement_source_ref", "source_type", "source_id"),
         {"schema": "core"},
     )
 
@@ -43,6 +49,8 @@ class InventoryMovementModel(UUIDPrimaryKeyMixin, Base):
     )
     unit_cost: Mapped[Decimal | None] = mapped_column(sa.Numeric(12, 2), nullable=True)
     note: Mapped[str | None] = mapped_column(sa.String(500), nullable=True)
+    source_type: Mapped[str | None] = mapped_column(sa.String(100), nullable=True)
+    source_id: Mapped[uuid.UUID | None] = mapped_column(sa.Uuid(as_uuid=True), nullable=True)
     occurred_at: Mapped[datetime] = mapped_column(
         sa.DateTime(timezone=True),
         nullable=False,

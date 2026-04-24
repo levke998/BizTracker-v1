@@ -70,6 +70,11 @@ The main design tokens live in [frontend/src/styles/globals.css](C:\BizTracker\f
 
 ## Reference implementation
 
-- Sample dashboard layout: [frontend/src/modules/analytics/pages/DashboardPage.tsx](C:\BizTracker\frontend\src\modules\analytics\pages\DashboardPage.tsx)
+- Business dashboard layout: [frontend/src/modules/analytics/pages/DashboardPage.tsx](C:\BizTracker\frontend\src\modules\analytics\pages\DashboardPage.tsx)
 - Reusable primitives: [frontend/src/shared/components/ui/Card.tsx](C:\BizTracker\frontend\src\shared\components\ui\Card.tsx), [frontend/src/shared/components/ui/Button.tsx](C:\BizTracker\frontend\src\shared\components\ui\Button.tsx)
 - Layout styling: [frontend/src/shared/components/layout/Sidebar.tsx](C:\BizTracker\frontend\src\shared\components\layout\Sidebar.tsx), [frontend/src/shared/components/layout/Topbar.tsx](C:\BizTracker\frontend\src\shared\components\layout\Topbar.tsx)
+
+Megjegyzes:
+- a korabbi dashboard design referencia volt
+- az aktualis `DashboardPage` mar a valodi business dashboard v1 iranyt kepviseli
+- a reszletes dashboard domain es UX iranyt a [DASHBOARD_DIRECTION.md](C:\BizTracker\docs\DASHBOARD_DIRECTION.md) rogziti

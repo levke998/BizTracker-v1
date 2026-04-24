@@ -11,6 +11,9 @@ from app.db.session import get_db_session
 from app.modules.procurement.application.commands.create_purchase_invoice import (
     CreatePurchaseInvoiceCommand,
 )
+from app.modules.procurement.application.commands.post_purchase_invoice import (
+    PostPurchaseInvoiceCommand,
+)
 from app.modules.procurement.application.commands.create_supplier import (
     CreateSupplierCommand,
 )
@@ -54,3 +57,10 @@ def get_create_purchase_invoice_command(session: DbSession) -> CreatePurchaseInv
 
     repository = SqlAlchemyPurchaseInvoiceRepository(session)
     return CreatePurchaseInvoiceCommand(repository=repository)
+
+
+def get_post_purchase_invoice_command(session: DbSession) -> PostPurchaseInvoiceCommand:
+    """Wire the purchase invoice posting command to its repository."""
+
+    repository = SqlAlchemyPurchaseInvoiceRepository(session)
+    return PostPurchaseInvoiceCommand(repository=repository)

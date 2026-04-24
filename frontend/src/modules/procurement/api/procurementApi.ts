@@ -1,8 +1,9 @@
-import { apiGet, apiPostJson } from "../../../services/api/client";
+import { apiGet, apiPost, apiPostJson } from "../../../services/api/client";
 import type {
   PurchaseInvoice,
   PurchaseInvoiceCreatePayload,
   PurchaseInvoiceFilters,
+  PurchaseInvoicePostingResult,
   Supplier,
   SupplierCreatePayload,
   SupplierFilters,
@@ -24,5 +25,11 @@ export function createPurchaseInvoice(payload: PurchaseInvoiceCreatePayload) {
   return apiPostJson<PurchaseInvoiceCreatePayload, PurchaseInvoice>(
     "procurement/purchase-invoices",
     payload
+  );
+}
+
+export function postPurchaseInvoice(invoiceId: string) {
+  return apiPost<PurchaseInvoicePostingResult>(
+    `procurement/purchase-invoices/${invoiceId}/post`
   );
 }

@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from app.api.health import router as health_router
+from app.modules.analytics.presentation.api.router import router as analytics_router
 from app.modules.finance.presentation.api.router import router as finance_router
 from app.modules.imports.presentation.api.router import router as imports_router
 from app.modules.inventory.presentation.api.router import router as inventory_router
@@ -13,6 +14,7 @@ from app.modules.procurement.presentation.api.router import router as procuremen
 
 api_router = APIRouter()
 api_router.include_router(health_router)
+api_router.include_router(analytics_router)
 api_router.include_router(finance_router)
 api_router.include_router(imports_router)
 api_router.include_router(inventory_router)

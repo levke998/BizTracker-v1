@@ -6,6 +6,8 @@ Kapcsolodo dokumentumok:
 - [CURRENT_STATUS.md](C:\BizTracker\docs\CURRENT_STATUS.md)
 - [PROJECT_DESCRIPTION.md](C:\BizTracker\PROJECT_DESCRIPTION.md)
 - [BUSINESS_DIRECTION.md](C:\BizTracker\docs\BUSINESS_DIRECTION.md)
+- [DATABASE_SYNC_NOTES.md](C:\BizTracker\docs\DATABASE_SYNC_NOTES.md)
+- [DASHBOARD_DIRECTION.md](C:\BizTracker\docs\DASHBOARD_DIRECTION.md)
 - [INVENTORY_DIRECTION.md](C:\BizTracker\docs\INVENTORY_DIRECTION.md)
 - [THEORETICAL_STOCK_PREPARATION.md](C:\BizTracker\docs\THEORETICAL_STOCK_PREPARATION.md)
 
@@ -61,6 +63,9 @@ Ezert a kozvetlen fokusz:
    - manual purchase invoice adatok bekotese
    - inventory novekedes es penzugyi oldal kozelitese
    - kesobbi PDF workflow elokeszitese
+   - fo gepen elso lepes: `alembic upgrade head`, lasd [DATABASE_SYNC_NOTES.md](C:\BizTracker\docs\DATABASE_SYNC_NOTES.md)
+   - kod szinten elkezdve: purchase invoice posting endpoint, finance transaction mapping, inventory movement mapping, frontend post action
+   - hatralevo: fo gepes DB migration es integration test futtatas
 
 2. identity auth MVP
    - login
@@ -79,6 +84,9 @@ Ezert a kozvetlen fokusz:
 5. overall / business dashboard valodi adatos szelete
    - revenue / cost / profit alap KPI
    - drill-down kompatibilis read modellek
+   - kod szinten elkezdve: `GET /api/v1/analytics/dashboard`, scope-ok, period presetek, frontend business dashboard v1
+   - kod szinten elkezdve: category -> product es expense type -> transaction drill-down endpointok
+   - hatralevo: fo gepes DB integration test es source-row szintu drill-down endpointok
 
 ## 3/A. Strategiai hangsulyok
 

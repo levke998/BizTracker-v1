@@ -114,6 +114,8 @@ class SqlAlchemyInventoryItemRepository:
             uom_id=movement.uom_id,
             unit_cost=movement.unit_cost,
             note=movement.note,
+            source_type=movement.source_type,
+            source_id=movement.source_id,
             occurred_at=movement.occurred_at,
         )
         self._session.add(model)
@@ -301,6 +303,8 @@ class SqlAlchemyInventoryItemRepository:
             uom_id=model.uom_id,
             unit_cost=unit_cost,
             note=model.note,
+            source_type=model.source_type,
+            source_id=model.source_id,
             occurred_at=model.occurred_at,
             created_at=model.created_at,
         )

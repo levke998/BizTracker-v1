@@ -19,6 +19,11 @@ from app.modules.procurement.application.commands.create_purchase_invoice import
     ProcurementInvoiceSupplierNotFoundError,
     ProcurementInvoiceUnitOfMeasureNotFoundError,
 )
+from app.modules.procurement.application.commands.post_purchase_invoice import (
+    PostPurchaseInvoiceCommand,
+    PurchaseInvoiceAlreadyPostedError,
+    PurchaseInvoiceNotFoundError,
+)
 from app.modules.procurement.application.commands.create_supplier import (
     CreateSupplierCommand,
     ProcurementBusinessUnitNotFoundError,
@@ -33,9 +38,11 @@ from app.modules.procurement.presentation.dependencies import (
     get_create_supplier_command,
     get_list_purchase_invoices_query,
     get_list_suppliers_query,
+    get_post_purchase_invoice_command,
 )
 from app.modules.procurement.presentation.schemas.purchase_invoice import (
     PurchaseInvoiceCreateRequest,
+    PurchaseInvoicePostingResponse,
     PurchaseInvoiceResponse,
 )
 from app.modules.procurement.presentation.schemas.supplier import (
@@ -148,6 +155,29 @@ def create_purchase_invoice(
         ) from exc
 
     return PurchaseInvoiceResponse.model_validate(invoice)
+
+
+@router.post(
+    "/purchase-invoices/{purchase_invoice_id}/post",
+    response_model=PurchaseInvoicePostingResponse,
+)
+def post_purchase_invoice(
+    purchase_invoice_id: uuid.UUID,
+    command: Annotated[
+        PostPurchaseInvoiceCommand,
+        Depends(get_post_purchase_invoice_command),
+    ],
+) -> PurchaseInvoicePostingResponse:
+    """Post one purchase invoice into finance and actual inventory movements."""
+
+    try:
+        result = command.execute(purchase_invoice_id=purchase_invoice_id)
+    except PurchaseInvoiceNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except PurchaseInvoiceAlreadyPostedError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+    return PurchaseInvoicePostingResponse.model_validate(result)
 
 
 @router.get("/purchase-invoices", response_model=list[PurchaseInvoiceResponse])

@@ -921,6 +921,142 @@ select {
   box-shadow: 0 0 18px rgba(139, 92, 246, 0.14);
 }
 
+.business-dashboard-toolbar {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.business-segmented-control,
+.business-dashboard-filters {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: end;
+}
+
+.business-chart-surface {
+  position: relative;
+  min-height: 280px;
+  border-radius: 18px;
+  padding: 14px 14px 8px;
+  border: 1px solid rgba(148, 163, 184, 0.1);
+  background:
+    linear-gradient(180deg, rgba(8, 13, 28, 0.94), rgba(15, 23, 42, 0.76)),
+    radial-gradient(circle at top left, rgba(139, 92, 246, 0.08), transparent 35%);
+  overflow: hidden;
+}
+
+.business-chart-surface::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(rgba(148, 163, 184, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.08) 1px, transparent 1px);
+  background-size: 100% 25%, 12.5% 100%;
+  pointer-events: none;
+}
+
+.business-chart-axis {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.business-breakdown-list {
+  display: grid;
+  gap: 14px;
+}
+
+.business-breakdown-actions {
+  display: grid;
+  gap: 10px;
+}
+
+.business-drilldown-button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  width: 100%;
+  min-height: 46px;
+  padding: 11px 13px;
+  border-radius: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  background: rgba(15, 23, 42, 0.68);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    background-color 180ms ease;
+}
+
+.business-drilldown-button:hover {
+  transform: translateY(-1px);
+  border-color: rgba(139, 92, 246, 0.28);
+  background: rgba(139, 92, 246, 0.09);
+}
+
+.business-drilldown-button span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.business-drilldown-button strong {
+  white-space: nowrap;
+}
+
+.business-breakdown-row {
+  display: grid;
+  gap: 7px;
+}
+
+.business-breakdown-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.business-breakdown-top strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.business-breakdown-top span {
+  color: var(--text-primary);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.business-swatch-revenue {
+  background: #d946ef;
+  color: #d946ef;
+}
+
+.business-swatch-cost {
+  background: #fb7185;
+  color: #fb7185;
+}
+
+.business-swatch-profit {
+  background: #34d399;
+  color: #34d399;
+}
+
 .dashboard-hero {
   display: grid;
   grid-template-columns: minmax(0, 1.65fr) minmax(260px, 0.95fr);
@@ -1165,6 +1301,11 @@ select {
   .dashboard-hero,
   .dashboard-main {
     grid-template-columns: 1fr;
+  }
+
+  .business-dashboard-toolbar {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .summary-grid,

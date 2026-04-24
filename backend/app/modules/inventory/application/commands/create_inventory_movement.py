@@ -59,6 +59,8 @@ class CreateInventoryMovementCommand:
         unit_cost: Decimal | None = None,
         occurred_at: datetime | None = None,
         note: str | None = None,
+        source_type: str | None = None,
+        source_id: uuid.UUID | None = None,
     ) -> InventoryMovement:
         """Validate references and persist one movement log entry."""
 
@@ -101,6 +103,8 @@ class CreateInventoryMovementCommand:
             uom_id=uom_id,
             unit_cost=unit_cost,
             note=note.strip() if note else None,
+            source_type=source_type.strip() if source_type else None,
+            source_id=source_id,
             occurred_at=occurred_at or datetime.now(UTC),
         )
         return self.repository.create_movement(movement)

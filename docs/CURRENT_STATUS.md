@@ -7,6 +7,8 @@ Kapcsolodo dokumentumok:
 - [ARCHITECTURE.md](C:\BizTracker\docs\ARCHITECTURE.md)
 - [ACCOUNTING_AND_CONTROLLING_MODEL.md](C:\BizTracker\docs\ACCOUNTING_AND_CONTROLLING_MODEL.md)
 - [BUSINESS_DIRECTION.md](C:\BizTracker\docs\BUSINESS_DIRECTION.md)
+- [DATABASE_SYNC_NOTES.md](C:\BizTracker\docs\DATABASE_SYNC_NOTES.md)
+- [DASHBOARD_DIRECTION.md](C:\BizTracker\docs\DASHBOARD_DIRECTION.md)
 - [INVENTORY_DIRECTION.md](C:\BizTracker\docs\INVENTORY_DIRECTION.md)
 - [THEORETICAL_STOCK_PREPARATION.md](C:\BizTracker\docs\THEORETICAL_STOCK_PREPARATION.md)
 - [ROADMAP.md](C:\BizTracker\docs\ROADMAP.md)
@@ -104,16 +106,37 @@ Uzleti szintu irany:
 - `POST /api/v1/procurement/suppliers`
 - `GET /api/v1/procurement/purchase-invoices`
 - `POST /api/v1/procurement/purchase-invoices`
+- `POST /api/v1/procurement/purchase-invoices/{purchase_invoice_id}/post`
 - `core.supplier` tabla
 - `core.supplier_invoice`
 - `core.supplier_invoice_line`
 - supplier list es create backend flow
 - manual purchase invoice list es create backend flow
+- purchase invoice -> finance transaction posting flow
+- purchase invoice line -> inventory purchase movement posting flow
+- purchase invoice list posting status read model
 - `Suppliers` frontend oldal
 - `Purchase Invoices` frontend oldal
+- `Purchase Invoices` frontend post action es status jelzes
+
+### Analytics / Dashboard
+- `GET /api/v1/analytics/dashboard`
+- `GET /api/v1/analytics/dashboard/categories`
+- `GET /api/v1/analytics/dashboard/products`
+- `GET /api/v1/analytics/dashboard/expenses`
+- scope-ok: `overall`, `flow`, `gourmand`
+- idoszak presetek: `today`, `week`, `month`, `last_30_days`, `year`, `custom`
+- KPI-k: revenue, cost, profit, transaction count
+- revenue / cost / profit trend read model
+- category breakdown POS import sorokbol
+- top products POS import sorokbol
+- expense breakdown finance actual outflow-kbol
+- category -> product drill-down endpoint es frontend detail panel
+- expense type -> transaction drill-down endpoint es frontend detail panel
+- frontend dashboard sample helyett valodi business dashboard v1
 
 ### Frontend oldalak
-- `Dashboard`
+- `Dashboard` valodi business dashboard v1
 - `Master Data Viewer`
 - `Finance Transactions`
 - `Inventory Overview`
@@ -190,11 +213,23 @@ Ez jo alap, de UI szinten meg kell erositeni az egyertelmu szerepkor-szetvalaszt
 - `POST /api/v1/procurement/suppliers`
 - `GET /api/v1/procurement/purchase-invoices`
 - `POST /api/v1/procurement/purchase-invoices`
+- `POST /api/v1/procurement/purchase-invoices/{purchase_invoice_id}/post`
+
+### Analytics
+- `GET /api/v1/analytics/dashboard`
+- `GET /api/v1/analytics/dashboard/categories`
+- `GET /api/v1/analytics/dashboard/products`
+- `GET /api/v1/analytics/dashboard/expenses`
 
 ## 5. Jelenlegi adatbazis allapot
 
 Aktualis Alembic head:
-- `014_core_supplier_invoice_base`
+- `015_inventory_movement_source_ref`
+
+Fontos fejlesztoi megjegyzes:
+- ezen a PC-n nincs local database
+- a fo fejlesztoi gepen munkakezdeskor `alembic upgrade head` futtatasa szukseges
+- az aktualis adatbazis-szinkron teendot a [DATABASE_SYNC_NOTES.md](C:\BizTracker\docs\DATABASE_SYNC_NOTES.md) rogziti
 
 Schema-k:
 - `auth`
@@ -236,16 +271,16 @@ Fo tablak:
 - PDF alapu szamla workflow
 - manualis teteles beszerzes felvitel
 - supplier invoice / purchase alap kesz
-- purchase invoice -> inventory movement kapcsolat
-- purchase invoice -> finance cost kapcsolat
+- purchase invoice -> inventory movement kapcsolat fo geps DB tesztelese
+- purchase invoice -> finance cost kapcsolat fo geps DB tesztelese
 - forgalmi CSV/Excel upload tovabbfejlesztese
 - kesobbi POS API connector
 
 ### Dashboard / analytics direction
-- `Overall` osszesito dashboard
-- kulon `Flow` business view
-- kulon `Gourmand` business view
-- interaktiv KPI, chart es drill-down workflow
+- `Overall` osszesito dashboard v1 elinditva
+- kulon `Flow` business view v1 elinditva
+- kulon `Gourmand` business view v1 elinditva
+- interaktiv KPI, chart es drill-down workflow elokeszitve
 - idojaras alapu elemzesi reteg elokeszitese
 
 ### Finance
@@ -269,9 +304,9 @@ Fo tablak:
 - events settlement MVP
 
 ### Analytics
-- dashboard aggregatumok
+- dashboard aggregatumok fo geps DB tesztelese
 - actual vs estimated nezetek
-- drill downos KPI workflow
+- drill downos KPI workflow kovetkezo endpointjai
 
 ## 7. Nyitott iranydontesek
 

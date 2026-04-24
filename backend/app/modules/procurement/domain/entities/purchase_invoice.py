@@ -46,6 +46,9 @@ class PurchaseInvoice:
     currency: str
     gross_total: Decimal
     notes: str | None
+    is_posted: bool
+    posted_to_finance: bool
+    posted_inventory_movement_count: int
     created_at: datetime
     updated_at: datetime
     lines: tuple[PurchaseInvoiceLine, ...]

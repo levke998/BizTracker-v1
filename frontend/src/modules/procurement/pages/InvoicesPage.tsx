@@ -89,6 +89,18 @@ function getInventoryItemById(items: InventoryItem[], inventoryItemId: string) {
   return items.find((item) => item.id === inventoryItemId) ?? null;
 }
 
+function getPostingStatusLabel(isPosted: boolean, movementCount: number) {
+  if (!isPosted) {
+    return "Pending";
+  }
+
+  if (movementCount > 0) {
+    return "Posted";
+  }
+
+  return "Posted to finance";
+}
+
 export function InvoicesPage() {
   const {
     primaryBusinessUnits,
@@ -104,7 +116,9 @@ export function InvoicesPage() {
     limit,
     setLimit,
     createPurchaseInvoice,
+    postPurchaseInvoice,
     isSaving,
+    isPosting,
     isLoading,
     errorMessage,
   } = usePurchaseInvoices();
@@ -230,6 +244,22 @@ export function InvoicesPage() {
     } catch (error) {
       setActionErrorMessage(
         error instanceof Error ? error.message : "Failed to create purchase invoice."
+      );
+    }
+  };
+
+  const handlePost = async (invoiceId: string, invoiceNumber: string) => {
+    setActionMessage("");
+    setActionErrorMessage("");
+
+    try {
+      const result = await postPurchaseInvoice(invoiceId);
+      setActionMessage(
+        `Purchase invoice "${invoiceNumber}" posted: ${result.created_financial_transactions} finance transaction, ${result.created_inventory_movements} inventory movements.`
+      );
+    } catch (error) {
+      setActionErrorMessage(
+        error instanceof Error ? error.message : "Failed to post purchase invoice."
       );
     }
   };
@@ -565,7 +595,9 @@ export function InvoicesPage() {
                   <th>Currency</th>
                   <th>Gross total</th>
                   <th>Lines</th>
+                  <th>Status</th>
                   <th>Updated at</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -577,7 +609,23 @@ export function InvoicesPage() {
                     <td>{invoice.currency}</td>
                     <td>{invoice.gross_total}</td>
                     <td>{invoice.lines.length}</td>
+                    <td>
+                      {getPostingStatusLabel(
+                        invoice.is_posted,
+                        invoice.posted_inventory_movement_count
+                      )}
+                    </td>
                     <td>{formatDateTime(invoice.updated_at)}</td>
+                    <td>
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        onClick={() => handlePost(invoice.id, invoice.invoice_number)}
+                        disabled={isPosting || invoice.is_posted}
+                      >
+                        Post
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>

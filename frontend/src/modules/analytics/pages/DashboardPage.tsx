@@ -1,386 +1,482 @@
 import { Button } from "../../../shared/components/ui/Button";
 import { Card } from "../../../shared/components/ui/Card";
+import { useDashboard } from "../hooks/useDashboard";
+import type {
+  DashboardBreakdownRow,
+  DashboardExpenseRow,
+  DashboardKpi,
+  DashboardPeriodPreset,
+  DashboardScope,
+  DashboardTrendPoint,
+} from "../types/analytics";
 
-const kpis = [
-  {
-    label: "Net revenue",
-    value: "EUR 128.4K",
-    delta: "+12.6%",
-    caption: "vs previous 30 days",
-    tone: "primary" as const,
-  },
-  {
-    label: "Inventory accuracy",
-    value: "97.8%",
-    delta: "+1.9%",
-    caption: "tracked locations aligned",
-    tone: "secondary" as const,
-  },
-  {
-    label: "Purchase cycle",
-    value: "4.2 days",
-    delta: "-0.6 day",
-    caption: "approval to receipt",
-    tone: "highlight" as const,
-  },
-  {
-    label: "Open exceptions",
-    value: "18",
-    delta: "-7",
-    caption: "reconciliations pending",
-    tone: "rainbow" as const,
-  },
+const scopeOptions: Array<{ value: DashboardScope; label: string }> = [
+  { value: "overall", label: "Overall" },
+  { value: "flow", label: "Flow" },
+  { value: "gourmand", label: "Gourmand" },
 ];
 
-const revenuePoints = [
-  [40, 218],
-  [110, 196],
-  [180, 204],
-  [250, 168],
-  [320, 150],
-  [390, 112],
-  [460, 124],
-  [530, 94],
-  [600, 78],
-  [670, 56],
+const periodOptions: Array<{ value: DashboardPeriodPreset; label: string }> = [
+  { value: "today", label: "Today" },
+  { value: "week", label: "This week" },
+  { value: "month", label: "This month" },
+  { value: "last_30_days", label: "Last 30 days" },
+  { value: "year", label: "This year" },
+  { value: "custom", label: "Custom" },
 ];
 
-const forecastPoints = [
-  [40, 226],
-  [110, 210],
-  [180, 188],
-  [250, 162],
-  [320, 142],
-  [390, 118],
-  [460, 102],
-  [530, 86],
-  [600, 72],
-  [670, 62],
-];
+function toNumber(value: string) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
 
-const channels = [
-  { label: "Retail", value: "46%", width: "46%" },
-  { label: "Wholesale", value: "28%", width: "28%" },
-  { label: "Delivery", value: "18%", width: "18%" },
-  { label: "Events", value: "8%", width: "8%" },
-];
+function formatMoney(value: string | number) {
+  return new Intl.NumberFormat("hu-HU", {
+    style: "currency",
+    currency: "HUF",
+    maximumFractionDigits: 0,
+  }).format(typeof value === "number" ? value : toNumber(value));
+}
 
-const activityItems = [
-  {
-    title: "Inventory movement reconciliation",
-    time: "08:45",
-    description: "Three high-value ingredients need review before end-of-day close.",
-  },
-  {
-    title: "Import pipeline healthy",
-    time: "09:10",
-    description: "POS sales, invoices and stock movements arrived without parse failures.",
-  },
-  {
-    title: "Purchase approvals",
-    time: "09:32",
-    description: "Two supplier invoices are waiting for finance confirmation.",
-  },
-];
+function formatNumber(value: string | number) {
+  return new Intl.NumberFormat("hu-HU", {
+    maximumFractionDigits: 1,
+  }).format(typeof value === "number" ? value : toNumber(value));
+}
 
-const exceptionRows = [
-  {
-    unit: "Central Kitchen",
-    area: "Stock Levels",
-    issue: "Theoretical stock diverges by more than 4.5%",
-    owner: "Operations",
-    status: "Investigating",
-  },
-  {
-    unit: "Riverside Cafe",
-    area: "Imports",
-    issue: "Manual review required for missing supplier reference",
-    owner: "Procurement",
-    status: "Queued",
-  },
-  {
-    unit: "Airport Unit",
-    area: "Finance",
-    issue: "Source mapping pending for one imported revenue batch",
-    owner: "Finance",
-    status: "Open",
-  },
-];
+function formatDate(value: string) {
+  return new Intl.DateTimeFormat("hu-HU", {
+    month: "short",
+    day: "2-digit",
+  }).format(new Date(value));
+}
 
-function toPath(points: number[][]) {
+function getKpiValue(kpi: DashboardKpi) {
+  if (kpi.unit === "HUF") {
+    return formatMoney(kpi.value);
+  }
+
+  return formatNumber(kpi.value);
+}
+
+function getKpiTone(code: string) {
+  if (code === "revenue") {
+    return "primary" as const;
+  }
+  if (code === "cost") {
+    return "secondary" as const;
+  }
+  if (code === "profit") {
+    return "highlight" as const;
+  }
+  return "rainbow" as const;
+}
+
+function buildLinePath(
+  points: DashboardTrendPoint[],
+  valueSelector: (point: DashboardTrendPoint) => number,
+) {
+  if (points.length === 0) {
+    return "";
+  }
+
+  const width = 680;
+  const height = 220;
+  const padding = 24;
+  const values = points.flatMap((point) => [
+    toNumber(point.revenue),
+    toNumber(point.cost),
+    toNumber(point.profit),
+  ]);
+  const maxValue = Math.max(...values, 1);
+  const minValue = Math.min(...values, 0);
+  const range = Math.max(maxValue - minValue, 1);
+  const step = points.length > 1 ? (width - padding * 2) / (points.length - 1) : 0;
+
   return points
-    .map((point, index) => `${index === 0 ? "M" : "L"} ${point[0]} ${point[1]}`)
+    .map((point, index) => {
+      const x = padding + step * index;
+      const normalized = (valueSelector(point) - minValue) / range;
+      const y = height - padding - normalized * (height - padding * 2);
+      return `${index === 0 ? "M" : "L"} ${x.toFixed(1)} ${y.toFixed(1)}`;
+    })
     .join(" ");
 }
 
+function TrendChart({ points }: { points: DashboardTrendPoint[] }) {
+  const revenuePath = buildLinePath(points, (point) => toNumber(point.revenue));
+  const costPath = buildLinePath(points, (point) => toNumber(point.cost));
+  const profitPath = buildLinePath(points, (point) => toNumber(point.profit));
+
+  return (
+    <div className="business-chart-surface">
+      <svg className="chart-svg" viewBox="0 0 680 220" role="img">
+        <defs>
+          <linearGradient id="businessRevenueGradient" x1="0%" x2="100%">
+            <stop offset="0%" stopColor="#8b5cf6" />
+            <stop offset="55%" stopColor="#d946ef" />
+            <stop offset="100%" stopColor="#38bdf8" />
+          </linearGradient>
+        </defs>
+        <path
+          d={revenuePath}
+          fill="none"
+          stroke="url(#businessRevenueGradient)"
+          strokeWidth="4"
+          strokeLinecap="round"
+        />
+        <path
+          d={costPath}
+          fill="none"
+          stroke="#fb7185"
+          strokeWidth="3"
+          strokeLinecap="round"
+          strokeDasharray="7 8"
+        />
+        <path
+          d={profitPath}
+          fill="none"
+          stroke="#34d399"
+          strokeWidth="3"
+          strokeLinecap="round"
+        />
+      </svg>
+      <div className="business-chart-axis">
+        {points.slice(0, 6).map((point) => (
+          <span key={point.period_start}>{formatDate(point.period_start)}</span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function BreakdownBars({
+  rows,
+  valueKey,
+}: {
+  rows: DashboardBreakdownRow[] | DashboardExpenseRow[];
+  valueKey: "revenue" | "amount";
+}) {
+  const getRowValue = (row: DashboardBreakdownRow | DashboardExpenseRow) => {
+    if (valueKey === "revenue" && "revenue" in row) {
+      return row.revenue;
+    }
+    if (valueKey === "amount" && "amount" in row) {
+      return row.amount;
+    }
+    return "0";
+  };
+  const maxValue = Math.max(
+    ...rows.map((row) => toNumber(getRowValue(row))),
+    1,
+  );
+
+  return (
+    <div className="business-breakdown-list">
+      {rows.map((row) => {
+        const value = getRowValue(row);
+        const width = `${Math.max(3, (toNumber(value) / maxValue) * 100)}%`;
+
+        return (
+          <div className="business-breakdown-row" key={row.label}>
+            <div className="business-breakdown-top">
+              <strong>{row.label}</strong>
+              <span>{formatMoney(value)}</span>
+            </div>
+            <div className="chart-bar">
+              <span style={{ width }} />
+            </div>
+            <span className="section-note">
+              {row.transaction_count} records · {row.source_layer}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export function DashboardPage() {
-  const revenuePath = toPath(revenuePoints);
-  const forecastPath = toPath(forecastPoints);
+  const {
+    dashboard,
+    productDetails,
+    expenseDetails,
+    drilldown,
+    setDrilldown,
+    scope,
+    setScope,
+    period,
+    setPeriod,
+    startDate,
+    setStartDate,
+    endDate,
+    setEndDate,
+    isLoading,
+    isDrilldownLoading,
+    errorMessage,
+  } = useDashboard();
 
   return (
     <section className="page-section">
-      <div className="dashboard-hero">
-        <Card
-          tone="primary"
-          eyebrow="Visual Foundation"
-          className="hero-copy"
-          hoverable
-          title={
-            <span className="hero-title">
-              Dark premium styling for a practical internal dashboard.
-            </span>
-          }
-          subtitle={
-            <span className="hero-text">
-              This page is a visual reference for the rest of the application. It keeps
-              the product structure intact and demonstrates how KPI cards, filters,
-              charts and tables can feel more polished without becoming flashy.
-            </span>
-          }
-          actions={
-            <div className="toolbar-group">
-              <Button variant="primary" glow>
-                Refresh snapshot
-              </Button>
-              <Button variant="secondary">Export view</Button>
-            </div>
-          }
-        >
-          <div className="hero-badges">
-            <span className="hero-badge">
-              Window <strong>Rolling 30 days</strong>
-            </span>
-            <span className="hero-badge">
-              Theme <strong>Purple glow, dark enterprise</strong>
-            </span>
-            <span className="hero-badge">
-              Charts <strong>Gradient-led emphasis</strong>
-            </span>
-          </div>
-        </Card>
+      <section className="panel business-dashboard-toolbar">
+        <div className="business-segmented-control">
+          {scopeOptions.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              className={
+                scope === option.value
+                  ? "filter-chip filter-chip-active"
+                  : "filter-chip"
+              }
+              onClick={() => setScope(option.value)}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
 
-        <Card
-          tone="highlight"
-          eyebrow="Usage Notes"
-          title="How to extend the style"
-          subtitle="Keep the same spacing rhythm and reserve the strongest gradients for focus, KPIs and charts."
-          className="hero-note"
-        >
-          <div className="hero-note-list">
-            <span>
-              <strong>Sidebar:</strong> use glow only on the active route and selected
-              filters.
-            </span>
-            <span>
-              <strong>Panels:</strong> keep surfaces dark with subtle border gradients
-              and soft hover elevation.
-            </span>
-            <span>
-              <strong>Charts:</strong> use purple-pink-blue accents to carry most of the
-              visual energy.
-            </span>
-          </div>
-        </Card>
-      </div>
+        <div className="business-dashboard-filters">
+          <label className="field">
+            <span>Period</span>
+            <select
+              className="field-input"
+              value={period}
+              onChange={(event) =>
+                setPeriod(event.target.value as DashboardPeriodPreset)
+              }
+            >
+              {periodOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
 
-      <div className="kpi-grid">
-        {kpis.map((item) => (
-          <Card
-            key={item.label}
-            tone={item.tone}
-            className="kpi-card"
-            hoverable
-            eyebrow={item.label}
-          >
-            <span className="kpi-value">{item.value}</span>
-            <span className={`kpi-delta${item.delta.startsWith("-") ? " down" : ""}`}>
-              {item.delta}
-            </span>
-            <span className="kpi-caption">{item.caption}</span>
-          </Card>
-        ))}
-      </div>
+          {period === "custom" ? (
+            <>
+              <label className="field">
+                <span>Start date</span>
+                <input
+                  className="field-input"
+                  type="date"
+                  value={startDate}
+                  onChange={(event) => setStartDate(event.target.value)}
+                />
+              </label>
+              <label className="field">
+                <span>End date</span>
+                <input
+                  className="field-input"
+                  type="date"
+                  value={endDate}
+                  onChange={(event) => setEndDate(event.target.value)}
+                />
+              </label>
+            </>
+          ) : null}
 
-      <div className="dashboard-main">
-        <div className="dashboard-stack">
-          <Card
-            tone="rainbow"
-            hoverable
-            className="chart-card"
-            eyebrow="Chart Styling"
-            title="Revenue trajectory"
-            subtitle="The chart carries the strongest gradient treatment, while grid lines and labels stay soft."
-            actions={
-              <div className="chart-legend">
-                <span className="chart-legend-item">
-                  <span
-                    className="chart-legend-swatch"
-                    style={{ color: "#d946ef", background: "#d946ef" }}
-                  />
-                  Actual
-                </span>
-                <span className="chart-legend-item">
-                  <span
-                    className="chart-legend-swatch"
-                    style={{ color: "#38bdf8", background: "#38bdf8" }}
-                  />
-                  Forecast
-                </span>
-              </div>
-            }
-          >
-            <div className="chart-surface">
-              <div className="chart-tooltip">
-                <strong>Week 4</strong>
-                <span>EUR 32.6K actual revenue</span>
-              </div>
-              <svg
-                className="chart-svg"
-                viewBox="0 0 720 260"
-                role="img"
-                aria-label="Sample revenue trend chart"
+          <Button variant="secondary">Export</Button>
+        </div>
+      </section>
+
+      {errorMessage ? <p className="error-message">{errorMessage}</p> : null}
+      {isLoading ? <p className="info-message">Loading business dashboard...</p> : null}
+
+      {dashboard ? (
+        <>
+          <div className="kpi-grid">
+            {dashboard.kpis.map((kpi) => (
+              <Card
+                key={kpi.code}
+                tone={getKpiTone(kpi.code)}
+                className="kpi-card"
+                hoverable
+                eyebrow={kpi.label}
               >
-                <defs>
-                  <linearGradient id="actualGradient" x1="0%" x2="100%" y1="0%" y2="0%">
-                    <stop offset="0%" stopColor="#8b5cf6" />
-                    <stop offset="48%" stopColor="#d946ef" />
-                    <stop offset="100%" stopColor="#38bdf8" />
-                  </linearGradient>
-                  <linearGradient id="areaGradient" x1="0%" x2="0%" y1="0%" y2="100%">
-                    <stop offset="0%" stopColor="#d946ef" stopOpacity="0.42" />
-                    <stop offset="100%" stopColor="#38bdf8" stopOpacity="0.02" />
-                  </linearGradient>
-                </defs>
+                <span className="kpi-value">{getKpiValue(kpi)}</span>
+                <span className="kpi-caption">{kpi.source_layer}</span>
+              </Card>
+            ))}
+          </div>
 
-                <path
-                  d={`${revenuePath} L 670 240 L 40 240 Z`}
-                  fill="url(#areaGradient)"
-                  opacity="0.95"
-                />
-                <path
-                  d={forecastPath}
-                  fill="none"
-                  stroke="rgba(56, 189, 248, 0.66)"
-                  strokeDasharray="7 8"
-                  strokeWidth="3"
-                  strokeLinecap="round"
-                />
-                <path
-                  d={revenuePath}
-                  fill="none"
-                  stroke="url(#actualGradient)"
-                  strokeWidth="5"
-                  strokeLinecap="round"
-                  filter="drop-shadow(0 0 12px rgba(139, 92, 246, 0.45))"
-                />
-                {revenuePoints.map((point) => (
-                  <circle
-                    key={point.join("-")}
-                    cx={point[0]}
-                    cy={point[1]}
-                    r="4.5"
-                    fill="#0b1020"
-                    stroke="#c084fc"
-                    strokeWidth="2"
-                  />
-                ))}
-              </svg>
+          <div className="dashboard-main">
+            <div className="dashboard-stack">
+              <Card
+                tone="rainbow"
+                className="chart-card"
+                hoverable
+                eyebrow={`${dashboard.period.start_date} - ${dashboard.period.end_date}`}
+                title="Revenue, cost and profit"
+                subtitle={`Grouped by ${dashboard.period.grain}`}
+                actions={
+                  <div className="chart-legend">
+                    <span className="chart-legend-item">
+                      <span className="chart-legend-swatch business-swatch-revenue" />
+                      Revenue
+                    </span>
+                    <span className="chart-legend-item">
+                      <span className="chart-legend-swatch business-swatch-cost" />
+                      Cost
+                    </span>
+                    <span className="chart-legend-item">
+                      <span className="chart-legend-swatch business-swatch-profit" />
+                      Profit
+                    </span>
+                  </div>
+                }
+              >
+                <TrendChart points={dashboard.revenue_trend} />
+              </Card>
+
+              <Card
+                hoverable
+                eyebrow="Top products"
+                title="Best selling products"
+                subtitle="POS import derived revenue and quantity"
+                count={dashboard.top_products.length}
+              >
+                <BreakdownBars rows={dashboard.top_products} valueKey="revenue" />
+              </Card>
             </div>
-          </Card>
 
-          <Card
-            hoverable
-            eyebrow="Exception Queue"
-            title="Operational exceptions"
-            subtitle="Dark tables should stay calm and readable, using separators instead of heavy borders."
-            count={exceptionRows.length}
-          >
-            <div className="table-wrap">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Unit</th>
-                    <th>Area</th>
-                    <th>Issue</th>
-                    <th>Owner</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {exceptionRows.map((row) => (
-                    <tr key={`${row.unit}-${row.area}`}>
-                      <td>{row.unit}</td>
-                      <td>{row.area}</td>
-                      <td>{row.issue}</td>
-                      <td>{row.owner}</td>
-                      <td>{row.status}</td>
-                    </tr>
+            <div className="dashboard-stack">
+              <Card
+                tone="secondary"
+                hoverable
+                eyebrow="Revenue mix"
+                title="Category breakdown"
+                subtitle="Categories come from optional POS import category_name values"
+                count={dashboard.category_breakdown.length}
+              >
+                <div className="business-breakdown-actions">
+                  {dashboard.category_breakdown.map((row) => (
+                    <button
+                      key={row.label}
+                      type="button"
+                      className="business-drilldown-button"
+                      onClick={() => setDrilldown({ type: "category", label: row.label })}
+                    >
+                      <span>{row.label}</span>
+                      <strong>{formatMoney(row.revenue)}</strong>
+                    </button>
                   ))}
-                </tbody>
-              </table>
-            </div>
-          </Card>
-        </div>
-
-        <div className="dashboard-stack">
-          <Card
-            tone="secondary"
-            hoverable
-            className="chart-card"
-            eyebrow="Distribution"
-            title="Channel mix"
-            subtitle="Bar fills can use the iridescent gradient, but labels and grid stay restrained."
-          >
-            <div className="chart-list">
-              {channels.map((channel) => (
-                <div className="chart-list-item" key={channel.label}>
-                  <div className="chart-list-top">
-                    <strong>{channel.label}</strong>
-                    <span className="section-note">{channel.value}</span>
-                  </div>
-                  <div className="chart-bar" aria-hidden="true">
-                    <span style={{ width: channel.width }} />
-                  </div>
                 </div>
-              ))}
-            </div>
-          </Card>
+              </Card>
 
-          <Card
-            tone="highlight"
-            hoverable
-            eyebrow="Activity"
-            title="Operator feed"
-            subtitle="Small supporting cards keep glow to a minimum and prioritize readable status text."
-          >
-            <div className="activity-list">
-              {activityItems.map((item) => (
-                <article className="activity-item" key={`${item.title}-${item.time}`}>
-                  <div className="activity-meta">
-                    <strong>{item.title}</strong>
-                    <span className="section-note">{item.time}</span>
-                  </div>
-                  <p>{item.description}</p>
-                </article>
-              ))}
-            </div>
-          </Card>
+              <Card
+                tone="highlight"
+                hoverable
+                eyebrow="Cost control"
+                title="Expense breakdown"
+                subtitle="Financial actual outflows by transaction type"
+                count={dashboard.expense_breakdown.length}
+              >
+                <div className="business-breakdown-actions">
+                  {dashboard.expense_breakdown.map((row) => (
+                    <button
+                      key={row.label}
+                      type="button"
+                      className="business-drilldown-button"
+                      onClick={() => setDrilldown({ type: "expense", label: row.label })}
+                    >
+                      <span>{row.label}</span>
+                      <strong>{formatMoney(row.amount)}</strong>
+                    </button>
+                  ))}
+                </div>
+              </Card>
 
-          <Card
-            hoverable
-            eyebrow="Filter Behaviour"
-            title="Selected states"
-            subtitle="Selected filters use a soft glow and gradient tint, while unselected chips stay neutral."
-          >
-            <div className="toolbar-group">
-              <span className="filter-chip filter-chip-active">Rolling 7 days</span>
-              <span className="filter-chip">Business Units</span>
-              <span className="filter-chip">Stock Alerts</span>
-              <span className="filter-chip">Finance Mapping</span>
+              <Card hoverable eyebrow="Model notes" title="Data lineage">
+                <div className="activity-list">
+                  {dashboard.notes.map((note) => (
+                    <article className="activity-item" key={note}>
+                      <p>{note}</p>
+                    </article>
+                  ))}
+                </div>
+              </Card>
             </div>
-          </Card>
-        </div>
-      </div>
+          </div>
+
+          {drilldown ? (
+            <Card
+              hoverable
+              eyebrow="Drill-down"
+              title={drilldown.label}
+              subtitle={
+                drilldown.type === "category"
+                  ? "Product-level revenue rows for the selected category"
+                  : "Expense transactions for the selected type"
+              }
+              actions={
+                <Button variant="secondary" onClick={() => setDrilldown(null)}>
+                  Close
+                </Button>
+              }
+            >
+              {isDrilldownLoading ? (
+                <p className="info-message">Loading drill-down...</p>
+              ) : null}
+
+              {drilldown.type === "category" ? (
+                <div className="table-wrap">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Product</th>
+                        <th>Category</th>
+                        <th>Revenue</th>
+                        <th>Quantity</th>
+                        <th>Rows</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {productDetails.map((row) => (
+                        <tr key={`${row.product_name}-${row.category_name}`}>
+                          <td>{row.product_name}</td>
+                          <td>{row.category_name}</td>
+                          <td>{formatMoney(row.revenue)}</td>
+                          <td>{formatNumber(row.quantity)}</td>
+                          <td>{row.transaction_count}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : null}
+
+              {drilldown.type === "expense" ? (
+                <div className="table-wrap">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Date</th>
+                        <th>Type</th>
+                        <th>Amount</th>
+                        <th>Description</th>
+                        <th>Source</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {expenseDetails.map((row) => (
+                        <tr key={row.transaction_id}>
+                          <td>{row.occurred_at}</td>
+                          <td>{row.transaction_type}</td>
+                          <td>{formatMoney(row.amount)}</td>
+                          <td>{row.description}</td>
+                          <td>{row.source_type}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : null}
+            </Card>
+          ) : null}
+        </>
+      ) : null}
     </section>
   );
 }

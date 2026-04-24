@@ -12,8 +12,12 @@ import {
   createPurchaseInvoice,
   listPurchaseInvoices,
   listSuppliers,
+  postPurchaseInvoice,
 } from "../api/procurementApi";
-import type { PurchaseInvoiceCreatePayload } from "../types/procurement";
+import type {
+  PurchaseInvoiceCreatePayload,
+  PurchaseInvoicePostingResult,
+} from "../types/procurement";
 
 type PurchaseInvoicesState = {
   primaryBusinessUnits: BusinessUnit[];
@@ -29,7 +33,9 @@ type PurchaseInvoicesState = {
   limit: number;
   setLimit: (value: number) => void;
   createPurchaseInvoice: (payload: PurchaseInvoiceCreatePayload) => Promise<void>;
+  postPurchaseInvoice: (invoiceId: string) => Promise<PurchaseInvoicePostingResult>;
   isSaving: boolean;
+  isPosting: boolean;
   isLoading: boolean;
   errorMessage: string;
 };
@@ -126,6 +132,18 @@ export function usePurchaseInvoices(): PurchaseInvoicesState {
     },
   });
 
+  const postMutation = useMutation({
+    mutationFn: (invoiceId: string) => postPurchaseInvoice(invoiceId),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["procurement-purchase-invoices"] }),
+        queryClient.invalidateQueries({ queryKey: ["inventory-movements"] }),
+        queryClient.invalidateQueries({ queryKey: ["inventory-stock-levels"] }),
+        queryClient.invalidateQueries({ queryKey: ["finance-transactions"] }),
+      ]);
+    },
+  });
+
   return {
     primaryBusinessUnits,
     technicalBusinessUnits,
@@ -142,7 +160,9 @@ export function usePurchaseInvoices(): PurchaseInvoicesState {
     createPurchaseInvoice: async (payload) => {
       await createMutation.mutateAsync(payload);
     },
+    postPurchaseInvoice: postMutation.mutateAsync,
     isSaving: createMutation.isPending,
+    isPosting: postMutation.isPending,
     isLoading:
       businessUnitsQuery.isLoading ||
       suppliersQuery.isLoading ||
@@ -157,6 +177,7 @@ export function usePurchaseInvoices(): PurchaseInvoicesState {
         unitsOfMeasureQuery.error.message) ||
       (invoicesQuery.error instanceof Error && invoicesQuery.error.message) ||
       (createMutation.error instanceof Error && createMutation.error.message) ||
+      (postMutation.error instanceof Error && postMutation.error.message) ||
       "",
   };
 }

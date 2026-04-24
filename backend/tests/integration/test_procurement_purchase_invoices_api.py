@@ -67,6 +67,9 @@ def test_create_purchase_invoice_succeeds(
     assert payload["supplier_name"] == "Molnar Alapanyag Kft"
     assert payload["invoice_number"] == "INV-2026-001"
     assert payload["gross_total"] == "12500.00"
+    assert payload["is_posted"] is False
+    assert payload["posted_to_finance"] is False
+    assert payload["posted_inventory_movement_count"] == 0
     assert len(payload["lines"]) == 1
     assert payload["lines"][0]["inventory_item_id"] == str(inventory_item.id)
 

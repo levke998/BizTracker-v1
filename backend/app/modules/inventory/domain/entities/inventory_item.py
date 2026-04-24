@@ -47,6 +47,8 @@ class InventoryMovement:
     uom_id: uuid.UUID
     unit_cost: Decimal | None
     note: str | None
+    source_type: str | None
+    source_id: uuid.UUID | None
     occurred_at: datetime
     created_at: datetime
 
@@ -62,6 +64,8 @@ class NewInventoryMovement:
     uom_id: uuid.UUID
     unit_cost: Decimal | None
     note: str | None
+    source_type: str | None
+    source_id: uuid.UUID | None
     occurred_at: datetime
 
 

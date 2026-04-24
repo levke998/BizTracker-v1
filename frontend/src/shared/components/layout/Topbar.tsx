@@ -5,9 +5,9 @@ import { routes } from "../../constants/routes";
 function getPageMeta(pathname: string) {
   if (pathname.startsWith(routes.dashboard)) {
     return {
-      title: "Dashboard",
+      title: "Business Dashboard",
       subtitle:
-        "Visual reference page for the shared dark premium design system and analytics treatment.",
+        "Overall, Flow and Gourmand business performance with KPI tiles, trends, costs and drill-down ready breakdowns.",
     };
   }
 
@@ -107,7 +107,7 @@ export function Topbar() {
         <p className="topbar-subtitle">{pageMeta.subtitle}</p>
       </div>
       <div className="topbar-actions">
-        <span className="topbar-chip topbar-chip-primary">Visual foundation in progress</span>
+        <span className="topbar-chip topbar-chip-primary">Business read model</span>
         <span className="topbar-chip">Readable dark enterprise UI</span>
         <span className="topbar-chip">{formattedDate}</span>
       </div>

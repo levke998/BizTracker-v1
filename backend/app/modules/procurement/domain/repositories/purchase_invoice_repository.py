@@ -3,12 +3,24 @@
 from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass
 from typing import Protocol
 
 from app.modules.procurement.domain.entities.purchase_invoice import (
     NewPurchaseInvoice,
     PurchaseInvoice,
 )
+
+
+@dataclass(frozen=True, slots=True)
+class PurchaseInvoicePostingResult:
+    """Summary of downstream records created from a purchase invoice."""
+
+    purchase_invoice_id: uuid.UUID
+    created_financial_transactions: int
+    created_inventory_movements: int
+    finance_source_type: str
+    inventory_source_type: str
 
 
 class PurchaseInvoiceRepository(Protocol):
@@ -25,6 +37,15 @@ class PurchaseInvoiceRepository(Protocol):
 
     def create(self, invoice: NewPurchaseInvoice) -> PurchaseInvoice:
         """Create one purchase invoice with its lines."""
+
+    def get_by_id(self, purchase_invoice_id: uuid.UUID) -> PurchaseInvoice | None:
+        """Return one purchase invoice with its lines when present."""
+
+    def has_posting_for_invoice(self, purchase_invoice_id: uuid.UUID) -> bool:
+        """Return whether downstream actual records already exist for this invoice."""
+
+    def post_to_actuals(self, invoice: PurchaseInvoice) -> PurchaseInvoicePostingResult:
+        """Create finance and inventory actual records from one invoice."""
 
     def business_unit_exists(self, business_unit_id: uuid.UUID) -> bool:
         """Return whether the referenced business unit exists."""

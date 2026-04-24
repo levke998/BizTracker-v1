@@ -58,6 +58,7 @@ class PosSalesImportProfile:
         return {
             "date": self._normalize_text(raw_payload.get("date")),
             "receipt_no": self._normalize_text(raw_payload.get("receipt_no")),
+            "category_name": self._normalize_text(raw_payload.get("category_name")),
             "product_name": self._normalize_text(raw_payload.get("product_name")),
             "quantity": self._normalize_number(raw_payload.get("quantity")),
             "gross_amount": self._normalize_number(raw_payload.get("gross_amount")),

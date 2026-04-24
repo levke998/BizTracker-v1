@@ -49,6 +49,9 @@ export type PurchaseInvoice = {
   currency: string;
   gross_total: string;
   notes: string | null;
+  is_posted: boolean;
+  posted_to_finance: boolean;
+  posted_inventory_movement_count: number;
   created_at: string;
   updated_at: string;
   lines: PurchaseInvoiceLine[];
@@ -78,4 +81,12 @@ export type PurchaseInvoiceCreatePayload = {
   gross_total: string;
   notes?: string;
   lines: PurchaseInvoiceLineCreatePayload[];
+};
+
+export type PurchaseInvoicePostingResult = {
+  purchase_invoice_id: string;
+  created_financial_transactions: number;
+  created_inventory_movements: number;
+  finance_source_type: string;
+  inventory_source_type: string;
 };
