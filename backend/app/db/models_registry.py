@@ -23,6 +23,9 @@ from app.modules.imports.infrastructure.orm.import_row_model import ImportRowMod
 from app.modules.inventory.infrastructure.orm.inventory_movement_model import (
     InventoryMovementModel,
 )
+from app.modules.inventory.infrastructure.orm.estimated_consumption_model import (
+    EstimatedConsumptionAuditModel,
+)
 from app.modules.inventory.infrastructure.orm.inventory_item_model import InventoryItemModel
 from app.modules.master_data.infrastructure.orm.business_unit_model import (
     BusinessUnitModel,
@@ -50,6 +53,7 @@ __all__ = [
     "BusinessUnitModel",
     "CategoryModel",
     "FinancialTransactionModel",
+    "EstimatedConsumptionAuditModel",
     "ImportBatchModel",
     "ImportFileModel",
     "ImportRowErrorModel",

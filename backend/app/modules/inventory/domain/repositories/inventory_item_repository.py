@@ -6,6 +6,7 @@ import uuid
 from typing import Protocol
 
 from app.modules.inventory.domain.entities.inventory_item import (
+    EstimatedConsumptionAudit,
     InventoryItem,
     InventoryMovement,
     InventoryStockLevel,
@@ -84,3 +85,14 @@ class InventoryItemRepository(Protocol):
         limit: int = 50,
     ) -> list[InventoryStockLevel]:
         """Return aggregated actual stock levels from movement logs."""
+
+    def list_estimated_consumption(
+        self,
+        *,
+        business_unit_id: uuid.UUID | None = None,
+        inventory_item_id: uuid.UUID | None = None,
+        product_id: uuid.UUID | None = None,
+        source_type: str | None = None,
+        limit: int = 50,
+    ) -> list[EstimatedConsumptionAudit]:
+        """Return estimated consumption audit rows with lightweight filters."""

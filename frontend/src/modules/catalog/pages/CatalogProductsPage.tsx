@@ -13,6 +13,7 @@ import {
 } from "../../masterData/api/masterDataApi";
 import {
   createCatalogProduct,
+  deleteCatalogProduct,
   listCatalogIngredients,
   listCatalogProducts,
   updateCatalogProduct,
@@ -180,6 +181,18 @@ export function CatalogProductsPage() {
       setIsCreating(false);
       setForm(buildProductForm(product, product.sales_uom_id ?? ""));
       void queryClient.invalidateQueries({ queryKey: ["catalog-products", selectedBusinessUnitId] });
+      void queryClient.invalidateQueries({ queryKey: ["demo-pos-catalog", selectedBusinessUnitId] });
+      void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+    },
+  });
+  const deleteMutation = useMutation({
+    mutationFn: deleteCatalogProduct,
+    onSuccess: () => {
+      setExpandedProductId(null);
+      setIsCreating(false);
+      setForm(buildProductForm());
+      void queryClient.invalidateQueries({ queryKey: ["catalog-products", selectedBusinessUnitId] });
+      void queryClient.invalidateQueries({ queryKey: ["demo-pos-catalog", selectedBusinessUnitId] });
       void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
     },
   });
@@ -244,6 +257,13 @@ export function CatalogProductsPage() {
   function submitProductForm(event: FormEvent) {
     event.preventDefault();
     saveMutation.mutate(buildPayload());
+  }
+
+  function archiveProduct(product: CatalogProduct) {
+    if (!window.confirm(`Archive ${product.name}?`)) {
+      return;
+    }
+    deleteMutation.mutate(product.id);
   }
 
   function updateRecipeIngredient(index: number, patch: Partial<CatalogRecipeIngredientPayload>) {
@@ -481,7 +501,10 @@ export function CatalogProductsPage() {
                     <article className="detail-item"><span>Recipe</span><strong>{product.has_recipe ? product.recipe_name : "No recipe"}</strong></article>
                     <article className="detail-item"><span>Yield</span><strong>{product.recipe_yield_quantity ? `${formatNumber(product.recipe_yield_quantity)} ${product.recipe_yield_uom_code ?? ""}` : "-"}</strong></article>
                   </div>
-                  <Button type="button" variant="secondary" onClick={() => startEdit(product)}>Edit product</Button>
+                  <div className="catalog-editor-actions">
+                    <Button type="button" variant="secondary" onClick={() => startEdit(product)}>Edit product</Button>
+                    <Button type="button" variant="secondary" onClick={() => archiveProduct(product)} disabled={deleteMutation.isPending}>Archive</Button>
+                  </div>
                   {product.ingredients.length > 0 ? (
                     <table className="data-table">
                       <thead>

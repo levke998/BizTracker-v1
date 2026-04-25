@@ -10,11 +10,15 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.modules.inventory.domain.entities.inventory_item import (
+    EstimatedConsumptionAudit,
     InventoryItem,
     InventoryMovement,
     InventoryStockLevel,
     NewInventoryItem,
     NewInventoryMovement,
+)
+from app.modules.inventory.infrastructure.orm.estimated_consumption_model import (
+    EstimatedConsumptionAuditModel,
 )
 from app.modules.inventory.infrastructure.orm.inventory_movement_model import (
     InventoryMovementModel,
@@ -25,6 +29,7 @@ from app.modules.inventory.infrastructure.orm.inventory_item_model import (
 from app.modules.master_data.infrastructure.orm.business_unit_model import (
     BusinessUnitModel,
 )
+from app.modules.master_data.infrastructure.orm.product_model import ProductModel
 from app.modules.master_data.infrastructure.orm.unit_of_measure_model import (
     UnitOfMeasureModel,
 )
@@ -272,6 +277,79 @@ class SqlAlchemyInventoryItemRepository:
                 movement_count=row.movement_count,
             )
             for row in rows
+        ]
+
+    def list_estimated_consumption(
+        self,
+        *,
+        business_unit_id: uuid.UUID | None = None,
+        inventory_item_id: uuid.UUID | None = None,
+        product_id: uuid.UUID | None = None,
+        source_type: str | None = None,
+        limit: int = 50,
+    ) -> list[EstimatedConsumptionAudit]:
+        statement = (
+            select(
+                EstimatedConsumptionAuditModel,
+                ProductModel.name.label("product_name"),
+                InventoryItemModel.name.label("inventory_item_name"),
+                UnitOfMeasureModel.code.label("uom_code"),
+            )
+            .join(ProductModel, ProductModel.id == EstimatedConsumptionAuditModel.product_id)
+            .join(
+                InventoryItemModel,
+                InventoryItemModel.id == EstimatedConsumptionAuditModel.inventory_item_id,
+            )
+            .join(UnitOfMeasureModel, UnitOfMeasureModel.id == EstimatedConsumptionAuditModel.uom_id)
+        )
+
+        if business_unit_id is not None:
+            statement = statement.where(
+                EstimatedConsumptionAuditModel.business_unit_id == business_unit_id
+            )
+        if inventory_item_id is not None:
+            statement = statement.where(
+                EstimatedConsumptionAuditModel.inventory_item_id == inventory_item_id
+            )
+        if product_id is not None:
+            statement = statement.where(
+                EstimatedConsumptionAuditModel.product_id == product_id
+            )
+        if source_type is not None:
+            statement = statement.where(
+                EstimatedConsumptionAuditModel.source_type == source_type
+            )
+
+        rows = self._session.execute(
+            statement.order_by(
+                EstimatedConsumptionAuditModel.occurred_at.desc(),
+                EstimatedConsumptionAuditModel.created_at.desc(),
+            ).limit(limit)
+        ).all()
+
+        return [
+            EstimatedConsumptionAudit(
+                id=model.id,
+                business_unit_id=model.business_unit_id,
+                product_id=model.product_id,
+                product_name=product_name,
+                inventory_item_id=model.inventory_item_id,
+                inventory_item_name=inventory_item_name,
+                recipe_version_id=model.recipe_version_id,
+                source_type=model.source_type,
+                source_id=model.source_id,
+                source_dedupe_key=model.source_dedupe_key,
+                receipt_no=model.receipt_no,
+                estimation_basis=model.estimation_basis,
+                quantity=Decimal(model.quantity),
+                uom_id=model.uom_id,
+                uom_code=uom_code,
+                quantity_before=Decimal(model.quantity_before),
+                quantity_after=Decimal(model.quantity_after),
+                occurred_at=model.occurred_at,
+                created_at=model.created_at,
+            )
+            for model, product_name, inventory_item_name, uom_code in rows
         ]
 
     @staticmethod

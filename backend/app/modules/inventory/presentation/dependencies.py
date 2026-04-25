@@ -23,6 +23,9 @@ from app.modules.inventory.application.commands.update_inventory_item import (
 from app.modules.inventory.application.queries.list_inventory_items import (
     ListInventoryItemsQuery,
 )
+from app.modules.inventory.application.queries.list_estimated_consumption import (
+    ListEstimatedConsumptionAuditQuery,
+)
 from app.modules.inventory.application.queries.list_inventory_movements import (
     ListInventoryMovementsQuery,
 )
@@ -62,6 +65,15 @@ def get_list_inventory_stock_levels_query(
 
     repository = SqlAlchemyInventoryItemRepository(session)
     return ListInventoryStockLevelsQuery(repository=repository)
+
+
+def get_list_estimated_consumption_audit_query(
+    session: DbSession,
+) -> ListEstimatedConsumptionAuditQuery:
+    """Wire the estimated consumption audit query to its repository."""
+
+    repository = SqlAlchemyInventoryItemRepository(session)
+    return ListEstimatedConsumptionAuditQuery(repository=repository)
 
 
 def get_list_inventory_theoretical_stock_query(

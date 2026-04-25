@@ -120,7 +120,9 @@ def bootstrap_reference_data(session: Session) -> BootstrapSummary:
             created_count += created
             updated_count += updated
 
-        archived_count += _archive_records_not_in_catalog(session)
+        # Bootstrap must seed and refresh stable reference data only. User-created
+        # catalog records are operational data, so they must not be archived just
+        # because they are absent from the seed catalog.
 
     return BootstrapSummary(
         created_count=created_count,

@@ -17,3 +17,9 @@ export function createDemoPosReceipt(payload: DemoPosReceiptRequest) {
     payload,
   );
 }
+
+export function listDemoPosReceipts(businessUnitId: string) {
+  return apiGet<DemoPosReceipt[]>("demo-pos/receipts", {
+    business_unit_id: businessUnitId,
+  });
+}

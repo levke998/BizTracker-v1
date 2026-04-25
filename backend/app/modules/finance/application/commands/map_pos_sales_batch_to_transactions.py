@@ -112,10 +112,13 @@ class MapPosSalesBatchToTransactionsCommand:
         ]
         transactions = [transaction for _row, transaction in new_row_transactions]
         created = self._finance_repository.create_many(transactions)
-        for row, _transaction in new_row_transactions:
+        for row, transaction in new_row_transactions:
             self._inventory_consumption.consume_line(
                 business_unit_id=batch.business_unit_id,
                 payload=row.normalized_payload or {},
+                source_type=self.source_type,
+                source_id=row.id,
+                occurred_at=transaction.occurred_at,
             )
         if new_row_transactions:
             self._inventory_consumption.commit()

@@ -12,6 +12,8 @@ import type {
   InventoryMovementCreatePayload,
   InventoryMovement,
   InventoryMovementFilters,
+  EstimatedConsumptionAudit,
+  EstimatedConsumptionAuditFilters,
   InventoryStockLevel,
   InventoryStockLevelFilters,
   InventoryTheoreticalStock,
@@ -48,6 +50,15 @@ export function listInventoryTheoreticalStock(
   filters: InventoryTheoreticalStockFilters
 ) {
   return apiGet<InventoryTheoreticalStock[]>("inventory/theoretical-stock", filters);
+}
+
+export function listEstimatedConsumptionAudit(
+  filters: EstimatedConsumptionAuditFilters
+) {
+  return apiGet<EstimatedConsumptionAudit[]>(
+    "inventory/estimated-consumption",
+    filters
+  );
 }
 
 export function listInventoryMovements(filters: InventoryMovementFilters) {

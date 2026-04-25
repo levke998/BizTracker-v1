@@ -76,6 +76,36 @@ export type InventoryTheoreticalStockFilters = {
   limit?: number;
 };
 
+export type EstimatedConsumptionAudit = {
+  id: string;
+  business_unit_id: string;
+  product_id: string;
+  product_name: string;
+  inventory_item_id: string;
+  inventory_item_name: string;
+  recipe_version_id: string | null;
+  source_type: string;
+  source_id: string;
+  source_dedupe_key: string | null;
+  receipt_no: string | null;
+  estimation_basis: string;
+  quantity: string;
+  uom_id: string;
+  uom_code: string;
+  quantity_before: string;
+  quantity_after: string;
+  occurred_at: string;
+  created_at: string;
+};
+
+export type EstimatedConsumptionAuditFilters = {
+  business_unit_id?: string;
+  inventory_item_id?: string;
+  product_id?: string;
+  source_type?: string;
+  limit?: number;
+};
+
 export type InventoryMovement = {
   id: string;
   business_unit_id: string;

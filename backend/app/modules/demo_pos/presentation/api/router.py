@@ -19,8 +19,12 @@ from app.modules.demo_pos.application.commands.create_demo_receipt import (
     DemoPosValidationError,
     NewDemoPosReceiptLine,
 )
+from app.modules.demo_pos.application.queries.list_demo_receipts import (
+    ListDemoPosReceiptsQuery,
+)
 from app.modules.demo_pos.presentation.dependencies import (
     get_create_demo_pos_receipt_command,
+    get_list_demo_pos_receipts_query,
 )
 from app.modules.demo_pos.presentation.schemas.demo_pos import (
     DemoPosCatalogProductResponse,
@@ -96,6 +100,21 @@ def list_demo_pos_catalog(
         )
         for product, category_name, sales_uom_code, sales_uom_symbol in rows
     ]
+
+
+@router.get("/receipts", response_model=list[DemoPosReceiptResponse])
+def list_demo_pos_receipts(
+    business_unit_id: uuid.UUID,
+    query: Annotated[
+        ListDemoPosReceiptsQuery,
+        Depends(get_list_demo_pos_receipts_query),
+    ],
+    limit: int = Query(default=20, ge=1, le=100),
+) -> list[DemoPosReceiptResponse]:
+    """Return recent POS receipts from persisted import and finance rows."""
+
+    receipts = query.execute(business_unit_id=business_unit_id, limit=limit)
+    return [DemoPosReceiptResponse.model_validate(receipt) for receipt in receipts]
 
 
 @router.post(

@@ -8,6 +8,7 @@ Igazsagforras-par:
 
 Dokumentacios allapot:
 - [DOCUMENTATION_STATUS.md](DOCUMENTATION_STATUS.md)
+- [UX_REDESIGN_ROADMAP.md](UX_REDESIGN_ROADMAP.md)
 
 ## 1. Strategiai cel
 
@@ -79,7 +80,6 @@ Most nem uj nagy modult kell vakon kezdeni, hanem a mar mukodo adatfolyamokat ke
 
 Aktiv irany:
 - frontend UX/dashboard takaritas
-- estimated stock audit trail
 - POS/SKU mapping es source-data workflow
 - FIFO costing elokeszites
 - Flow event management MVP elokeszitese
@@ -93,13 +93,20 @@ Cel:
 - a frontend egyre inkabb uzleti elemzo rendszernek hasson
 - a dashboard legyen a dontesi kozpont
 - tablazatok csak drill-down, audit es reszletezes szerepben legyenek
+- a felulet magyar nyelvu, ekezetes, user friendly business alkalmazas legyen, ne admin panel
 
 Konkreten:
+- magyar UI-szovegek es technikai label mapping
+- sidebar/header egyszerusites, Activity ikon + BizTracker logo irany
+- Catalog lenyilo menu es Inventory menuk logikus beolvasztasa
 - Dashboard v1 KPI/chart/detail panelek vizualis es UX tisztitasa
 - `overall`, `flow`, `gourmand` scope valtas erositese
 - category/product/expense/basket drill-down panelek egységesitese
 - inventory/procurement/finance oldalak szerepenek egyertelmu elkulonitese
 - placeholder oldalak eltuntetese vagy tudatos elrejtese a navigaciobol
+
+Reszletes UX redesign terv:
+- [UX_REDESIGN_ROADMAP.md](UX_REDESIGN_ROADMAP.md)
 
 Miert most:
 - a business-analysis cel ettol lesz lathato a felhasznalonak
@@ -124,18 +131,18 @@ Nem most:
 
 ### 3. Estimated stock audit trail
 
-Cel:
-- a POS eladas utani becsult keszletvaltozas legyen visszakovetheto
-
-Konkreten:
-- uj estimated consumption audit modell
+Allapot:
+- end-to-end MVP kesz
+- `core.estimated_consumption_audit` modell es migration
+- `GET /api/v1/inventory/estimated-consumption`
 - receipt/import row -> product -> recipe/direct item -> consumed inventory item kapcsolat
-- mennyiseg, UOM, estimation basis, timestamp
+- mennyiseg, UOM, estimation basis, timestamp, before/after quantity
 - dedupe kompatibilis mukodes
-- frontend read/debug detail panel
+- Theoretical Stock frontend oldalrol elerheto audit detail panel
 
-Miert kritikus:
-- most az estimated stock csokkenes hasznos, de magyarazhatosag nelkul kockazatos
+Kovetkezo bovites kesobb:
+- theoretical stock variance motorba bekotes
+- POS/SKU mapping utan stabilabb product resolution
 - kesobbi theoretical stock, variance es ML alapja lesz
 
 ### 4. POS/SKU mapping es source-data workflow
@@ -230,31 +237,30 @@ Fontos:
 Ha egy kovetkezo kodolas-orientalt sprintet kell valasztani:
 
 1. Dashboard UX es drill-down tisztitas
-2. Estimated stock audit trail
-3. POS/SKU mapping
-4. FIFO costing elokeszites
-5. Flow event MVP
-6. Weather impact MVP
-7. Finomszemcses authorization es session lifecycle kesobb, ha a termekhasznalat indokolja
+2. POS/SKU mapping
+3. FIFO costing elokeszites
+4. Flow event MVP
+5. Weather impact MVP
+6. Finomszemcses authorization es session lifecycle kesobb, ha a termekhasznalat indokolja
 
 Indok:
 - a dashboard UX a business-analysis cel lathatosagat emeli
-- az estimated stock audit es POS/SKU mapping a business-analysis adatok megbizhatosagat teszi rendbe
+- a POS/SKU mapping a business-analysis adatok megbizhatosagat teszi rendbe, mert az audit trail mar lathatova tette a product matching fontossagat
 - a FIFO elokeszites megorzi a kesobbi controlling iranyt
 - a Flow es weather irany uzletspecifikus elemzesi erteket ad
-- az identity/auth MVP mar megadja a minimalis belso hozzaferes-vedelmet
+- az identity/auth MVP es az estimated stock audit trail mar kesz
 
 ## 6/A. Konkret kovetkezo lepes
 
 A kovetkezo konkret fejlesztesi lepes:
 
-`Dashboard UX/drill-down tisztitas` vagy `Estimated stock audit trail`
+`POS/SKU mapping es source-data workflow`
 
 Miert ez:
-- az identity/auth MVP kesz, ezert a kovetkezo ertek vagy a business-analysis UX lathatosaga, vagy az estimated stock magyarazhatosaga
-- a dashboard UX a dontesi feluletet erositi
-- az estimated stock audit trail a POS -> recept/direct consumption -> keszletvaltozas visszakovethetoseget adja
-- mindketto a controlling rendszer celjat erositi, nem CRUD iranyba tolja a projektet
+- az identity/auth MVP es az estimated stock audit trail kesz
+- az audit trail most mar megmutatja, ha product_name alapu matching miatt rossz vagy hianyzo fogyasi magyarazat keletkezne
+- a kovetkezo adatbizalmi lepes a kulso kasszakod/SKU/barcode alias es missing mapping workflow
+- ez kozvetlenul erositi a dashboard, estimated stock es kesobbi FIFO/theoretical stock megbizhatosagat
 
 ## 7. Dontesi elvek
 

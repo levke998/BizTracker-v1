@@ -1,4 +1,9 @@
-import { apiGet, apiPatchJson, apiPostJson } from "../../../services/api/client";
+import {
+  apiDelete,
+  apiGet,
+  apiPatchJson,
+  apiPostJson,
+} from "../../../services/api/client";
 import type {
   CatalogIngredient,
   CatalogIngredientPayload,
@@ -29,6 +34,10 @@ export function updateCatalogProduct(productId: string, payload: CatalogProductP
   );
 }
 
+export function deleteCatalogProduct(productId: string) {
+  return apiDelete<CatalogProduct>(`catalog/products/${productId}`);
+}
+
 export function createCatalogIngredient(payload: CatalogIngredientPayload) {
   return apiPostJson<CatalogIngredientPayload, CatalogIngredient>(
     "catalog/ingredients",
@@ -44,4 +53,8 @@ export function updateCatalogIngredient(
     `catalog/ingredients/${inventoryItemId}`,
     payload,
   );
+}
+
+export function deleteCatalogIngredient(inventoryItemId: string) {
+  return apiDelete<CatalogIngredient>(`catalog/ingredients/${inventoryItemId}`);
 }

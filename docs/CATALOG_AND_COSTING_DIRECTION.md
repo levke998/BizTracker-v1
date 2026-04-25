@@ -23,17 +23,29 @@ Katalogus API:
 
 ```text
 GET /api/v1/catalog/products
+POST /api/v1/catalog/products
+PATCH /api/v1/catalog/products/{product_id}
+DELETE /api/v1/catalog/products/{product_id}
 GET /api/v1/catalog/ingredients
+POST /api/v1/catalog/ingredients
+PATCH /api/v1/catalog/ingredients/{inventory_item_id}
+DELETE /api/v1/catalog/ingredients/{inventory_item_id}
 ```
 
 Frontend:
 - `Catalog - Products`
 - `Catalog - Ingredients`
 - termek letrehozas es szerkesztes
+- termek archivalas soft delete modon, audit/history megtartassal
 - direkt koltseg, eladasi ar, kategoria es sales UOM modositasa
 - receptes termeknel uj aktiv receptverzio letrehozasa rugalmas osszetevo listaval
 - alapanyag letrehozas es szerkesztes
+- alapanyag archivalas soft delete modon, recept es keszlet history megtartassal
 - alapanyag koltseg es becsult stock kezi karbantartasa
+
+Fontos mukodesi szabaly:
+- a catalog delete jelenleg archivalas (`is_active=false`), nem fizikai torles
+- a bootstrap reference data nem archivalhatja a felhasznalo altal letrehozott catalog rekordokat csak azert, mert nincsenek benne a seed catalogban
 
 ## Termekkoltseg szabaly
 

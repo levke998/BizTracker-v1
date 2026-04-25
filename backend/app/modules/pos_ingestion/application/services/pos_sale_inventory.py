@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, date, datetime, time
 from decimal import Decimal
 from typing import Any, Mapping
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.modules.inventory.infrastructure.orm.estimated_consumption_model import (
+    EstimatedConsumptionAuditModel,
+)
 from app.modules.inventory.infrastructure.orm.inventory_item_model import (
     InventoryItemModel,
 )
@@ -34,6 +38,9 @@ class PosSaleInventoryConsumptionService:
         *,
         business_unit_id: uuid.UUID,
         payload: Mapping[str, Any],
+        source_type: str,
+        source_id: uuid.UUID,
+        occurred_at: datetime | None = None,
     ) -> None:
         product = self._resolve_product(
             business_unit_id=business_unit_id,
@@ -57,12 +64,25 @@ class PosSaleInventoryConsumptionService:
         )
         if recipe_version is not None:
             self._consume_recipe_stock(
+                business_unit_id=business_unit_id,
+                product=product,
                 recipe_version=recipe_version,
                 sold_quantity=sold_quantity,
+                payload=payload,
+                source_type=source_type,
+                source_id=source_id,
+                occurred_at=occurred_at or _extract_occurred_at(payload),
             )
             return
 
-        self._consume_direct_stock(product=product, sold_quantity=sold_quantity)
+        self._consume_direct_stock(
+            product=product,
+            sold_quantity=sold_quantity,
+            payload=payload,
+            source_type=source_type,
+            source_id=source_id,
+            occurred_at=occurred_at or _extract_occurred_at(payload),
+        )
 
     def commit(self) -> None:
         """Commit inventory changes when the caller owns no broader transaction."""
@@ -111,8 +131,14 @@ class PosSaleInventoryConsumptionService:
     def _consume_recipe_stock(
         self,
         *,
+        business_unit_id: uuid.UUID,
+        product: ProductModel,
         recipe_version: RecipeVersionModel,
         sold_quantity: Decimal,
+        payload: Mapping[str, Any],
+        source_type: str,
+        source_id: uuid.UUID,
+        occurred_at: datetime,
     ) -> None:
         yield_quantity = Decimal(recipe_version.yield_quantity)
         if yield_quantity <= 0:
@@ -135,13 +161,33 @@ class PosSaleInventoryConsumptionService:
                 to_uom=self._get_uom_code(item.uom_id),
             )
             if converted_quantity is not None:
-                self._decrease_estimated_stock(item, converted_quantity)
+                before, after = self._decrease_estimated_stock(item, converted_quantity)
+                self._add_audit_row(
+                    business_unit_id=business_unit_id,
+                    product_id=product.id,
+                    inventory_item_id=item.id,
+                    recipe_version_id=recipe_version.id,
+                    source_type=source_type,
+                    source_id=source_id,
+                    source_dedupe_key=_optional_text(payload.get("dedupe_key")),
+                    receipt_no=_optional_text(payload.get("receipt_no")),
+                    estimation_basis="recipe",
+                    quantity=converted_quantity,
+                    uom_id=item.uom_id,
+                    quantity_before=before,
+                    quantity_after=after,
+                    occurred_at=occurred_at,
+                )
 
     def _consume_direct_stock(
         self,
         *,
         product: ProductModel,
         sold_quantity: Decimal,
+        payload: Mapping[str, Any],
+        source_type: str,
+        source_id: uuid.UUID,
+        occurred_at: datetime,
     ) -> None:
         item = self._session.scalar(
             select(InventoryItemModel)
@@ -160,18 +206,74 @@ class PosSaleInventoryConsumptionService:
             to_uom=self._get_uom_code(item.uom_id),
         )
         if converted_quantity is not None:
-            self._decrease_estimated_stock(item, converted_quantity)
+            before, after = self._decrease_estimated_stock(item, converted_quantity)
+            self._add_audit_row(
+                business_unit_id=product.business_unit_id,
+                product_id=product.id,
+                inventory_item_id=item.id,
+                recipe_version_id=None,
+                source_type=source_type,
+                source_id=source_id,
+                source_dedupe_key=_optional_text(payload.get("dedupe_key")),
+                receipt_no=_optional_text(payload.get("receipt_no")),
+                estimation_basis="direct_product",
+                quantity=converted_quantity,
+                uom_id=item.uom_id,
+                quantity_before=before,
+                quantity_after=after,
+                occurred_at=occurred_at,
+            )
 
     @staticmethod
     def _decrease_estimated_stock(
         item: InventoryItemModel,
         quantity: Decimal,
-    ) -> None:
+    ) -> tuple[Decimal, Decimal]:
         current_quantity = Decimal(item.estimated_stock_quantity or 0)
         item.estimated_stock_quantity = max(
             Decimal("0"),
             current_quantity - quantity,
         ).quantize(Decimal("0.001"))
+        return current_quantity.quantize(Decimal("0.001")), Decimal(
+            item.estimated_stock_quantity
+        )
+
+    def _add_audit_row(
+        self,
+        *,
+        business_unit_id: uuid.UUID,
+        product_id: uuid.UUID,
+        inventory_item_id: uuid.UUID,
+        recipe_version_id: uuid.UUID | None,
+        source_type: str,
+        source_id: uuid.UUID,
+        source_dedupe_key: str | None,
+        receipt_no: str | None,
+        estimation_basis: str,
+        quantity: Decimal,
+        uom_id: uuid.UUID,
+        quantity_before: Decimal,
+        quantity_after: Decimal,
+        occurred_at: datetime,
+    ) -> None:
+        self._session.add(
+            EstimatedConsumptionAuditModel(
+                business_unit_id=business_unit_id,
+                product_id=product_id,
+                inventory_item_id=inventory_item_id,
+                recipe_version_id=recipe_version_id,
+                source_type=source_type,
+                source_id=source_id,
+                source_dedupe_key=source_dedupe_key,
+                receipt_no=receipt_no,
+                estimation_basis=estimation_basis,
+                quantity=quantity.quantize(Decimal("0.001")),
+                uom_id=uom_id,
+                quantity_before=quantity_before,
+                quantity_after=quantity_after,
+                occurred_at=occurred_at,
+            )
+        )
 
     def _get_uom_code(self, uom_id: uuid.UUID | None) -> str | None:
         if uom_id is None:
@@ -209,3 +311,31 @@ def _to_decimal(value: Any) -> Decimal:
     if value is None:
         return Decimal("0")
     return Decimal(str(value))
+
+
+def _optional_text(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    stripped = value.strip()
+    return stripped or None
+
+
+def _extract_occurred_at(payload: Mapping[str, Any]) -> datetime:
+    occurred_at = payload.get("occurred_at")
+    if isinstance(occurred_at, str) and occurred_at:
+        try:
+            parsed = datetime.fromisoformat(occurred_at)
+            if parsed.tzinfo is None:
+                return parsed.replace(tzinfo=UTC)
+            return parsed
+        except ValueError:
+            pass
+
+    value = payload.get("date")
+    if isinstance(value, str) and value:
+        try:
+            return datetime.combine(date.fromisoformat(value), time.min, tzinfo=UTC)
+        except ValueError:
+            pass
+
+    return datetime.now(UTC)

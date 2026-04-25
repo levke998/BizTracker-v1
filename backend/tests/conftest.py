@@ -27,6 +27,9 @@ from app.modules.imports.infrastructure.orm.import_row_model import ImportRowMod
 from app.modules.inventory.infrastructure.orm.inventory_item_model import (
     InventoryItemModel,
 )
+from app.modules.inventory.infrastructure.orm.estimated_consumption_model import (
+    EstimatedConsumptionAuditModel,
+)
 from app.modules.inventory.infrastructure.orm.inventory_movement_model import (
     InventoryMovementModel,
 )
@@ -100,6 +103,11 @@ def _cleanup_business_unit_data(
     db_session.execute(
         delete(InventoryMovementModel).where(
             InventoryMovementModel.business_unit_id.in_(business_unit_ids)
+        )
+    )
+    db_session.execute(
+        delete(EstimatedConsumptionAuditModel).where(
+            EstimatedConsumptionAuditModel.business_unit_id.in_(business_unit_ids)
         )
     )
     invoice_ids = [

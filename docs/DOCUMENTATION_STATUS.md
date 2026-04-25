@@ -65,8 +65,9 @@ Szerepe:
 | `BUSINESS_DIRECTION.md` | uzleti cel es elemzesi filozofia | aktualis hatter |
 | `ACCOUNTING_AND_CONTROLLING_MODEL.md` | actual vs estimated, controlling modell | aktualis hatter |
 | `DASHBOARD_DIRECTION.md` | dashboard contract es drill-down irany | aktualis |
+| `UX_REDESIGN_ROADMAP.md` | magyar business UX, dashboard es navigacio redesign roadmap | aktualis |
 | `INVENTORY_DIRECTION.md` | inventory UX/domain irany | aktualis |
-| `THEORETICAL_STOCK_PREPARATION.md` | theoretical/estimated stock domain hatar | aktualis, de kovetkezo kodlepes az audit trail |
+| `THEORETICAL_STOCK_PREPARATION.md` | theoretical/estimated stock domain hatar | aktualis, audit trail MVP utan variance engine elott |
 | `POS_INTEGRATION_DIRECTION.md` | demo POS vs valodi POS boundary | aktualis |
 | `CATALOG_AND_COSTING_DIRECTION.md` | catalog, recipe cost, margin | aktualis |
 | `ARCHITECTURE.md` | Clean Architecture es modularis monolit | aktualis hatter |
@@ -97,7 +98,7 @@ Nem szabad napi statuszforraskent hasznalni.
 
 ### `MIGRATION_PLAN.md`
 
-Eredeti migration hullamterv. A valos Alembic head mar `018_pos_sale_dedupe_key`, ezert migration igazsagforrasnak a `DATABASE_SYNC_NOTES.md` hasznalando.
+Eredeti migration hullamterv. A valos Alembic head mar `019_core_estimated_consumption_audit`, ezert migration igazsagforrasnak a `DATABASE_SYNC_NOTES.md` hasznalando.
 
 ### `INITIAL_STRUCTURE.md`
 
@@ -128,6 +129,7 @@ Mar mukodik:
 - catalog product/ingredient read-write alap
 - recipe/BOM adatmodell
 - estimated COGS es margin szamitas
+- estimated consumption audit trail POS fogyas magyarazathoz
 - Business Dashboard v1 es drill-down endpointok
 - basket-pair / receipt drill-down read model
 
@@ -137,7 +139,6 @@ Reszletek: [CURRENT_STATUS.md](CURRENT_STATUS.md).
 
 ### Kritikus
 - nincs finomszemcses role based authorization minden modulra
-- estimated stock fogyasnak nincs kulon audit trailje
 - valodi kasszakod/SKU mapping nincs
 - product_name alapu matching kockazatos
 
@@ -150,10 +151,8 @@ Reszletek: [CURRENT_STATUS.md](CURRENT_STATUS.md).
 - finance write workflow nincs
 
 ### Placeholder
-- backend `identity` router
 - backend `events` router
 - backend `production` router
-- frontend identity API/hook/token storage
 - frontend events oldalak
 - frontend production oldalak
 - `BusinessComparisonPage`
@@ -174,14 +173,14 @@ Dokumentacios szabaly:
 
 Van `GET /api/v1/inventory/theoretical-stock`, de a teljes theoretical engine meg nincs kesz.
 
-Kozben a POS ingestion mar csokkenthet `inventory_item.estimated_stock_quantity` erteket.
+Kozben a POS ingestion csokkentheti az `inventory_item.estimated_stock_quantity` erteket, es ezt mar `estimated_consumption_audit` sorok magyarazzak.
 
 Ertelemszeru kulonbseg:
 - `theoretical-stock` endpoint = jovobeli estimated/theoretical read contract
-- `estimated_stock_quantity` = jelenlegi becsult keszletmező, audit trail nelkul
+- `estimated_consumption_audit` = POS fogyasbol szarmazo estimated stock csokkenes magyarazata, nem actual movement
+- `estimated_stock_quantity` = jelenlegi becsult keszletmezo
 
 Kovetkezo feladat:
-- estimated consumption audit trail
 - theoretical quantity es variance tiszta bekotese
 
 ### 3. Profit / margin jelentese
@@ -206,7 +205,7 @@ Regebbi dokumentumokban meg elojohet, hogy dashboard sample vagy reference volt.
 ### 5. Migration terv vs valos migration allapot
 
 `MIGRATION_PLAN.md` eredeti tervet tartalmaz. Valos allapot:
-- Alembic head: `018_pos_sale_dedupe_key`
+- Alembic head: `019_core_estimated_consumption_audit`
 - igazsagforras: `DATABASE_SYNC_NOTES.md`
 
 ### 6. MVP scope vs mar implementalt szeletek

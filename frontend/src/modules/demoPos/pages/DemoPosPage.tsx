@@ -4,8 +4,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "../../../shared/components/ui/Button";
 import { Card } from "../../../shared/components/ui/Card";
 import { listBusinessUnits } from "../../masterData/api/masterDataApi";
-import { createDemoPosReceipt, listDemoPosCatalog } from "../api/demoPosApi";
-import type { DemoPosCatalogProduct, DemoPosReceipt } from "../types/demoPos";
+import {
+  createDemoPosReceipt,
+  listDemoPosCatalog,
+  listDemoPosReceipts,
+} from "../api/demoPosApi";
+import type { DemoPosCatalogProduct } from "../types/demoPos";
 
 type CartLine = {
   product: DemoPosCatalogProduct;
@@ -62,7 +66,6 @@ export function DemoPosPage() {
   const [paymentMethod, setPaymentMethod] = useState("card");
   const [cart, setCart] = useState<CartLine[]>([]);
   const [autoMode, setAutoMode] = useState(false);
-  const [lastReceipts, setLastReceipts] = useState<DemoPosReceipt[]>([]);
   const autoTimerRef = useRef<number | null>(null);
 
   const businessUnitsQuery = useQuery({
@@ -85,8 +88,14 @@ export function DemoPosPage() {
     queryFn: () => listDemoPosCatalog(selectedBusinessUnit!.id),
     enabled: Boolean(selectedBusinessUnit?.id),
   });
+  const receiptsQuery = useQuery({
+    queryKey: ["demo-pos-receipts", selectedBusinessUnit?.id],
+    queryFn: () => listDemoPosReceipts(selectedBusinessUnit!.id),
+    enabled: Boolean(selectedBusinessUnit?.id),
+  });
 
   const products = catalogQuery.data ?? [];
+  const lastReceipts = receiptsQuery.data ?? [];
   const groupedProducts = useMemo(() => groupProducts(products), [products]);
   const categories = Object.keys(groupedProducts);
   const visibleProducts =
@@ -101,9 +110,11 @@ export function DemoPosPage() {
 
   const receiptMutation = useMutation({
     mutationFn: createDemoPosReceipt,
-    onSuccess: (receipt) => {
-      setLastReceipts((current) => [receipt, ...current].slice(0, 8));
+    onSuccess: () => {
       setCart([]);
+      void queryClient.invalidateQueries({
+        queryKey: ["demo-pos-receipts", selectedBusinessUnit?.id],
+      });
       void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       void queryClient.invalidateQueries({ queryKey: ["finance-transactions"] });
       void queryClient.invalidateQueries({ queryKey: ["import-batches"] });

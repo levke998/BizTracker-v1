@@ -15,6 +15,27 @@ Ha a backend `.env` nincs betoltve automatikusan, elobb a fo gepen be kell allit
 
 ## Jelenlegi adatbazis allapot
 
+### `019_core_estimated_consumption_audit`
+
+Fajl:
+- `backend/migrations/versions/20260425_019_core_estimated_consumption_audit.py`
+
+Cel:
+- a POS eladas utani estimated stock csokkenes legyen visszakovetheto forrasrekordig
+- receptes es direkt trackelt termekfogyas is magyarazhato legyen
+- a duplikalt POS sor ne hozzon letre uj estimated consumption audit sort
+
+Valtozas:
+- `core.estimated_consumption_audit`
+- source/product/inventory item alapu unique constraint
+- business unit, product, inventory item es source ref indexek
+
+Kapcsolodo workflow:
+- `POST /api/v1/pos-ingestion/receipts`
+- `POST /api/v1/imports/batches/{batch_id}/map/financial-transactions`
+- `GET /api/v1/inventory/estimated-consumption`
+- frontend: Theoretical Stock oldal estimated consumption audit panel
+
 ### `018_pos_sale_dedupe_key`
 
 Fajl:
@@ -162,7 +183,7 @@ python -m alembic current
 Nyitott prioritas innen tovabb:
 - dashboard kovetkezo drill-down melyseg
 - basket-level behavior elso read modellje
-- estimated stock audit trail
+- POS/SKU mapping es source-data workflow
 
 ## 2026-04-25 Identity/auth MVP validacio
 
@@ -185,6 +206,26 @@ Eredmeny:
 - teljes backend integration csomag: `92 passed`
 - frontend production build: sikeres
 - reference bootstrap lefutott, seedelt admin/internal auth alapokkal
+
+## 2026-04-25 Estimated stock audit trail validacio
+
+Lefutott ellenorzesek:
+
+```powershell
+cd C:\BizTracker\backend
+python -m alembic upgrade head
+python -m compileall C:\BizTracker\backend\app C:\BizTracker\backend\tests
+python -m pytest C:\BizTracker\backend\tests\integration\test_demo_pos_api.py C:\BizTracker\backend\tests\integration\test_inventory_theoretical_stock_api.py -q
+python -m pytest C:\BizTracker\backend\tests\integration -q
+cd C:\BizTracker\frontend
+npm.cmd run build
+```
+
+Eredmeny:
+- Alembic head: `019_core_estimated_consumption_audit`
+- celzott demo POS + theoretical stock tesztek: `10 passed`
+- teljes backend integration csomag: `93 passed`
+- frontend production build: sikeres
 
 ## DB-t nem modosito, de fo gepen ellenorzendo dashboard munka
 

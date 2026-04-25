@@ -37,9 +37,10 @@ A projekt mar nem puszta scaffold. Tobb vegponttol frontend oldalig lefuto MVP s
 - finance transaction read
 - inventory item CRUD, inventory movement write/read, actual stock level read
 - theoretical stock read szerzodes, meg reszben placeholder szamitassal
+- estimated consumption audit trail POS fogyas magyarazathoz
 - procurement supplier es purchase invoice alap
 - purchase invoice posting: finance outflow + inventory purchase movement
-- catalog products/ingredients read-write alap
+- catalog products/ingredients read-write es archive/delete alap
 - recipe/BOM adatmodell es seedelt Gourmand receptek
 - estimated COGS es margin szamitas receptbol vagy direkt koltsegbol
 - Business Dashboard v1 KPI-kkal, trenddel, drill-down endpointokkal es integration tesztekkel
@@ -92,9 +93,11 @@ Fo irany:
 - `GET /api/v1/catalog/products`
 - `POST /api/v1/catalog/products`
 - `PATCH /api/v1/catalog/products/{product_id}`
+- `DELETE /api/v1/catalog/products/{product_id}` soft archive
 - `GET /api/v1/catalog/ingredients`
 - `POST /api/v1/catalog/ingredients`
 - `PATCH /api/v1/catalog/ingredients/{inventory_item_id}`
+- `DELETE /api/v1/catalog/ingredients/{inventory_item_id}` soft archive
 - frontend oldalak: `Catalog - Products`, `Catalog - Ingredients`
 - termek es alapanyag szerkeszto panelek
 - receptes termekeknel aktiv receptverzio, hozam, osszetevok es eloallitasi koltseg
@@ -126,10 +129,12 @@ Fo irany:
 
 ### Demo POS
 - `GET /api/v1/demo-pos/catalog`
+- `GET /api/v1/demo-pos/receipts`
 - `POST /api/v1/demo-pos/receipts`
 - frontend: `Demo POS`
 - uzletvalasztas, katalogus, kosar, kezi es random nyugta
 - demo frontend mar a `pos-ingestion` boundaryt hasznalja nyugtakuldesre
+- az utolso nyugtak listaja mar perzisztalt import/finance sorokbol jon, nem csak runtime state
 - demo POS szerepe: tesztkliens, nem vegleges kassza
 
 ### Inventory
@@ -141,15 +146,18 @@ Fo irany:
 - `POST /api/v1/inventory/movements`
 - `GET /api/v1/inventory/stock-levels`
 - `GET /api/v1/inventory/theoretical-stock`
+- `GET /api/v1/inventory/estimated-consumption`
 - inventory item create/edit/archive flow
 - inventory movement create flow
 - actual stock level aggregacio movement log alapjan
 - inventory overview oldal
 - POS eladas utani estimated stock csokkenes receptbol vagy direkt trackelt kesztermekbol
+- POS eladas utani estimated stock csokkenes audit trail receptes es direkt trackelt fogyasra
+- Theoretical Stock frontend oldalrol elerheto estimated consumption audit panel
 
 Fontos hatar:
 - `inventory_movement` actual operational log
-- `inventory_item.estimated_stock_quantity` jelenleg becsult mennyiseg, de meg nincs kulon audit trail
+- `estimated_consumption_audit` estimated fogyasi magyarazat, nem actual keszletmozgas
 - `theoretical-stock` endpoint szerzodese letezik, de nem teljes theoretical engine
 
 ### Procurement
@@ -199,12 +207,13 @@ Integration tesztek vannak ezekre:
 - inventory movements read/write
 - inventory stock levels
 - inventory theoretical stock
+- inventory estimated consumption audit
 - procurement supplier API
 - procurement purchase invoices
 - procurement invoice posting
 - identity/auth login es current-user API
 
-A legutobbi dokumentalt teljes integration allapot: `92 passed`.
+A legutobbi dokumentalt teljes integration allapot: `93 passed`.
 
 ## 3. Felkesz, reszben kesz vagy placeholder reszek
 
@@ -242,15 +251,6 @@ Allapot:
 
 Kritikussag:
 - Gourmand elemzesi szempontbol fontos, de csak stabil sales/product adatok utan erdemes kezdeni.
-
-### Estimated stock audit trail
-Allapot:
-- POS eladas utan estimated stock quantity csokkenhet
-- dedupe miatt duplikalt POS sor nem csinal uj fogyast
-- nincs kulon audit tabla vagy endpoint, ami megmutatja, melyik receipt melyik alapanyagot mennyivel csokkentette
-
-Kritikussag:
-- kritikus a magyarazhatosaghoz. Enelkul a becsult keszlet valtozasa nehezen ellenorizheto.
 
 ### FIFO costing / valuation
 Allapot:
@@ -290,8 +290,8 @@ Kritikussag:
 - PDF szamla workflow nincs
 
 ### Keszlet es costing kockazatok
-- estimated stock fogyas nincs audit trailbe mentve
 - actual es estimated keszlet fogalmat tovabbra is szigoruan kulon kell tartani
+- estimated consumption audit letezik, de meg nem teljes theoretical stock engine es nem FIFO valuation
 - FIFO nelkul a margin es keszleten allo penz meg becsult
 - manual correction history hianyzik
 
@@ -320,9 +320,11 @@ Kritikussag:
 - `GET /api/v1/catalog/products`
 - `POST /api/v1/catalog/products`
 - `PATCH /api/v1/catalog/products/{product_id}`
+- `DELETE /api/v1/catalog/products/{product_id}`
 - `GET /api/v1/catalog/ingredients`
 - `POST /api/v1/catalog/ingredients`
 - `PATCH /api/v1/catalog/ingredients/{inventory_item_id}`
+- `DELETE /api/v1/catalog/ingredients/{inventory_item_id}`
 
 ### Imports / POS
 - `POST /api/v1/imports/files`
@@ -332,6 +334,7 @@ Kritikussag:
 - `GET /api/v1/imports/batches/{batch_id}/errors`
 - `POST /api/v1/imports/batches/{batch_id}/map/financial-transactions`
 - `GET /api/v1/demo-pos/catalog`
+- `GET /api/v1/demo-pos/receipts`
 - `POST /api/v1/demo-pos/receipts`
 - `POST /api/v1/pos-ingestion/receipts`
 
@@ -347,6 +350,7 @@ Kritikussag:
 - `POST /api/v1/inventory/movements`
 - `GET /api/v1/inventory/stock-levels`
 - `GET /api/v1/inventory/theoretical-stock`
+- `GET /api/v1/inventory/estimated-consumption`
 
 ### Procurement
 - `GET /api/v1/procurement/suppliers`
@@ -372,7 +376,7 @@ Kritikussag:
 ## 6. Jelenlegi adatbazis allapot
 
 Aktualis Alembic head:
-- `018_pos_sale_dedupe_key`
+- `019_core_estimated_consumption_audit`
 
 Schema-k:
 - `auth`
@@ -394,6 +398,7 @@ Fo tablak:
 - `core.financial_transaction`
 - `core.inventory_item`
 - `core.inventory_movement`
+- `core.estimated_consumption_audit`
 - `core.supplier`
 - `core.supplier_invoice`
 - `core.supplier_invoice_line`
@@ -416,38 +421,36 @@ A kovetkezo fejleszteseket ne izolalt CRUD feature-kent kezeljuk, hanem az uzlet
    - KPI, chart, drill-down es reszletezo panelek tisztabb hierarchiaja
    - operational tablazatok szerepenek pontosabb elkulonitese
 
-2. Estimated stock audit trail
-   - POS sale -> recipe/direct consumption audit row
-   - source receipt / import row traceability
-   - estimated stock valtozas magyarazhatosaga
-
-3. POS/SKU mapping es source-data workflow
+2. POS/SKU mapping es source-data workflow
    - kulso kasszakod -> BizTracker product mapping
    - missing mapping quarantine
    - CSV fallback tovabbi validacio
 
-4. FIFO costing elokeszites
+3. FIFO costing elokeszites
    - invoice line / purchase movement / cost source osszekotese
    - valuation-ready adatmodell
    - teljes FIFO engine nelkul
 
-5. Flow event management MVP
+4. Flow event management MVP
    - event CRUD minimum
    - ticket/bar revenue hozzarendeles elokeszitese
    - event cost es settlement lite
 
-6. Weather impact analysis elokeszites
+5. Weather impact analysis elokeszites
    - Szolnok weather observation adatmodell
    - sales/weather idosav osszekotes
    - elso korrelacios dashboard slice
 
-7. Kesobbi ML modellek
+6. Kesobbi ML modellek
    - csak tiszta lineage es stabil historical data utan
    - eloszor forecast/ajanlas kutatasi irany, nem core mukodes
 
 Reszletes prioritas: [ROADMAP.md](ROADMAP.md).
 
 ## 8. Gyors lokal futtatas
+
+Seedelt user: admin@biztracker.local
+Seedelt jelszó: ChangeMe123!
 
 Backend:
 

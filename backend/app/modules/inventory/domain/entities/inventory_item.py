@@ -102,3 +102,28 @@ class InventoryTheoreticalStock:
     last_actual_movement_at: datetime | None
     last_estimated_event_at: datetime | None
     estimation_basis: str
+
+
+@dataclass(frozen=True, slots=True)
+class EstimatedConsumptionAudit:
+    """Explains one estimated stock decrease from a POS sale source row."""
+
+    id: uuid.UUID
+    business_unit_id: uuid.UUID
+    product_id: uuid.UUID
+    product_name: str
+    inventory_item_id: uuid.UUID
+    inventory_item_name: str
+    recipe_version_id: uuid.UUID | None
+    source_type: str
+    source_id: uuid.UUID
+    source_dedupe_key: str | None
+    receipt_no: str | None
+    estimation_basis: str
+    quantity: Decimal
+    uom_id: uuid.UUID
+    uom_code: str
+    quantity_before: Decimal
+    quantity_after: Decimal
+    occurred_at: datetime
+    created_at: datetime

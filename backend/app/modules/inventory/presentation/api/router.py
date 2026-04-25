@@ -33,6 +33,9 @@ from app.modules.inventory.application.commands.update_inventory_item import (
 from app.modules.inventory.application.queries.list_inventory_items import (
     ListInventoryItemsQuery,
 )
+from app.modules.inventory.application.queries.list_estimated_consumption import (
+    ListEstimatedConsumptionAuditQuery,
+)
 from app.modules.inventory.application.queries.list_inventory_movements import (
     ListInventoryMovementsQuery,
 )
@@ -47,6 +50,7 @@ from app.modules.inventory.presentation.dependencies import (
     get_create_inventory_movement_command,
     get_create_inventory_item_command,
     get_list_inventory_items_query,
+    get_list_estimated_consumption_audit_query,
     get_list_inventory_movements_query,
     get_list_inventory_stock_levels_query,
     get_list_inventory_theoretical_stock_query,
@@ -55,6 +59,7 @@ from app.modules.inventory.presentation.dependencies import (
 from app.modules.inventory.presentation.schemas.inventory_item import (
     InventoryMovementCreateRequest,
     InventoryMovementResponse,
+    EstimatedConsumptionAuditResponse,
     InventoryItemCreateRequest,
     InventoryItemResponse,
     InventoryItemUpdateRequest,
@@ -243,6 +248,33 @@ def list_inventory_stock_levels(
         limit=limit,
     )
     return [InventoryStockLevelResponse.model_validate(item) for item in items]
+
+
+@router.get(
+    "/estimated-consumption",
+    response_model=list[EstimatedConsumptionAuditResponse],
+)
+def list_estimated_consumption_audit(
+    query: Annotated[
+        ListEstimatedConsumptionAuditQuery,
+        Depends(get_list_estimated_consumption_audit_query),
+    ],
+    business_unit_id: uuid.UUID | None = Query(default=None),
+    inventory_item_id: uuid.UUID | None = Query(default=None),
+    product_id: uuid.UUID | None = Query(default=None),
+    source_type: str | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=200),
+) -> list[EstimatedConsumptionAuditResponse]:
+    """Return estimated stock decrease audit rows created from POS sales."""
+
+    items = query.execute(
+        business_unit_id=business_unit_id,
+        inventory_item_id=inventory_item_id,
+        product_id=product_id,
+        source_type=source_type,
+        limit=limit,
+    )
+    return [EstimatedConsumptionAuditResponse.model_validate(item) for item in items]
 
 
 @router.get(

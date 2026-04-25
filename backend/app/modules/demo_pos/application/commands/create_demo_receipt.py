@@ -17,22 +17,11 @@ from app.modules.finance.infrastructure.orm.transaction_model import (
 from app.modules.imports.infrastructure.orm.import_batch_model import ImportBatchModel
 from app.modules.imports.infrastructure.orm.import_file_model import ImportFileModel
 from app.modules.imports.infrastructure.orm.import_row_model import ImportRowModel
-from app.modules.inventory.infrastructure.orm.inventory_item_model import (
-    InventoryItemModel,
-)
 from app.modules.master_data.infrastructure.orm.business_unit_model import (
     BusinessUnitModel,
 )
 from app.modules.master_data.infrastructure.orm.category_model import CategoryModel
 from app.modules.master_data.infrastructure.orm.product_model import ProductModel
-from app.modules.master_data.infrastructure.orm.unit_of_measure_model import (
-    UnitOfMeasureModel,
-)
-from app.modules.production.infrastructure.orm.recipe_model import (
-    RecipeIngredientModel,
-    RecipeModel,
-    RecipeVersionModel,
-)
 from app.modules.pos_ingestion.application.services.pos_sale_identity import (
     build_pos_sale_dedupe_key,
 )
@@ -193,10 +182,6 @@ class CreateDemoPosReceiptCommand:
                 if self._dedupe_key_exists(dedupe_key):
                     continue
 
-                self._inventory_consumption.consume_line(
-                    business_unit_id=business_unit_id,
-                    payload=payload,
-                )
                 gross_total += gross_amount
                 import_row = ImportRowModel(
                     batch_id=batch.id,
@@ -208,6 +193,14 @@ class CreateDemoPosReceiptCommand:
                 )
                 self._session.add(import_row)
                 self._session.flush()
+
+                self._inventory_consumption.consume_line(
+                    business_unit_id=business_unit_id,
+                    payload=payload,
+                    source_type="import_row",
+                    source_id=import_row.id,
+                    occurred_at=occurred_at,
+                )
 
                 transaction = FinancialTransactionModel(
                     business_unit_id=business_unit_id,
@@ -277,128 +270,6 @@ class CreateDemoPosReceiptCommand:
             )
             is not None
         )
-
-    def _apply_estimated_stock_consumption(
-        self,
-        *,
-        product: ProductModel,
-        sold_quantity: Decimal,
-    ) -> None:
-        recipe_version = self._session.scalar(
-            select(RecipeVersionModel)
-            .join(RecipeModel, RecipeModel.id == RecipeVersionModel.recipe_id)
-            .where(RecipeModel.product_id == product.id)
-            .where(RecipeModel.is_active.is_(True))
-            .where(RecipeVersionModel.is_active.is_(True))
-            .order_by(RecipeVersionModel.version_no.desc())
-            .limit(1)
-        )
-        if recipe_version is not None:
-            self._consume_recipe_stock(
-                recipe_version=recipe_version,
-                sold_quantity=sold_quantity,
-            )
-            return
-
-        self._consume_direct_stock(product=product, sold_quantity=sold_quantity)
-
-    def _consume_recipe_stock(
-        self,
-        *,
-        recipe_version: RecipeVersionModel,
-        sold_quantity: Decimal,
-    ) -> None:
-        yield_quantity = Decimal(recipe_version.yield_quantity)
-        if yield_quantity <= 0:
-            return
-
-        ingredients = self._session.scalars(
-            select(RecipeIngredientModel).where(
-                RecipeIngredientModel.recipe_version_id == recipe_version.id
-            )
-        ).all()
-        for ingredient in ingredients:
-            item = self._session.get(InventoryItemModel, ingredient.inventory_item_id)
-            if item is None or item.estimated_stock_quantity is None:
-                continue
-
-            quantity = Decimal(ingredient.quantity) * sold_quantity / yield_quantity
-            converted_quantity = self._convert_quantity(
-                quantity,
-                from_uom=self._get_uom_code(ingredient.uom_id),
-                to_uom=self._get_uom_code(item.uom_id),
-            )
-            if converted_quantity is None:
-                continue
-            self._decrease_estimated_stock(item, converted_quantity)
-
-    def _consume_direct_stock(
-        self,
-        *,
-        product: ProductModel,
-        sold_quantity: Decimal,
-    ) -> None:
-        item = self._session.scalar(
-            select(InventoryItemModel)
-            .where(InventoryItemModel.business_unit_id == product.business_unit_id)
-            .where(InventoryItemModel.name == product.name)
-            .where(InventoryItemModel.track_stock.is_(True))
-            .where(InventoryItemModel.is_active.is_(True))
-            .limit(1)
-        )
-        if item is None or item.estimated_stock_quantity is None:
-            return
-
-        converted_quantity = self._convert_quantity(
-            sold_quantity,
-            from_uom=self._get_uom_code(product.sales_uom_id),
-            to_uom=self._get_uom_code(item.uom_id),
-        )
-        if converted_quantity is None:
-            return
-        self._decrease_estimated_stock(item, converted_quantity)
-
-    @staticmethod
-    def _decrease_estimated_stock(
-        item: InventoryItemModel,
-        quantity: Decimal,
-    ) -> None:
-        current_quantity = Decimal(item.estimated_stock_quantity or 0)
-        item.estimated_stock_quantity = max(
-            Decimal("0"),
-            current_quantity - quantity,
-        ).quantize(Decimal("0.001"))
-
-    def _get_uom_code(self, uom_id: uuid.UUID | None) -> str | None:
-        if uom_id is None:
-            return None
-        unit = self._session.get(UnitOfMeasureModel, uom_id)
-        return unit.code if unit else None
-
-    @staticmethod
-    def _convert_quantity(
-        quantity: Decimal,
-        *,
-        from_uom: str | None,
-        to_uom: str | None,
-    ) -> Decimal | None:
-        if from_uom == to_uom:
-            return quantity
-        if from_uom is None or to_uom is None:
-            return None
-
-        factors = {
-            "g": ("mass", Decimal("0.001")),
-            "kg": ("mass", Decimal("1")),
-            "ml": ("volume", Decimal("0.001")),
-            "l": ("volume", Decimal("1")),
-        }
-        from_factor = factors.get(from_uom)
-        to_factor = factors.get(to_uom)
-        if from_factor is None or to_factor is None or from_factor[0] != to_factor[0]:
-            return None
-
-        return (quantity * from_factor[1]) / to_factor[1]
 
     @staticmethod
     def _build_receipt_number(business_unit_code: str) -> str:

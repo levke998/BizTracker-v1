@@ -9,6 +9,7 @@ import { routes } from "../../../shared/constants/routes";
 import { listBusinessUnits, listUnitsOfMeasure } from "../../masterData/api/masterDataApi";
 import {
   createCatalogIngredient,
+  deleteCatalogIngredient,
   listCatalogIngredients,
   updateCatalogIngredient,
 } from "../api/catalogApi";
@@ -133,6 +134,17 @@ export function CatalogIngredientsPage() {
       void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
     },
   });
+  const deleteMutation = useMutation({
+    mutationFn: deleteCatalogIngredient,
+    onSuccess: () => {
+      setExpandedIngredientId(null);
+      setIsCreating(false);
+      setForm(buildIngredientForm());
+      void queryClient.invalidateQueries({ queryKey: ["catalog-ingredients", selectedBusinessUnitId] });
+      void queryClient.invalidateQueries({ queryKey: ["catalog-products", selectedBusinessUnitId] });
+      void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+    },
+  });
 
   function startCreate() {
     setForm(buildIngredientForm(undefined, units[0]?.id ?? ""));
@@ -160,6 +172,13 @@ export function CatalogIngredientsPage() {
       is_active: form.is_active,
     };
     saveMutation.mutate(payload);
+  }
+
+  function archiveIngredient(ingredient: CatalogIngredient) {
+    if (!window.confirm(`Archive ${ingredient.name}?`)) {
+      return;
+    }
+    deleteMutation.mutate(ingredient.id);
   }
 
   const formPanel = isCreating || form.id ? (
@@ -296,7 +315,10 @@ export function CatalogIngredientsPage() {
                     <article className="detail-item"><span>Estimated stock</span><strong>{ingredient.estimated_stock_quantity === null ? "Not set" : `${formatNumber(ingredient.estimated_stock_quantity)} ${ingredient.uom_symbol ?? ingredient.uom_code ?? ""}`}</strong></article>
                     <article className="detail-item"><span>Recipe coverage</span><strong>{ingredient.used_by_product_count} products</strong></article>
                   </div>
-                  <Button type="button" variant="secondary" onClick={() => startEdit(ingredient)}>Edit ingredient</Button>
+                  <div className="catalog-editor-actions">
+                    <Button type="button" variant="secondary" onClick={() => startEdit(ingredient)}>Edit ingredient</Button>
+                    <Button type="button" variant="secondary" onClick={() => archiveIngredient(ingredient)} disabled={deleteMutation.isPending}>Archive</Button>
+                  </div>
                   {stockQuantity <= 0 ? <p className="error-message">Estimated stock is empty or not set.</p> : null}
                 </div>
               ) : null}

@@ -38,14 +38,15 @@ Mar letezik:
 - `recipe_version`
 - `recipe_ingredient`
 - POS ingestion utani estimated stock csokkenes recept vagy direkt trackelt kesztermek alapjan
+- `estimated_consumption_audit`
+- `GET /api/v1/inventory/estimated-consumption`
+- Theoretical Stock frontend oldali audit detail panel
 
 Ez jo alapot ad a theoretical stock kesobbi bevezetesehez.
 
 ## 3. Mi nincs meg hozza meg
 
 A theoretical stockhoz meg hianyzik:
-- kulon estimated consumption audit tabla
-- source receipt / import row szintu traceability
 - production / batch logika
 - inventory valuation logika
 - actual vs theoretical variance read modell
@@ -130,17 +131,16 @@ Fontos pontositas:
 - a POS ingestion mar csokkentheti az `inventory_item.estimated_stock_quantity` mezot
 - ez hasznos MVP-s becsult keszletjelzes
 - de ez meg nem teljes theoretical stock engine
-- kovetkezo kritikus lepes a kulon audit trail, hogy minden becsult fogyas forrasig visszakeresheto legyen
+- a kulon audit trail mar megmutatja, melyik POS source sor melyik termek miatt melyik inventory itemet csokkentette
 
 ## 9. Elso implementacios sorrend
 
 Javasolt sorrend:
 
-1. estimated consumption audit trail
-2. source receipt/import row -> product -> recipe/direct inventory item traceability
-3. actual vs theoretical frontend osszehasonlito nezet tisztitasa
-4. theoretical quantity es variance elso valodi szamitasa
-5. manual correction history
+1. POS/SKU mapping es missing mapping workflow, hogy az estimated fogyas stabil product kapcsolatra epuljon
+2. actual vs theoretical frontend osszehasonlito nezet tisztitasa
+3. theoretical quantity es variance elso valodi szamitasa
+4. manual correction history
 
 ## 10. Osszefoglalo
 

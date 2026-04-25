@@ -335,6 +335,22 @@ def update_catalog_product(
     return _get_catalog_product_response(session, product_id=product.id)
 
 
+@router.delete("/products/{product_id}", response_model=CatalogProductResponse)
+def archive_catalog_product(
+    product_id: uuid.UUID,
+    session: Annotated[Session, Depends(get_db_session)],
+) -> CatalogProductResponse:
+    """Archive one product while preserving source-data and sales history."""
+
+    product = session.get(ProductModel, product_id)
+    if product is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found.")
+
+    product.is_active = False
+    session.commit()
+    return _get_catalog_product_response(session, product_id=product.id)
+
+
 @router.get("/ingredients", response_model=list[CatalogIngredientResponse])
 def list_catalog_ingredients(
     business_unit_id: uuid.UUID,
@@ -432,6 +448,22 @@ def update_catalog_ingredient(
     item.estimated_stock_quantity = payload.estimated_stock_quantity
     item.is_active = payload.is_active
 
+    session.commit()
+    return _get_catalog_ingredient_response(session, inventory_item_id=item.id)
+
+
+@router.delete("/ingredients/{inventory_item_id}", response_model=CatalogIngredientResponse)
+def archive_catalog_ingredient(
+    inventory_item_id: uuid.UUID,
+    session: Annotated[Session, Depends(get_db_session)],
+) -> CatalogIngredientResponse:
+    """Archive one ingredient/material without deleting historical references."""
+
+    item = session.get(InventoryItemModel, inventory_item_id)
+    if item is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ingredient not found.")
+
+    item.is_active = False
     session.commit()
     return _get_catalog_ingredient_response(session, inventory_item_id=item.id)
 

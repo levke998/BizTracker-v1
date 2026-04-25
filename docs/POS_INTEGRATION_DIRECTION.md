@@ -90,10 +90,13 @@ Demo API:
 
 ```text
 GET /api/v1/demo-pos/catalog
+GET /api/v1/demo-pos/receipts
 POST /api/v1/demo-pos/receipts
 ```
 
 A demo frontend nyugtakuldesnel mar a `pos-ingestion` endpointot hasznalja. A `demo-pos` modul celja tovabbra is a tesztkatalogus es a fejlesztoi demo flow tamogatasa.
+
+Az utolso demo nyugtak listaja perzisztalt `ingest.import_row` es `core.financial_transaction` sorokbol epul vissza. Ez tudatosan ugyanazt az igazsagot mutatja, amelybol a dashboard es a finance read model is dolgozik; a demo kassza sajat lokalis runtime listaja nem tekintheto adatforrasnak.
 
 ## Kesobbi valodi kassza adapter
 

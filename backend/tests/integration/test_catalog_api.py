@@ -104,6 +104,39 @@ def test_catalog_creates_product_with_recipe_and_updates_ingredient_stock(
         ingredient_payload = ingredient_response.json()
         assert Decimal(ingredient_payload["default_unit_cost"]) == Decimal("140")
         assert Decimal(ingredient_payload["estimated_stock_quantity"]) == Decimal("75")
+
+        delete_product_response = client.delete(
+            f"{API_PREFIX}/products/{created_product_id}"
+        )
+        assert delete_product_response.status_code == 200
+        assert delete_product_response.json()["is_active"] is False
+
+        active_products_response = client.get(
+            f"{API_PREFIX}/products",
+            params={"business_unit_id": str(test_business_unit.id)},
+        )
+        assert active_products_response.status_code == 200
+        assert created_product_id not in [
+            item["id"] for item in active_products_response.json()
+        ]
+
+        inactive_products_response = client.get(
+            f"{API_PREFIX}/products",
+            params={
+                "business_unit_id": str(test_business_unit.id),
+                "active_only": False,
+            },
+        )
+        assert inactive_products_response.status_code == 200
+        assert created_product_id in [
+            item["id"] for item in inactive_products_response.json()
+        ]
+
+        delete_ingredient_response = client.delete(
+            f"{API_PREFIX}/ingredients/{ingredient.id}"
+        )
+        assert delete_ingredient_response.status_code == 200
+        assert delete_ingredient_response.json()["is_active"] is False
     finally:
         db_session.rollback()
         if created_product_id is not None:

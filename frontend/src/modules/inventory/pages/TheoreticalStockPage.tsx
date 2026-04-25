@@ -1,3 +1,6 @@
+import { useState } from "react";
+
+import { useEstimatedConsumptionAudit } from "../hooks/useEstimatedConsumptionAudit";
 import { useTheoreticalStock } from "../hooks/useTheoreticalStock";
 
 function formatDateTime(value: string | null) {
@@ -27,6 +30,7 @@ function formatEstimationBasis(value: string) {
 }
 
 export function TheoreticalStockPage() {
+  const [selectedInventoryItemId, setSelectedInventoryItemId] = useState("");
   const {
     primaryBusinessUnits,
     technicalBusinessUnits,
@@ -40,6 +44,15 @@ export function TheoreticalStockPage() {
     isLoading,
     errorMessage,
   } = useTheoreticalStock();
+  const selectedStockRow = stockRows.find(
+    (item) => item.inventory_item_id === selectedInventoryItemId
+  );
+  const auditQuery = useEstimatedConsumptionAudit({
+    business_unit_id: selectedBusinessUnitId,
+    inventory_item_id: selectedInventoryItemId,
+    limit: 25,
+  });
+  const auditRows = auditQuery.data ?? [];
 
   return (
     <section className="page-section">
@@ -144,6 +157,7 @@ export function TheoreticalStockPage() {
                   <th>Last estimated event</th>
                   <th>Track stock</th>
                   <th>Active</th>
+                  <th>Audit</th>
                 </tr>
               </thead>
               <tbody>
@@ -159,6 +173,78 @@ export function TheoreticalStockPage() {
                     <td>{formatDateTime(item.last_estimated_event_at)}</td>
                     <td>{item.track_stock ? "Yes" : "No"}</td>
                     <td>{item.is_active ? "Yes" : "No"}</td>
+                    <td>
+                      <button
+                        className="secondary-button inventory-audit-button"
+                        type="button"
+                        onClick={() => setSelectedInventoryItemId(item.inventory_item_id)}
+                      >
+                        Details
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+      </section>
+
+      <section className="panel">
+        <div className="panel-header">
+          <h2>Estimated consumption audit</h2>
+          <span className="panel-count">{auditRows.length}</span>
+        </div>
+
+        {!selectedStockRow ? (
+          <p className="empty-message">Select an inventory item to inspect estimated consumption.</p>
+        ) : null}
+
+        {selectedStockRow ? (
+          <p className="info-message">
+            {selectedStockRow.name} estimated stock changes from POS sales.
+          </p>
+        ) : null}
+
+        {auditQuery.error instanceof Error ? (
+          <p className="error-message">{auditQuery.error.message}</p>
+        ) : null}
+        {auditQuery.isLoading ? (
+          <p className="info-message">Loading estimated consumption audit...</p>
+        ) : null}
+
+        {selectedStockRow && !auditQuery.isLoading && auditRows.length === 0 ? (
+          <p className="empty-message">No estimated consumption audit rows found.</p>
+        ) : null}
+
+        {auditRows.length > 0 ? (
+          <div className="table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Occurred at</th>
+                  <th>Product</th>
+                  <th>Basis</th>
+                  <th>Quantity</th>
+                  <th>Before</th>
+                  <th>After</th>
+                  <th>Receipt</th>
+                  <th>Source</th>
+                </tr>
+              </thead>
+              <tbody>
+                {auditRows.map((row) => (
+                  <tr key={row.id}>
+                    <td>{formatDateTime(row.occurred_at)}</td>
+                    <td>{row.product_name}</td>
+                    <td>{formatEstimationBasis(row.estimation_basis)}</td>
+                    <td>
+                      {row.quantity} {row.uom_code}
+                    </td>
+                    <td>{row.quantity_before}</td>
+                    <td>{row.quantity_after}</td>
+                    <td>{row.receipt_no ?? "-"}</td>
+                    <td className="mono-cell">{row.source_id}</td>
                   </tr>
                 ))}
               </tbody>

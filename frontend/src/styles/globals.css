@@ -1323,6 +1323,11 @@ select {
   grid-column: 1 / -1;
 }
 
+.inventory-audit-button {
+  min-height: 34px;
+  padding: 6px 10px;
+}
+
 .field-readonly {
   display: flex;
   align-items: center;
