@@ -3,6 +3,7 @@
 Ez a dokumentum az inventory modul UX es domain iranyat tisztazza. A cel az, hogy az inventory resz ne eseti oldalak halmaza legyen, hanem kovetkezetes, bovitheto operativ es controlling felulet.
 
 Kapcsolodo dokumentumok:
+- [DOCUMENTATION_STATUS.md](C:\BizTracker\docs\DOCUMENTATION_STATUS.md)
 - [CURRENT_STATUS.md](C:\BizTracker\docs\CURRENT_STATUS.md)
 - [ACCOUNTING_AND_CONTROLLING_MODEL.md](C:\BizTracker\docs\ACCOUNTING_AND_CONTROLLING_MODEL.md)
 - [THEORETICAL_STOCK_PREPARATION.md](C:\BizTracker\docs\THEORETICAL_STOCK_PREPARATION.md)
@@ -10,16 +11,20 @@ Kapcsolodo dokumentumok:
 ## 1. A jelenlegi helyzet
 
 Jelenleg a frontend inventory reszen kulon menupontok vannak:
+- `Inventory Overview`
 - `Inventory Items`
 - `Inventory Movements`
 - `Stock Levels`
+- `Theoretical Stock`
 
 Ez domain szempontbol nem hibas, mert a harom nezet valoban mas szerepet tolt be:
+- `Inventory Overview` = inventory landing es gyors operationalis attekintes
 - `Inventory Items` = torzsadat
 - `Inventory Movements` = actual operational log
 - `Stock Levels` = actual aggregalt keszletszint
+- `Theoretical Stock` = estimated/theoretical read szerzodes, meg nem teljes engine
 
-Ugyanakkor UX szinten ezek most meg nem alkotnak egyertelmu, vezeto inventory feluletet.
+Ugyanakkor UX szinten ezek most meg tovabbi tisztitast igenyelnek, hogy a felhasznalo egyertelmuen ertse: mi actual, mi estimated, es mi csak reszletezo/audit nezet.
 
 ## 2. A celirany
 
@@ -102,13 +107,13 @@ Ezert nem osszevonni kell oket, hanem egyertelmubben kell kommunikani a szerepko
 
 ## 5. Javasolt kovetkezo frontend irany
 
-Rovid tavon a legjobb kovetkezo UI lepes:
-- hozzunk letre egy `Inventory Overview` oldalt
-- ez legyen az inventory modul landing oldala
-- innen lehessen tovabblepni:
+Az `Inventory Overview` oldal mar letezik, ezert a kovetkezo UI lepes nem az oldal letrehozasa, hanem a szerepenek megerositese:
+- legyen az inventory modul landing oldala
+- innen lehessen kontextussal tovabblepni:
   - `Inventory Items`
   - `Inventory Movements`
   - `Actual Stock Levels`
+  - `Theoretical Stock`
 
 Az overview oldalon kesobb megjelenhet:
 - item count
@@ -116,6 +121,8 @@ Az overview oldalon kesobb megjelenhet:
 - stock level row count
 - legutobbi movementek
 - gyors szuro business unit szerint
+- actual vs estimated figyelmeztetesek
+- estimated stock audit link, ha az audit trail elkeszul
 
 Ez dashboard-szeru, de nem valik teljes analytics oldalla.
 
@@ -149,12 +156,11 @@ Ez mar jobban tukrozi az inventory domain belso szerkezetet.
 
 Az inventory modult a kovetkezo sorrendben erdemes boviteni:
 
-1. Inventory Overview oldal
-2. Theoretical stock modell dokumentalt elokeszitese
-3. Theoretical stock backend read modell
-4. Inventory item frontend CRUD alap
-5. Inventory movement frontend write alap
-6. Kesobbi inventory valuation es FIFO kompatibilis bovites
+1. Estimated stock audit trail
+2. Actual vs estimated UX tisztitas
+3. Theoretical stock read modell valodi estimated consumption bekotese
+4. Inventory correction/manual adjustment UX finomitas
+5. Inventory valuation es FIFO kompatibilis bovites elokeszitese
 
 ## 9. Osszefoglalo
 

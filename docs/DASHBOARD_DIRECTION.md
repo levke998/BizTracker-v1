@@ -3,6 +3,7 @@
 Ez a dokumentum a BizTracker valodi business dashboard iranyat rogziti. A korabbi frontend dashboard design referencia volt; innen tovabb a dashboard valodi uzleti read model es elemzesi felulet.
 
 Kapcsolodo dokumentumok:
+- [DOCUMENTATION_STATUS.md](C:\BizTracker\docs\DOCUMENTATION_STATUS.md)
 - [BUSINESS_DIRECTION.md](C:\BizTracker\docs\BUSINESS_DIRECTION.md)
 - [ACCOUNTING_AND_CONTROLLING_MODEL.md](C:\BizTracker\docs\ACCOUNTING_AND_CONTROLLING_MODEL.md)
 - [CURRENT_STATUS.md](C:\BizTracker\docs\CURRENT_STATUS.md)
@@ -202,13 +203,31 @@ Kovetkezo bovites:
 - cost center / expense category modell
 - procurement posting validalasa utan pontosabb cost oldali dashboard
 
-## 7. Kovetkezo fejlesztesek
+## 7. Aktualis fejlesztesi irany
+
+Korabbi validacios feladatok kozul a procurement posting es a Business Dashboard v1 integration tesztek mar dokumentaltan lefutottak. Innen a dashboard iranya nem tovabbi sample/reference tisztazas, hanem UX es elemzesi melyites.
 
 Javasolt sorrend:
 
-1. fo gepen DB migration es procurement posting tesztek futtatasa
-2. fo gepen analytics dashboard endpoint integration test
-3. category_name mezovel bovitheto POS CSV fixture
-4. receipt detail -> basket-level behavior kovetkezo elemzesi modell
-5. Flow event dashboard szelet
-6. Gourmand product/category dashboard szelet
+1. Dashboard UX takaritas
+   - KPI, trend, drill-down es detail panelek egysegesitese
+   - scope valto (`overall`, `flow`, `gourmand`) erositese
+   - tablazatok reszletezo/audit szerepenek tisztazasa
+
+2. Receipt detail -> basket-level behavior
+   - receipt szintu elemzesi modell
+   - kosar osszetetel reszletesebb magyarazata
+   - kesobbi ajanlasokhoz adatminosegi alap
+
+3. Gourmand product/category dashboard szelet
+   - estimated COGS es margin metrikak magyarazhatobb drill-downja
+   - category/product profitability view
+   - kesobbi weather impact elokeszitese
+
+4. Flow event dashboard szelet
+   - event context bekotese, ha az event MVP elindul
+   - ticket/bar/event cost bontas
+
+5. Weather impact analysis elokeszites
+   - weather observation read model
+   - sales idosavhoz kotott korrelacios alap

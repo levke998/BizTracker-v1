@@ -366,6 +366,10 @@ A következő tervezési lépésként érdemes elkészíteni:
 - frontend route tree-t,
 - első MVP user story-k és use case-ek listáját,
 - kezdeti migrációs és importstratégiát.
-## Jelenlegi allapot
+## Dokumentum szerepe es jelenlegi allapot
 
-A projekt aktualis, futtathato allapotat a [CURRENT_STATUS.md](C:\BizTracker\docs\CURRENT_STATUS.md) foglalja ossze. Ez a forras mutatja meg legjobban, hol tartunk most, mi mukodik mar, es mely teruletek hianyoznak meg.
+Ez a dokumentum az eredeti termek- es domain-vizio. Tovabbra is fontos, mert a hosszu tavu celokat, modulokat es uzleti iranyokat nem hagyjuk el.
+
+Nem ez az aktualis implementacios igazsagforras. A projekt tenyleges, futtathato allapotat es a felkesz/hianyzo reszeket a [CURRENT_STATUS.md](C:\BizTracker\docs\CURRENT_STATUS.md) foglalja ossze.
+
+A kovetkezo fejlesztesi fokuszt a [ROADMAP.md](C:\BizTracker\docs\ROADMAP.md), a dokumentacios rendet pedig a [DOCUMENTATION_STATUS.md](C:\BizTracker\docs\DOCUMENTATION_STATUS.md) vezeti.

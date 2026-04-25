@@ -1,2 +1,5 @@
-"""Authentication and authorization dependency placeholder."""
+"""Authentication dependency exports for protected API surfaces."""
 
+from app.modules.identity.presentation.dependencies import get_current_user
+
+__all__ = ["get_current_user"]

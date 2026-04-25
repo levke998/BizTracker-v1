@@ -162,7 +162,29 @@ python -m alembic current
 Nyitott prioritas innen tovabb:
 - dashboard kovetkezo drill-down melyseg
 - basket-level behavior elso read modellje
-- identity/auth MVP elokeszitese
+- estimated stock audit trail
+
+## 2026-04-25 Identity/auth MVP validacio
+
+Az Identity/auth MVP nem igenyelt uj Alembic migrationt, mert a szukseges `auth` tablak mar a `002_auth_identity_base` revisionben leteztek.
+
+Lefutott ellenorzesek:
+
+```powershell
+cd C:\BizTracker\backend
+python -m compileall C:\BizTracker\backend\app C:\BizTracker\backend\tests
+python -m pytest C:\BizTracker\backend\tests\integration\test_identity_auth_api.py -q
+python -m pytest C:\BizTracker\backend\tests\integration -q
+python -m scripts.bootstrap_reference_data
+cd C:\BizTracker\frontend
+npm.cmd run build
+```
+
+Eredmeny:
+- identity/auth integration tesztek: `4 passed`
+- teljes backend integration csomag: `92 passed`
+- frontend production build: sikeres
+- reference bootstrap lefutott, seedelt admin/internal auth alapokkal
 
 ## DB-t nem modosito, de fo gepen ellenorzendo dashboard munka
 

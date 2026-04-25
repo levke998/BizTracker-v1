@@ -3,6 +3,7 @@
 Ez a dokumentum a theoretical / estimated stock modell elso dokumentalt elokeszitese. A cel most nem implementacio, hanem tiszta domain hatar kijelolese, hogy a kesobbi fejlesztes ne keverje ossze az actual es estimated inventory retegeket.
 
 Kapcsolodo dokumentumok:
+- [DOCUMENTATION_STATUS.md](C:\BizTracker\docs\DOCUMENTATION_STATUS.md)
 - [ACCOUNTING_AND_CONTROLLING_MODEL.md](C:\BizTracker\docs\ACCOUNTING_AND_CONTROLLING_MODEL.md)
 - [CURRENT_STATUS.md](C:\BizTracker\docs\CURRENT_STATUS.md)
 - [INVENTORY_DIRECTION.md](C:\BizTracker\docs\INVENTORY_DIRECTION.md)
@@ -19,31 +20,36 @@ Egyszeru szemlelet:
 
 `theoretical stock = actual incoming actuals - estimated consumption + actual corrections`
 
-MVP szinten ezt meg nem implementaljuk, csak az alapelveit rogzitjuk.
+MVP szinten a teljes theoretical engine meg nincs kesz. Van viszont kulon read szerzodes es van egy egyszerusitett `estimated_stock_quantity` mezore epulo becsult keszletcsokkentes POS eladas utan. Ezt a ket dolgot nem szabad osszemosni.
 
 ## 2. Mi mar van meg hozza
 
 Mar letezik:
 - `inventory_item`
 - `inventory_movement`
+- `inventory_item.estimated_stock_quantity`
 - actual movement tipusok:
   - `purchase`
   - `adjustment`
   - `waste`
   - `initial_stock`
 - actual stock level read modell
+- `recipe`
+- `recipe_version`
+- `recipe_ingredient`
+- POS ingestion utani estimated stock csokkenes recept vagy direkt trackelt kesztermek alapjan
 
 Ez jo alapot ad a theoretical stock kesobbi bevezetesehez.
 
 ## 3. Mi nincs meg hozza meg
 
 A theoretical stockhoz meg hianyzik:
-- recipe / BOM kezeles
-- recipe version fogalma
-- sales to consumption mapping
+- kulon estimated consumption audit tabla
+- source receipt / import row szintu traceability
 - production / batch logika
 - inventory valuation logika
 - actual vs theoretical variance read modell
+- theoretical quantity valodi bekotese a read endpointba
 
 ## 4. Actual vs theoretical elv
 
@@ -117,17 +123,24 @@ Jelenlegi MVP jelentese:
 
 Ez tudatos atmeneti allapot:
 - mar van kulon szerzodes az estimated reteghez
-- de meg nincs bekotve recipe vagy sales alapu becsles
+- de meg nincs bekotve audit trail alapu recipe vagy sales alapu theoretical szamitas
 - igy nem keverjuk ossze a valos es a modellalt mennyiseget
+
+Fontos pontositas:
+- a POS ingestion mar csokkentheti az `inventory_item.estimated_stock_quantity` mezot
+- ez hasznos MVP-s becsult keszletjelzes
+- de ez meg nem teljes theoretical stock engine
+- kovetkezo kritikus lepes a kulon audit trail, hogy minden becsult fogyas forrasig visszakeresheto legyen
 
 ## 9. Elso implementacios sorrend
 
 Javasolt sorrend:
 
-1. recipe / consumption szabalyok minimal domain elokeszitese
-2. sales -> estimated consumption alapelvek rogzitese
-3. actual vs theoretical frontend osszehasonlito nezet
+1. estimated consumption audit trail
+2. source receipt/import row -> product -> recipe/direct inventory item traceability
+3. actual vs theoretical frontend osszehasonlito nezet tisztitasa
 4. theoretical quantity es variance elso valodi szamitasa
+5. manual correction history
 
 ## 10. Osszefoglalo
 

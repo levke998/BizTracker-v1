@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from decimal import Decimal
 
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
+from app.core.security import hash_password, normalize_email
 from app.bootstrap.catalog_data import (
     BUSINESS_UNITS,
     CATEGORIES,
@@ -27,6 +29,13 @@ from app.modules.inventory.infrastructure.orm.inventory_item_model import (
 from app.modules.inventory.infrastructure.orm.inventory_movement_model import (
     InventoryMovementModel,
 )
+from app.modules.identity.infrastructure.orm.permission_model import PermissionModel
+from app.modules.identity.infrastructure.orm.role_model import RoleModel
+from app.modules.identity.infrastructure.orm.role_permission_model import (
+    RolePermissionModel,
+)
+from app.modules.identity.infrastructure.orm.user_model import UserModel
+from app.modules.identity.infrastructure.orm.user_role_model import UserRoleModel
 from app.modules.master_data.infrastructure.orm.business_unit_model import (
     BusinessUnitModel,
 )
@@ -64,6 +73,11 @@ def bootstrap_reference_data(session: Session) -> BootstrapSummary:
 
     with session.begin():
         deleted_count += _cleanup_known_dummy_data(session)
+
+        created, updated = _upsert_identity_foundation(session)
+        created_count += created
+        updated_count += updated
+        session.flush()
 
         for payload in BUSINESS_UNITS:
             _, created, updated = _upsert_business_unit(session, payload)
@@ -114,6 +128,170 @@ def bootstrap_reference_data(session: Session) -> BootstrapSummary:
         archived_count=archived_count,
         deleted_count=deleted_count,
     )
+
+
+def _upsert_identity_foundation(session: Session) -> tuple[int, int]:
+    created_count = 0
+    updated_count = 0
+
+    permission_payloads = [
+        {
+            "code": "app.access",
+            "name": "Application access",
+            "description": "Can access the BizTracker internal application.",
+        }
+    ]
+    role_payloads = [
+        {
+            "code": "admin",
+            "name": "Admin",
+            "description": "Internal administrator for MVP access.",
+            "permission_codes": ["app.access"],
+        },
+        {
+            "code": "internal",
+            "name": "Internal user",
+            "description": "Baseline internal user role for protected app access.",
+            "permission_codes": ["app.access"],
+        },
+    ]
+
+    permissions_by_code: dict[str, PermissionModel] = {}
+    for payload in permission_payloads:
+        permission, created, updated = _upsert_permission(session, payload)
+        permissions_by_code[permission.code] = permission
+        created_count += int(created)
+        updated_count += int(updated)
+    session.flush()
+
+    roles_by_code: dict[str, RoleModel] = {}
+    for payload in role_payloads:
+        role, created, updated = _upsert_role(session, payload)
+        roles_by_code[role.code] = role
+        created_count += int(created)
+        updated_count += int(updated)
+    session.flush()
+
+    for role_payload in role_payloads:
+        role = roles_by_code[str(role_payload["code"])]
+        for permission_code in role_payload["permission_codes"]:
+            if _ensure_role_permission(
+                session,
+                role=role,
+                permission=permissions_by_code[str(permission_code)],
+            ):
+                created_count += 1
+
+    user, created, updated = _upsert_seed_admin_user(session)
+    created_count += int(created)
+    updated_count += int(updated)
+    session.flush()
+
+    for role_code in ("admin", "internal"):
+        if _ensure_user_role(session, user=user, role=roles_by_code[role_code]):
+            created_count += 1
+
+    return created_count, updated_count
+
+
+def _upsert_permission(
+    session: Session,
+    payload: dict[str, str],
+) -> tuple[PermissionModel, bool, bool]:
+    model = session.scalar(
+        select(PermissionModel).where(PermissionModel.code == payload["code"])
+    )
+    if model is None:
+        model = PermissionModel(**payload)
+        session.add(model)
+        return model, True, False
+
+    changed = False
+    for field in ("name", "description"):
+        if getattr(model, field) != payload[field]:
+            setattr(model, field, payload[field])
+            changed = True
+    return model, False, changed
+
+
+def _upsert_role(
+    session: Session,
+    payload: dict[str, str | list[str]],
+) -> tuple[RoleModel, bool, bool]:
+    model = session.scalar(select(RoleModel).where(RoleModel.code == payload["code"]))
+    if model is None:
+        model = RoleModel(
+            code=str(payload["code"]),
+            name=str(payload["name"]),
+            description=str(payload["description"]),
+            is_active=True,
+        )
+        session.add(model)
+        return model, True, False
+
+    changed = False
+    updates = {
+        "name": str(payload["name"]),
+        "description": str(payload["description"]),
+        "is_active": True,
+    }
+    for field, value in updates.items():
+        if getattr(model, field) != value:
+            setattr(model, field, value)
+            changed = True
+    return model, False, changed
+
+
+def _upsert_seed_admin_user(session: Session) -> tuple[UserModel, bool, bool]:
+    email = normalize_email(os.getenv("BIZTRACKER_ADMIN_EMAIL", "admin@biztracker.local"))
+    full_name = os.getenv("BIZTRACKER_ADMIN_FULL_NAME", "BizTracker Admin")
+    password = os.getenv("BIZTRACKER_ADMIN_PASSWORD", "ChangeMe123!")
+
+    model = session.scalar(select(UserModel).where(UserModel.email == email))
+    if model is None:
+        model = UserModel(
+            email=email,
+            password_hash=hash_password(password),
+            full_name=full_name,
+            is_active=True,
+        )
+        session.add(model)
+        return model, True, False
+
+    changed = False
+    if model.full_name != full_name:
+        model.full_name = full_name
+        changed = True
+    if not model.is_active:
+        model.is_active = True
+        changed = True
+    return model, False, changed
+
+
+def _ensure_user_role(session: Session, *, user: UserModel, role: RoleModel) -> bool:
+    existing = session.get(UserRoleModel, {"user_id": user.id, "role_id": role.id})
+    if existing is not None:
+        return False
+
+    session.add(UserRoleModel(user_id=user.id, role_id=role.id))
+    return True
+
+
+def _ensure_role_permission(
+    session: Session,
+    *,
+    role: RoleModel,
+    permission: PermissionModel,
+) -> bool:
+    existing = session.get(
+        RolePermissionModel,
+        {"role_id": role.id, "permission_id": permission.id},
+    )
+    if existing is not None:
+        return False
+
+    session.add(RolePermissionModel(role_id=role.id, permission_id=permission.id))
+    return True
 
 
 def _cleanup_known_dummy_data(session: Session) -> int:

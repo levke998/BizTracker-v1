@@ -1,3 +1,5 @@
+import { clearAccessToken, getAccessToken } from "../storage/tokenStorage";
+
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000/api/v1";
 
@@ -29,9 +31,7 @@ export async function apiGet<T>(
 ): Promise<T> {
   const response = await fetch(buildUrl(path, query), {
     method: "GET",
-    headers: {
-      Accept: "application/json",
-    },
+    headers: buildHeaders(),
   });
 
   if (!response.ok) {
@@ -45,6 +45,7 @@ export async function apiGet<T>(
 export async function apiPostForm<T>(path: string, formData: FormData): Promise<T> {
   const response = await fetch(buildUrl(path), {
     method: "POST",
+    headers: buildHeaders({ acceptOnly: true }),
     body: formData,
   });
 
@@ -59,9 +60,7 @@ export async function apiPostForm<T>(path: string, formData: FormData): Promise<
 export async function apiPost<T>(path: string): Promise<T> {
   const response = await fetch(buildUrl(path), {
     method: "POST",
-    headers: {
-      Accept: "application/json",
-    },
+    headers: buildHeaders(),
   });
 
   if (!response.ok) {
@@ -78,10 +77,7 @@ export async function apiPostJson<TBody extends object, TResponse>(
 ): Promise<TResponse> {
   const response = await fetch(buildUrl(path), {
     method: "POST",
-    headers: {
-      Accept: "application/json",
-      "Content-Type": "application/json",
-    },
+    headers: buildHeaders({ contentType: "application/json" }),
     body: JSON.stringify(body),
   });
 
@@ -99,10 +95,7 @@ export async function apiPatchJson<TBody extends object, TResponse>(
 ): Promise<TResponse> {
   const response = await fetch(buildUrl(path), {
     method: "PATCH",
-    headers: {
-      Accept: "application/json",
-      "Content-Type": "application/json",
-    },
+    headers: buildHeaders({ contentType: "application/json" }),
     body: JSON.stringify(body),
   });
 
@@ -117,9 +110,7 @@ export async function apiPatchJson<TBody extends object, TResponse>(
 export async function apiDelete<T>(path: string): Promise<T> {
   const response = await fetch(buildUrl(path), {
     method: "DELETE",
-    headers: {
-      Accept: "application/json",
-    },
+    headers: buildHeaders(),
   });
 
   if (!response.ok) {
@@ -130,7 +121,29 @@ export async function apiDelete<T>(path: string): Promise<T> {
   return (await response.json()) as T;
 }
 
+function buildHeaders(
+  options: { contentType?: string; acceptOnly?: boolean } = {},
+): HeadersInit {
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+  };
+  const token = getAccessToken();
+
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+  if (options.contentType && !options.acceptOnly) {
+    headers["Content-Type"] = options.contentType;
+  }
+
+  return headers;
+}
+
 async function extractErrorMessage(response: Response): Promise<string> {
+  if (response.status === 401) {
+    clearAccessToken();
+  }
+
   const contentType = response.headers.get("content-type") ?? "";
 
   if (contentType.includes("application/json")) {

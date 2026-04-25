@@ -6,6 +6,7 @@ Kapcsolodo dokumentumok:
 - [PROJECT_DESCRIPTION.md](C:\BizTracker\PROJECT_DESCRIPTION.md)
 - [CURRENT_STATUS.md](C:\BizTracker\docs\CURRENT_STATUS.md)
 - [ROADMAP.md](C:\BizTracker\docs\ROADMAP.md)
+- [DOCUMENTATION_STATUS.md](C:\BizTracker\docs\DOCUMENTATION_STATUS.md)
 - [ACCOUNTING_AND_CONTROLLING_MODEL.md](C:\BizTracker\docs\ACCOUNTING_AND_CONTROLLING_MODEL.md)
 - [THEORETICAL_STOCK_PREPARATION.md](C:\BizTracker\docs\THEORETICAL_STOCK_PREPARATION.md)
 
@@ -99,6 +100,10 @@ A cel nem egyetlen statikus dashboard, hanem egy olyan analitikai felulet, ahol:
 - diagramok vannak
 - interaktiv drill-down van
 - minden lenyeges mutato lebontHato a legelemibb szintig
+
+Fontos UI-elv:
+- a tablazatok nem fo termekelmenyek, hanem reszletezesre, audit trailre es forrasrekordok ellenorzesere valok
+- a fo elmeny KPI, trend, grafikon, drill-down es osszefuggesek megertese legyen
 
 Pelda irany:
 - revenue

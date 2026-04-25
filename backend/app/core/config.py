@@ -46,6 +46,7 @@ class Settings:
     app_name: str
     api_v1_prefix: str
     secret_key: str
+    access_token_expire_minutes: int
     database_url: str
     sqlalchemy_echo: bool
     cors_origins: tuple[str, ...]
@@ -56,6 +57,12 @@ def _parse_bool(value: str | None, *, default: bool = False) -> bool:
     if value is None:
         return default
     return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _parse_int(value: str | None, *, default: int) -> int:
+    if value is None:
+        return default
+    return int(value)
 
 
 def _parse_csv(value: str | None) -> tuple[str, ...]:
@@ -96,6 +103,10 @@ def get_settings() -> Settings:
         app_name=os.getenv("APP_NAME", "BizTracker"),
         api_v1_prefix=os.getenv("API_V1_PREFIX", "/api/v1"),
         secret_key=os.getenv("SECRET_KEY", "change-me"),
+        access_token_expire_minutes=_parse_int(
+            os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES"),
+            default=30,
+        ),
         database_url=database_url,
         sqlalchemy_echo=_parse_bool(os.getenv("SQLALCHEMY_ECHO"), default=False),
         cors_origins=cors_origins,

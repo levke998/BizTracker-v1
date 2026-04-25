@@ -2,6 +2,11 @@
 
 Ez a dokumentum a termek- es alapanyagkatalogus, a receptalapu koltsegmodell, valamint a margin szamitas jelenlegi iranyat foglalja ossze.
 
+Kapcsolodo dokumentumok:
+- [CURRENT_STATUS.md](C:\BizTracker\docs\CURRENT_STATUS.md)
+- [ROADMAP.md](C:\BizTracker\docs\ROADMAP.md)
+- [DOCUMENTATION_STATUS.md](C:\BizTracker\docs\DOCUMENTATION_STATUS.md)
+
 ## Jelenlegi allapot
 
 Adatbazis alap:
@@ -56,7 +61,7 @@ A dashboard a POS sorokhoz termekkod alapjan keresi a koltseget:
 
 KPI-k:
 - `estimated_cogs`
-- `profit_margin` HUF fo ertek
+- `profit_margin` HUF fo ertek, vagyis estimated margin profit
 - `gross_margin_percent` masodlagos szazalek
 
 Trend chart:
@@ -77,8 +82,6 @@ A db most mar kepes sales UOM tarolasara termekszinten. Ez fontos, mert nem mind
 Nyitott dontes:
 - a meglévő seedben mely termekeket kell kg alapu ertekesitesre atallitani
 - a `prods.docx` alapjan ehhez meg explicit termekenkenti jovahagyas kell, hogy ne irjunk at vakon darabos termeket kg-ra
-
-## Kovetkezo implementacios szelet
 
 ## Estimated stock consumption
 

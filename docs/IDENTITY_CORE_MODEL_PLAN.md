@@ -1,5 +1,26 @@
 # BizTracker Identity and Core Master Data Model Plan
 
+## 0. Aktualis Identity/auth MVP statusz
+
+2026-04-25 allapot:
+- az identity ORM modell es `auth` schema tovabbra is az eredeti modelltervet koveti
+- az Identity/auth MVP end-to-end elkeszult
+- `POST /api/v1/auth/login` mukodik
+- `GET /api/v1/me` mukodik bearer access tokennel
+- login use case email normalizalast, aktiv user ellenorzest es jelszoellenorzest vegez
+- a jelszavak PBKDF2-SHA256 hashkent vannak tarolva
+- az access token HMAC-SHA256 alairasu es lejarati idot tartalmaz
+- az idempotens reference bootstrap letrehozza/frissiti az `admin` es `internal` role-okat, az `app.access` permissiont es a seedelt admin usert
+- frontend oldalon van `/login`, token storage, bearer API header, `/me` alapu session read, logout es route guard
+- integration teszt fedi a sikeres login, hibas login, `/me` valid token es `/me` token nelkuli eseteket
+
+Tudatosan kesobbre maradt:
+- SSO
+- password reset
+- refresh token/session rotation
+- finomszemcses permission matrix minden modul endpointjara
+- komplex audit/compliance layer
+
 Ez a dokumentum az első `identity` és `core master data` ORM modelltervet rögzíti kontrollált mélységben. A cél nem a teljes implementáció, hanem az adatmodell és az első Alembic revisionök egyértelműsítése.
 
 Kapcsolódó dokumentumok:
@@ -573,4 +594,3 @@ Ajánlott technikai irány:
 Megjegyzés:
 - a jelenlegi scaffoldban külön `master_data` modul még nincs létrehozva, mert az előző terv a domain modulokra fókuszált
 - a következő technikai körben ezt érdemes külön, tisztán bevezetni
-

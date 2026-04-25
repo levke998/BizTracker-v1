@@ -1,5 +1,7 @@
 import { useLocation } from "react-router-dom";
 
+import { useCurrentUser, useLogout } from "../../../modules/identity/hooks/useLogin";
+import { Button } from "../ui/Button";
 import { routes } from "../../constants/routes";
 
 function getPageMeta(pathname: string) {
@@ -116,6 +118,8 @@ function getPageMeta(pathname: string) {
 
 export function Topbar() {
   const location = useLocation();
+  const currentUser = useCurrentUser();
+  const logout = useLogout();
   const pageMeta = getPageMeta(location.pathname);
   const formattedDate = new Intl.DateTimeFormat("hu-HU", {
     month: "short",
@@ -132,8 +136,13 @@ export function Topbar() {
       </div>
       <div className="topbar-actions">
         <span className="topbar-chip topbar-chip-primary">Business read model</span>
-        <span className="topbar-chip">Readable dark enterprise UI</span>
+        {currentUser.data ? (
+          <span className="topbar-chip">{currentUser.data.full_name}</span>
+        ) : null}
         <span className="topbar-chip">{formattedDate}</span>
+        <Button variant="secondary" className="topbar-logout-button" onClick={logout}>
+          Log out
+        </Button>
       </div>
     </header>
   );

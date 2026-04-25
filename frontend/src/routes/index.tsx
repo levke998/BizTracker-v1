@@ -6,6 +6,7 @@ import { CatalogProductsPage } from "../modules/catalog/pages/CatalogProductsPag
 import { DemoPosPage } from "../modules/demoPos/pages/DemoPosPage";
 import { TransactionsPage } from "../modules/finance/pages/TransactionsPage";
 import { ImportCenterPage } from "../modules/imports/pages/ImportCenterPage";
+import { LoginPage } from "../modules/identity/pages/LoginPage";
 import { InventoryOverviewPage } from "../modules/inventory/pages/InventoryOverviewPage";
 import { InventoryListPage } from "../modules/inventory/pages/InventoryListPage";
 import { InventoryMovementsPage } from "../modules/inventory/pages/InventoryMovementsPage";
@@ -16,11 +17,20 @@ import { InvoicesPage } from "../modules/procurement/pages/InvoicesPage";
 import { SuppliersPage } from "../modules/procurement/pages/SuppliersPage";
 import { AppLayout } from "../shared/components/layout/AppLayout";
 import { routes } from "../shared/constants/routes";
+import { ProtectedRoute } from "./protected";
 
 export function AppRoutes() {
   return (
     <Routes>
-      <Route path="/" element={<AppLayout />}>
+      <Route path={routes.login.slice(1)} element={<LoginPage />} />
+      <Route
+        path="/"
+        element={
+          <ProtectedRoute>
+            <AppLayout />
+          </ProtectedRoute>
+        }
+      >
         <Route index element={<Navigate replace to={routes.dashboard} />} />
         <Route path={routes.dashboard.slice(1)} element={<DashboardPage />} />
         <Route path={routes.demoPos.slice(1)} element={<DemoPosPage />} />
