@@ -6,6 +6,8 @@ Ez a dokumentum azt rogziti, hogy a Demo POS nem a kesobbi hivatalos kassza hely
 
 A kasszaprogram kulso, hivatalos rendszer. A BizTracker nem epulhet ugy, mintha a demo kassza lenne a vegleges kassza. A BizTracker feladata egy tiszta ingestion boundary fenntartasa, amelyhez kesobb egy kulso connector vagy adapter illeszti a valodi kasszabol erkezo adatot.
 
+Ha nincs meg a kasszakapcsolat, vagy atmenetileg kiesik, a rendszer tovabbra is mukodokepes marad. Ilyenkor az eladasi adatok CSV exportbol erkeznek az import kozponton keresztul.
+
 ## Jelenlegi szerzodes
 
 Normalized receipt endpoint:
@@ -26,6 +28,55 @@ A backend ezutan:
 - `ingest.import_file` demo/API forrast rogziti
 - `ingest.import_row` sorokat hoz letre normalized payload-dal
 - `core.financial_transaction` `pos_sale` inflow rekordokat keszit
+
+## CSV fallback
+
+A kassza CSV exportja a meglévo import flow-val toltheto fel:
+
+```text
+POST /api/v1/imports/files
+POST /api/v1/imports/batches/{batch_id}/parse
+POST /api/v1/imports/batches/{batch_id}/map/financial-transactions
+```
+
+Import type:
+
+```text
+pos_sales
+```
+
+Minimalis oszlopok:
+- `date`
+- `receipt_no`
+- `product_name`
+- `quantity`
+- `gross_amount`
+- `payment_method`
+
+Opcionális, kesobbi kassza API/export eseten hasznos oszlopok:
+- `sku`
+- `product_id`
+- `category_name`
+
+## Duplikacio vedelem
+
+A POS sale sorok stabil dedupe kulcsot kapnak. A kulcs forrastol fuggetlenul ugyanugy epul:
+- business unit
+- date
+- receipt number
+- product name
+- quantity
+- gross amount
+
+Ez azt jelenti, hogy:
+- ugyanaz a CSV egymas utan feltoltve nem hoz letre dupla penzugyi tranzakciot
+- ha API-n mar megerkezett az eladas, a kesobbi CSV fallback nem duplazza
+- ha CSV-bol mar bekerult az eladas, a kesobbi API kuldes nem duplazza
+- a becsult stock fogyas is csak az elfogadott, nem duplikalt sorokra fut
+
+Technikai alap:
+- `core.financial_transaction.dedupe_key`
+- egyedi index: `ix_core_financial_transaction_dedupe_key`
 
 ## Demo POS szerepe
 
@@ -51,6 +102,8 @@ A valodi kassza integracional nem a dashboardot, finance modult vagy import rete
 - a kulso termekkodokat BizTracker `product_id` / `sku` ertekekre mappeli
 - a fizetesi modot, timestampet es mennyiseget normalizalja
 - ugyanarra a `POST /api/v1/pos-ingestion/receipts` szerzodesre kuld
+
+Amig a kulso kasszakod nem ismert, a rendszer `product_name` es kesobb `sku` alapon is tud dolgozni. A kasszakod mapping felulet kulon kovetkezo szelet lesz, amikor megkapjuk a valodi API/export specifikaciot.
 
 ## Nyitott adatok
 

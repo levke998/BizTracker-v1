@@ -24,6 +24,11 @@ GET /api/v1/catalog/ingredients
 Frontend:
 - `Catalog - Products`
 - `Catalog - Ingredients`
+- termek letrehozas es szerkesztes
+- direkt koltseg, eladasi ar, kategoria es sales UOM modositasa
+- receptes termeknel uj aktiv receptverzio letrehozasa rugalmas osszetevo listaval
+- alapanyag letrehozas es szerkesztes
+- alapanyag koltseg es becsult stock kezi karbantartasa
 
 ## Termekkoltseg szabaly
 
@@ -75,27 +80,31 @@ Nyitott dontes:
 
 ## Kovetkezo implementacios szelet
 
-1. Product write API:
-   - create product
-   - update sale price
-   - update category
-   - update sales UOM
-   - update direct unit cost
+## Estimated stock consumption
 
-2. Recipe write API:
-   - create recipe
-   - create new recipe version
-   - add/remove ingredient
-   - change ingredient quantity
-   - recalculate margin immediately
+POS receipt ingestion utan a rendszer becsult stock fogyast szamol:
+- receptes termeknel az aktiv receptverzio osszetevoi alapjan
+- direkt trackelt kesztermeknel a termek nevet egyezteti inventory itemmel
+- csak kompatibilis mertekegysegeknel von le keszletet
+- a becsult stock 0 ala nem mehet
+- a fogyas nem blokkolja az eladast
 
-3. Ingredient write API:
-   - create inventory item
-   - update default unit cost
-   - update estimated stock quantity
-   - keep manual edit compatible with later supplier invoice updates
+Nyitott tovabbfejlesztes:
+- a becsult fogyas kulon audit tablaba keruljon, hogy visszakeresheto legyen melyik nyugta melyik alapanyagot csokkentette
 
-4. Estimated stock:
-   - POS sale -> recipe consumption estimate
-   - do not block sales when estimated stock is zero
-   - stock floor should not go below zero in the read model
+## Kovetkezo implementacios szelet
+
+1. Estimated stock audit:
+   - POS sale -> recipe consumption audit row
+   - receipt/source row level traceability
+   - manual correction history
+
+2. POS mapping:
+   - external cash-register product code -> BizTracker product
+   - SKU and barcode aliases
+   - missing mapping quarantine
+
+3. Catalog UX hardening:
+   - archive/deactivate decisions
+   - larger recipe editor ergonomics
+   - duplicate SKU warnings

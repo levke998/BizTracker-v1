@@ -16,6 +16,12 @@ from app.modules.imports.domain.entities.import_batch import ImportBatch, Import
 from app.modules.imports.domain.repositories.import_batch_repository import (
     ImportBatchRepository,
 )
+from app.modules.pos_ingestion.application.services.pos_sale_identity import (
+    build_pos_sale_dedupe_key,
+)
+from app.modules.pos_ingestion.application.services.pos_sale_inventory import (
+    PosSaleInventoryConsumptionService,
+)
 
 
 class ImportBatchNotFoundError(Exception):
@@ -52,9 +58,11 @@ class MapPosSalesBatchToTransactionsCommand:
         self,
         imports_repository: ImportBatchRepository,
         finance_repository: FinancialTransactionRepository,
+        inventory_consumption: PosSaleInventoryConsumptionService,
     ) -> None:
         self._imports_repository = imports_repository
         self._finance_repository = finance_repository
+        self._inventory_consumption = inventory_consumption
 
     def execute(self, *, batch_id: uuid.UUID) -> FinancialTransactionMappingResult:
         batch = self._imports_repository.get_batch(batch_id)
@@ -86,11 +94,31 @@ class MapPosSalesBatchToTransactionsCommand:
                 "This batch has already been mapped to financial transactions."
             )
 
-        transactions = [
-            self._map_row(batch=batch, row=row)
+        row_transactions = [
+            (row, self._map_row(batch=batch, row=row))
             for row in parsed_rows
         ]
+        existing_dedupe_keys = self._finance_repository.existing_dedupe_keys(
+            [
+                transaction.dedupe_key
+                for _row, transaction in row_transactions
+                if transaction.dedupe_key is not None
+            ]
+        )
+        new_row_transactions = [
+            (row, transaction)
+            for row, transaction in row_transactions
+            if transaction.dedupe_key not in existing_dedupe_keys
+        ]
+        transactions = [transaction for _row, transaction in new_row_transactions]
         created = self._finance_repository.create_many(transactions)
+        for row, _transaction in new_row_transactions:
+            self._inventory_consumption.consume_line(
+                business_unit_id=batch.business_unit_id,
+                payload=row.normalized_payload or {},
+            )
+        if new_row_transactions:
+            self._inventory_consumption.commit()
 
         return FinancialTransactionMappingResult(
             batch_id=batch.id,
@@ -110,6 +138,10 @@ class MapPosSalesBatchToTransactionsCommand:
         amount = self._extract_amount(payload)
         occurred_at = self._extract_occurred_at(payload)
         description = self._build_description(payload)
+        dedupe_key = build_pos_sale_dedupe_key(
+            business_unit_id=batch.business_unit_id,
+            payload=payload,
+        )
 
         return NewFinancialTransaction(
             business_unit_id=batch.business_unit_id,
@@ -121,6 +153,7 @@ class MapPosSalesBatchToTransactionsCommand:
             description=description,
             source_type=self.source_type,
             source_id=row.id,
+            dedupe_key=dedupe_key,
         )
 
     @staticmethod

@@ -34,6 +34,8 @@ A projekt mar tul van a tiszta foundation fazison, es mar tobb valodi, vegpontto
 - valosabb demo POS elokeszito torzsadat: termekek, arak, alapanyagok es recept/BOM alap
 - onallo demo POS API es frontend oldal a kassza adatfolyam tesztelesehez
 - POS ingestion boundary, hogy a demo kassza csak tesztkliens legyen
+- CSV fallback POS sales import, ha nincs vagy kiesik a kasszakapcsolat
+- POS sale dedupe kulcs API es CSV forras kozott
 - katalogus read API es frontend termek/alapanyag kartyanezet
 - receptbol vagy direkt beszerzesi arbol becsult COGS es margin-profit szamitas
 
@@ -74,7 +76,11 @@ Uzleti szintu irany:
 - direkt koltsegu termekeknel `product.default_unit_cost` alapu margin
 - alapanyagoknal torzs koltseg, becsult keszlet es recept hasznalat darabszam
 - a termekekhez sales UOM tarolhato, igy a db kezeli a darabos, adag, gomboc es kesobb kg alapu ertekesitest is
-- a jelenlegi katalogus olvaso/elemzo felulet; a szerkeszto parancsoldal kovetkezo implementacios szelet
+- termek create es update API
+- receptes termeknel uj aktiv receptverzio irasa rugalmas osszetevo listaval
+- alapanyag create es update API
+- frontend szerkeszto panelek termekekhez es alapanyagokhoz
+- seedelt alapanyagokhoz es keszletelemekhez realis becsult stock mennyisegek tartoznak
 
 ### Imports
 - `POST /api/v1/imports/files`
@@ -89,6 +95,7 @@ Uzleti szintu irany:
 - `pos_sales` profil
 - konnyu mezoszintu normalizalas
 - demo POS nyugtak ugyanebbe az import staging retegbe erkeznek
+- CSV fallback ugyanabba a POS sale dedupe es finance pipeline-ba kerul, mint az API-s ingestion
 
 ### Finance
 - `POST /api/v1/imports/batches/{batch_id}/map/financial-transactions`
@@ -98,6 +105,8 @@ Uzleti szintu irany:
 - egyszeru source reference alapu duplicate vedelem
 - `Finance Transactions` frontend oldal
 - demo POS nyugtasor -> `pos_sale` inflow transaction
+- demo POS / POS ingestion nyugtasor utan a becsult stock recept vagy direkt kesztermek alapjan csokken
+- POS sale `dedupe_key` ved a duplikalt API/CSV eladasok ellen
 
 ### Demo POS
 - `GET /api/v1/demo-pos/catalog`
@@ -111,6 +120,9 @@ Uzleti szintu irany:
 - automata demo eladas generatore
 - a frontend demo POS mar a `pos-ingestion` boundaryt hasznalja nyugtakuldesre
 - a `/demo-pos/*` API demo-kliens es katalogus tamogato szerepu
+- nyugta mentese utan a receptes termekek osszetevoi becsult keszletbol levonodnak
+- direkt darabos, trackelt kesztermekeknel a megfelelo inventory item becsult keszlete csokken
+- becsult keszlet nem mehet 0 ala, es nem blokkolja az eladast
 
 ### Inventory backend
 - `GET /api/v1/inventory/items`
@@ -126,6 +138,7 @@ Uzleti szintu irany:
 - actual stock level aggregacio movement log alapjan
 - theoretical stock elso read modell explicit `not_configured` estimation basis jelolessel
 - Gourmand recept-alapanyag torzsadat es Flow ital/jegy keszletelem-alap a demo kasszahoz
+- POS eladas utani becsult stock fogyas receptbol vagy direkt kesztermekbol
 
 ### Production / recipes
 - `core.recipe`
@@ -284,10 +297,16 @@ Ez jo alap, de UI szinten meg kell erositeni az egyertelmu szerepkor-szetvalaszt
 
 ### POS ingestion
 - `POST /api/v1/pos-ingestion/receipts`
+- API es CSV forras kozott stabil dedupe kulcs ved a duplikacio ellen
+- ha ugyanaz az eladas CSV-bol es API-bol is megerkezik, csak egy finance tranzakcio es egy stock fogyas tortenik
 
 ### Catalog
 - `GET /api/v1/catalog/products`
 - `GET /api/v1/catalog/ingredients`
+- `POST /api/v1/catalog/products`
+- `PATCH /api/v1/catalog/products/{product_id}`
+- `POST /api/v1/catalog/ingredients`
+- `PATCH /api/v1/catalog/ingredients/{inventory_item_id}`
 
 ### Procurement
 - `GET /api/v1/procurement/suppliers`
@@ -309,7 +328,7 @@ Ez jo alap, de UI szinten meg kell erositeni az egyertelmu szerepkor-szetvalaszt
 ## 5. Jelenlegi adatbazis allapot
 
 Aktualis Alembic head:
-- `017_core_costing_foundation`
+- `018_pos_sale_dedupe_key`
 
 Fontos fejlesztoi megjegyzes:
 - ezen a gepen a `015_inventory_movement_source_ref` migration lefutott
@@ -335,6 +354,7 @@ Fo tablak:
 - `core.category`
 - `core.product`
 - `core.financial_transaction`
+  - `dedupe_key` stabil POS sale duplikacio vedelemhez
 - `core.inventory_item`
 - `core.inventory_movement`
 - `core.supplier`
@@ -352,10 +372,10 @@ Fo tablak:
 
 ### Inventory
 - movement create/edit UX finomitas
-- theoretical / estimated stock valodi becslesi logikaja
+- theoretical / estimated stock riport es audit trail finomitasa
 - inventory valuation
 - FIFO kompatibilis costing reteg
-- POS eladas utan recipe alapu becsult keszletfogyas naplozasa
+- POS eladas utani becsult keszletfogyas naplozasa kulon audit retegbe
 
 ### Upload / procurement / source data
 - PDF alapu szamla workflow
@@ -365,6 +385,7 @@ Fo tablak:
 - purchase invoice -> finance cost posting alap kesz es validalva
 - forgalmi CSV/Excel upload tovabbfejlesztese
 - kesobbi POS API connector
+- CSV POS fallback mar mukodik duplikacio vedelemmel
 - hivatalos kasszaprogramhoz illesztheto kulso connector/adaptor szerzodes
 
 ### Dashboard / analytics direction
@@ -400,10 +421,9 @@ Fo tablak:
 - drill downos KPI workflow kovetkezo endpointjai
 
 ### Catalog
-- termek create/update parancsok
-- recept version create/update parancsok
-- alapanyag koltseg es becsult keszlet kezi modositasa
-- kategoria, sales UOM es uzletenkenti ar validaciok
+- recipe editor UX tovabbi finomitasa nagyobb receptlistakhoz
+- termek archive/delete dontesi szabaly
+- kulso kasszakod / SKU mapping felulet
 
 ## 7. Nyitott iranydontesek
 
@@ -432,8 +452,8 @@ A kovetkezo fazisban erre lehet raepiteni az elso valodi consumption / recipe al
 
 ## 8. Javasolt kovetkezo fokusz
 
-1. Catalog write side: product, recipe es ingredient szerkesztes
-2. Recipe alapu estimated stock fogyas eladasok utan
+1. Kulso kasszakod / SKU mapping felulet a valodi POS connectorhoz
+2. Estimated stock fogyas audit trail es riport
 3. Dashboard basket-level behavior kovetkezo elemzesi modell
 4. Identity auth MVP
 5. Inventory valuation es FIFO kompatibilis reteg elokeszitese

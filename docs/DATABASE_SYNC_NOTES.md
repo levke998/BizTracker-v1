@@ -15,6 +15,28 @@ Ha a backend `.env` nincs betoltve automatikusan, elobb a fo gepen be kell allit
 
 ## Jelenlegi adatbazis allapot
 
+### `018_pos_sale_dedupe_key`
+
+Fajl:
+- `backend/migrations/versions/20260425_018_pos_sale_dedupe_key.py`
+
+Cel:
+- ugyanaz az eladas ne tudjon duplazodni API es CSV forras kozott
+- azonos CSV export tobbszori feltoltese ne hozzon letre uj penzugyi tranzakciokat
+- kasszakapcsolat kiesese es CSV fallback biztonsagosan egy pipeline-ba keruljon
+
+Valtozas:
+- `core.financial_transaction.dedupe_key`
+- `ix_core_financial_transaction_dedupe_key` unique index
+
+Kapcsolodo workflow:
+- `POST /api/v1/pos-ingestion/receipts`
+- `POST /api/v1/imports/files`
+- `POST /api/v1/imports/batches/{batch_id}/parse`
+- `POST /api/v1/imports/batches/{batch_id}/map/financial-transactions`
+- a dedupe kulcs business unit, date, receipt_no, product_name, quantity es gross_amount alapon epul
+- csak a nem duplikalt POS sorok hoznak letre finance tranzakciot es becsult stock fogyast
+
 ### `017_core_costing_foundation`
 
 Fajl:
@@ -34,9 +56,11 @@ Valtozas:
 Kapcsolodo workflow:
 - `python -m scripts.bootstrap_reference_data`
 - frissiti a prods.docx alapu arakat, sales UOM adatokat es alapanyag koltsegeket
+- 72 keszletelemhez realis becsult `estimated_stock_quantity` induloadatot ad
 - torli a zavaro `Reusable Demo Item%` keszletelemeket, ha nincs rajtuk movement referencia
 - a demo POS a `POST /api/v1/pos-ingestion/receipts` boundaryn keresztul kuld nyugtat
 - a dashboard `estimated_cogs`, HUF `profit_margin` es `% gross_margin_percent` KPI-ket szamol
+- POS receipt ingestion utan a becsult stock recept vagy direkt trackelt kesztermek alapjan csokken, 0 also korlattal
 - katalogus endpointok:
   - `GET /api/v1/catalog/products`
   - `GET /api/v1/catalog/ingredients`
@@ -93,7 +117,7 @@ Kapcsolodo workflow:
 
 ## 2026-04-24 fo gepes validacio allapota
 
-Ezen a gepen a `017_core_costing_foundation` migration sikeresen lefutott. A kapcsolodo procurement posting validacio, Business Dashboard v1 read-model integration validacio es a teljes backend integration csomag is zold.
+Ezen a gepen a `018_pos_sale_dedupe_key` migration sikeresen lefutott. A kapcsolodo procurement posting validacio, Business Dashboard v1 read-model integration validacio es a teljes backend integration csomag is zold.
 
 Lefutott ellenorzesek:
 
@@ -108,13 +132,15 @@ python -m pytest C:\BizTracker\backend\tests\integration -q
 ```
 
 Eredmeny:
-- Alembic head: `017_core_costing_foundation`
+- Alembic head: `018_pos_sale_dedupe_key`
 - procurement posting + inventory movement tesztek: `14 passed`
 - analytics dashboard tesztek: `9 passed`
 - kombinált validacios csomag: `23 passed`
-- teljes backend integration csomag: `85 passed`
 - frontend production build: sikeres
 - katalogus smoke check: `/catalog/products` es `/catalog/ingredients` 200 OK
+- catalog write integration teszt: `backend/tests/integration/test_catalog_api.py`
+- teljes backend integration csomag: `88 passed`
+- POS CSV/API dedupe celtesztek: `16 passed`
 
 Megjegyzes:
 - ezen a gepen az `alembic_version.version_num` oszlop kezdetben tul rovid volt a `015_inventory_movement_source_ref` revision azonositohoz

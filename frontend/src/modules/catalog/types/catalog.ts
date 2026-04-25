@@ -45,3 +45,41 @@ export type CatalogIngredient = {
   track_stock: boolean;
   is_active: boolean;
 };
+
+export type CatalogRecipeIngredientPayload = {
+  inventory_item_id: string;
+  quantity: string;
+  uom_id: string;
+};
+
+export type CatalogRecipePayload = {
+  name: string;
+  yield_quantity: string;
+  yield_uom_id: string;
+  ingredients: CatalogRecipeIngredientPayload[];
+};
+
+export type CatalogProductPayload = {
+  business_unit_id?: string;
+  category_id: string | null;
+  sales_uom_id: string | null;
+  sku: string | null;
+  name: string;
+  product_type: string;
+  sale_price_gross: string | null;
+  default_unit_cost: string | null;
+  currency: string;
+  is_active: boolean;
+  recipe: CatalogRecipePayload | null;
+};
+
+export type CatalogIngredientPayload = {
+  business_unit_id?: string;
+  name: string;
+  item_type: string;
+  uom_id: string;
+  track_stock: boolean;
+  default_unit_cost: string | null;
+  estimated_stock_quantity: string | null;
+  is_active: boolean;
+};

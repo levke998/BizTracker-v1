@@ -26,6 +26,7 @@ class FinancialTransactionModel(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         sa.Index("ix_core_financial_transaction_business_unit_id", "business_unit_id"),
         sa.Index("ix_core_financial_transaction_occurred_at", "occurred_at"),
         sa.Index("ix_core_financial_transaction_transaction_type", "transaction_type"),
+        sa.Index("ix_core_financial_transaction_dedupe_key", "dedupe_key", unique=True),
         {"schema": "core"},
     )
 
@@ -45,3 +46,4 @@ class FinancialTransactionModel(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     description: Mapped[str] = mapped_column(sa.Text, nullable=False)
     source_type: Mapped[str] = mapped_column(sa.String(100), nullable=False)
     source_id: Mapped[uuid.UUID] = mapped_column(sa.Uuid(as_uuid=True), nullable=False)
+    dedupe_key: Mapped[str | None] = mapped_column(sa.String(128), nullable=True)

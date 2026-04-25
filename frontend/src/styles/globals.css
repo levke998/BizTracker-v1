@@ -943,7 +943,7 @@ select {
   align-items: end;
   display: grid;
   gap: 14px;
-  grid-template-columns: minmax(180px, 1.2fr) minmax(220px, 1.4fr) minmax(150px, 0.8fr) auto;
+  grid-template-columns: minmax(180px, 1.2fr) minmax(220px, 1.4fr) minmax(150px, 0.8fr) auto auto;
 }
 
 .catalog-tabs {
@@ -1024,6 +1024,53 @@ select {
   display: grid;
   gap: 16px;
   margin-top: 18px;
+}
+
+.catalog-editor-card {
+  border-color: rgba(56, 189, 248, 0.26);
+}
+
+.catalog-edit-form,
+.catalog-recipe-editor,
+.catalog-recipe-lines {
+  display: grid;
+  gap: 14px;
+}
+
+.catalog-recipe-toggle {
+  margin-top: 6px;
+}
+
+.catalog-recipe-line {
+  align-items: center;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(180px, 1fr) minmax(100px, 0.4fr) minmax(110px, 0.4fr) auto;
+}
+
+.catalog-recipe-line select,
+.catalog-recipe-line input {
+  min-height: 40px;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(15, 23, 42, 0.78);
+  color: var(--text-primary);
+  padding: 0 12px;
+}
+
+.catalog-recipe-line button {
+  min-height: 40px;
+  border: 1px solid rgba(251, 113, 133, 0.25);
+  border-radius: 10px;
+  background: rgba(127, 29, 29, 0.16);
+  color: #fda4af;
+  cursor: pointer;
+}
+
+.catalog-editor-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 .empty-state,
@@ -1232,6 +1279,14 @@ select {
   display: flex;
   align-items: center;
   color: var(--text-secondary);
+}
+
+.checkbox-field {
+  align-items: center;
+  color: var(--text-secondary);
+  display: inline-flex;
+  gap: 10px;
+  min-height: 42px;
 }
 
 .checkbox-field input[type="checkbox"] {
@@ -1811,7 +1866,8 @@ select {
   }
 
   .catalog-toolbar,
-  .catalog-metrics {
+  .catalog-metrics,
+  .catalog-recipe-line {
     grid-template-columns: 1fr;
   }
 

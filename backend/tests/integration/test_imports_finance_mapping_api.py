@@ -140,3 +140,46 @@ def test_same_batch_cannot_be_mapped_twice(
 
     assert second_mapping_response.status_code == 409
     assert "already been mapped" in second_mapping_response.json()["detail"]
+
+
+def test_duplicate_pos_sales_csv_does_not_create_duplicate_transactions(
+    client: TestClient,
+    db_session: Session,
+    imports_fixtures_dir: Path,
+    test_business_unit: BusinessUnitModel,
+    upload_import_fixture,
+) -> None:
+    first_upload_response = upload_import_fixture(
+        business_unit_id=test_business_unit.id,
+        import_type="pos_sales",
+        file_path=imports_fixtures_dir / "sample_pos_sales_clean.csv",
+    )
+    first_batch_id = first_upload_response.json()["id"]
+    client.post(f"{IMPORTS_API_PREFIX}/batches/{first_batch_id}/parse")
+    first_mapping_response = client.post(
+        f"{IMPORTS_API_PREFIX}/batches/{first_batch_id}/map/financial-transactions"
+    )
+    assert first_mapping_response.status_code == 200
+    assert first_mapping_response.json()["created_transactions"] == 4
+
+    second_upload_response = upload_import_fixture(
+        business_unit_id=test_business_unit.id,
+        import_type="pos_sales",
+        file_path=imports_fixtures_dir / "sample_pos_sales_clean.csv",
+    )
+    second_batch_id = second_upload_response.json()["id"]
+    client.post(f"{IMPORTS_API_PREFIX}/batches/{second_batch_id}/parse")
+    second_mapping_response = client.post(
+        f"{IMPORTS_API_PREFIX}/batches/{second_batch_id}/map/financial-transactions"
+    )
+
+    assert second_mapping_response.status_code == 200
+    assert second_mapping_response.json()["created_transactions"] == 0
+
+    db_session.expire_all()
+    count = db_session.scalar(
+        select(func.count())
+        .select_from(FinancialTransactionModel)
+        .where(FinancialTransactionModel.business_unit_id == test_business_unit.id)
+    )
+    assert count == 4

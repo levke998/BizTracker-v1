@@ -39,6 +39,9 @@ from app.modules.imports.infrastructure.repositories.sqlalchemy_import_batch_rep
 from app.modules.imports.infrastructure.storage.local_import_file_storage import (
     LocalImportFileStorage,
 )
+from app.modules.pos_ingestion.application.services.pos_sale_inventory import (
+    PosSaleInventoryConsumptionService,
+)
 
 DbSession = Annotated[Session, Depends(get_db_session)]
 
@@ -90,4 +93,5 @@ def get_map_pos_sales_batch_to_transactions_command(
     return MapPosSalesBatchToTransactionsCommand(
         imports_repository=imports_repository,
         finance_repository=finance_repository,
+        inventory_consumption=PosSaleInventoryConsumptionService(session),
     )

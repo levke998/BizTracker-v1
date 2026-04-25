@@ -28,6 +28,9 @@ class FinancialTransactionRepository(Protocol):
     ) -> bool:
         """Return whether any transaction already exists for the source references."""
 
+    def existing_dedupe_keys(self, dedupe_keys: list[str]) -> set[str]:
+        """Return already persisted dedupe keys."""
+
     def list_many(
         self,
         *,

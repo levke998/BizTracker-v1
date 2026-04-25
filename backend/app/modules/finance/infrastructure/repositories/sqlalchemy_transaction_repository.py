@@ -41,6 +41,7 @@ class SqlAlchemyFinancialTransactionRepository:
                     description=transaction.description,
                     source_type=transaction.source_type,
                     source_id=transaction.source_id,
+                    dedupe_key=transaction.dedupe_key,
                 )
                 for transaction in transactions
             ]
@@ -71,6 +72,16 @@ class SqlAlchemyFinancialTransactionRepository:
             .where(FinancialTransactionModel.source_id.in_(source_ids))
         )
         return bool(count)
+
+    def existing_dedupe_keys(self, dedupe_keys: list[str]) -> set[str]:
+        if not dedupe_keys:
+            return set()
+
+        rows = self._session.execute(
+            select(FinancialTransactionModel.dedupe_key)
+            .where(FinancialTransactionModel.dedupe_key.in_(dedupe_keys))
+        ).all()
+        return {dedupe_key for dedupe_key, in rows if dedupe_key is not None}
 
     def list_many(
         self,
@@ -112,6 +123,7 @@ class SqlAlchemyFinancialTransactionRepository:
             description=model.description,
             source_type=model.source_type,
             source_id=model.source_id,
+            dedupe_key=model.dedupe_key,
             created_at=model.created_at,
             updated_at=model.updated_at,
         )

@@ -24,4 +24,5 @@ class FinancialTransactionResponse(BaseModel):
     description: str
     source_type: str
     source_id: uuid.UUID
+    dedupe_key: str | None
     created_at: datetime
