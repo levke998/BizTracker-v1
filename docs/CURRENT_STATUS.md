@@ -11,6 +11,8 @@ Kapcsolodo dokumentumok:
 - [DASHBOARD_DIRECTION.md](C:\BizTracker\docs\DASHBOARD_DIRECTION.md)
 - [INVENTORY_DIRECTION.md](C:\BizTracker\docs\INVENTORY_DIRECTION.md)
 - [THEORETICAL_STOCK_PREPARATION.md](C:\BizTracker\docs\THEORETICAL_STOCK_PREPARATION.md)
+- [POS_INTEGRATION_DIRECTION.md](C:\BizTracker\docs\POS_INTEGRATION_DIRECTION.md)
+- [CATALOG_AND_COSTING_DIRECTION.md](C:\BizTracker\docs\CATALOG_AND_COSTING_DIRECTION.md)
 - [ROADMAP.md](C:\BizTracker\docs\ROADMAP.md)
 
 ## 1. Hol tartunk most
@@ -27,6 +29,13 @@ A projekt mar tul van a tiszta foundation fazison, es mar tobb valodi, vegpontto
 - inventory frontend read es torzsadat kezelo oldalak
 - procurement supplier foundation
 - procurement purchase invoice foundation
+- procurement purchase invoice posting foundation
+- Business Dashboard v1 integration tesztekkel validalva
+- valosabb demo POS elokeszito torzsadat: termekek, arak, alapanyagok es recept/BOM alap
+- onallo demo POS API es frontend oldal a kassza adatfolyam tesztelesehez
+- POS ingestion boundary, hogy a demo kassza csak tesztkliens legyen
+- katalogus read API es frontend termek/alapanyag kartyanezet
+- receptbol vagy direkt beszerzesi arbol becsult COGS es margin-profit szamitas
 
 Ez mar nem csak scaffold, hanem valodi, hasznalhato belso alkalmazas alap.
 
@@ -53,6 +62,19 @@ Uzleti szintu irany:
 - `GET /api/v1/master-data/categories`
 - `GET /api/v1/master-data/products`
 - idempotens reference data bootstrap
+- a bootstrap mar a `prods.docx` alapjan tolti a Gourmand es Flow demo termekkatalogust
+- a termekekhez aktualis bruttó ar es opcionális alap egységkoltseg tarolhato
+
+### Catalog
+- `GET /api/v1/catalog/products`
+- `GET /api/v1/catalog/ingredients`
+- frontend oldalak: `Catalog - Products`, `Catalog - Ingredients`
+- termekkartyak szures, kereses, rendezes es lenyithato reszletek
+- receptes termekeknel recept, hozam, osszetevok es kalkulalt eloallitasi koltseg
+- direkt koltsegu termekeknel `product.default_unit_cost` alapu margin
+- alapanyagoknal torzs koltseg, becsult keszlet es recept hasznalat darabszam
+- a termekekhez sales UOM tarolhato, igy a db kezeli a darabos, adag, gomboc es kesobb kg alapu ertekesitest is
+- a jelenlegi katalogus olvaso/elemzo felulet; a szerkeszto parancsoldal kovetkezo implementacios szelet
 
 ### Imports
 - `POST /api/v1/imports/files`
@@ -66,6 +88,7 @@ Uzleti szintu irany:
 - staging sorok es parse hibak tarolasa
 - `pos_sales` profil
 - konnyu mezoszintu normalizalas
+- demo POS nyugtak ugyanebbe az import staging retegbe erkeznek
 
 ### Finance
 - `POST /api/v1/imports/batches/{batch_id}/map/financial-transactions`
@@ -74,6 +97,20 @@ Uzleti szintu irany:
 - `pos_sales` import -> financial transaction mapping MVP
 - egyszeru source reference alapu duplicate vedelem
 - `Finance Transactions` frontend oldal
+- demo POS nyugtasor -> `pos_sale` inflow transaction
+
+### Demo POS
+- `GET /api/v1/demo-pos/catalog`
+- `POST /api/v1/demo-pos/receipts`
+- `POST /api/v1/pos-ingestion/receipts`
+- frontend oldal: `Demo POS`
+- uzletvalasztas: Gourmand / Flow
+- termekkatalogus es kosar
+- kezi nyugta kuldes
+- random nyugta generalas
+- automata demo eladas generatore
+- a frontend demo POS mar a `pos-ingestion` boundaryt hasznalja nyugtakuldesre
+- a `/demo-pos/*` API demo-kliens es katalogus tamogato szerepu
 
 ### Inventory backend
 - `GET /api/v1/inventory/items`
@@ -88,6 +125,15 @@ Uzleti szintu irany:
 - movement log
 - actual stock level aggregacio movement log alapjan
 - theoretical stock elso read modell explicit `not_configured` estimation basis jelolessel
+- Gourmand recept-alapanyag torzsadat es Flow ital/jegy keszletelem-alap a demo kasszahoz
+
+### Production / recipes
+- `core.recipe`
+- `core.recipe_version`
+- `core.recipe_ingredient`
+- Gourmand sutemeny, torta es fagylalt receptek seedelve
+- a receptek egyelore torzsadat/BOM alapot adnak a kesobbi theoretical stock fogyasbecsleshez
+- a receptek es a direkt termekkoltsegek mar becsult eladasi margin szamitasra is hasznaltak
 
 ### Inventory frontend
 - `Dashboard` vizualis referenciaoldal
@@ -126,17 +172,41 @@ Uzleti szintu irany:
 - `GET /api/v1/analytics/dashboard/expenses`
 - scope-ok: `overall`, `flow`, `gourmand`
 - idoszak presetek: `today`, `week`, `month`, `last_30_days`, `year`, `custom`
-- KPI-k: revenue, cost, profit, transaction count
-- revenue / cost / profit trend read model
+- KPI-k: revenue, cost, profit, estimated COGS, profit margin HUF, gross margin %, transaction count
+- KPI-k bovultek: average basket value es average basket quantity
+- profit margin csempe fo erteke HUF margin profit, masodlagos informacio a %
+- revenue csempen masodlagos informaciokent megjelenik a margin profit
+- KPI csempek magyarazatot kapnak hover tooltipben
+- revenue / cost / profit / estimated COGS / margin profit trend read model
+- a trend charton a felhasznalo valaszthatja, mely metrikakat latja; alapbol revenue, cost es profit aktiv
+- a `today` preset Europe/Budapest uzleti nap szerint szamol
 - category breakdown POS import sorokbol
 - top products POS import sorokbol
 - expense breakdown finance actual outflow-kbol
 - category -> product drill-down endpoint es frontend detail panel
+- product -> source POS rows drill-down endpoint es frontend nested detail panel
 - expense type -> transaction drill-down endpoint es frontend detail panel
+- expense transaction -> supplier invoice source drill-down endpoint es frontend nested detail panel
+- kosar osszetetel / gyakran egyutt vasarolt termekek endpoint es frontend panel
+- kosarpar -> source receipt detail endpoint es frontend nested panel
 - frontend dashboard sample helyett valodi business dashboard v1
+- backend integration teszt:
+  - `backend/tests/integration/test_analytics_dashboard_api.py`
+  - dashboard snapshot
+  - `overall`, `flow`, `gourmand` scope
+  - `year`, `last_30_days` period preset
+  - category -> product import-derived bontas
+  - product -> source POS rows bontas
+  - expense financial_actual bontas
+  - expense transaction -> supplier invoice source bontas
+  - basket-pair import-derived bontas
+  - basket-pair -> source receipt POS sorok bontas
 
 ### Frontend oldalak
 - `Dashboard` valodi business dashboard v1
+- `Demo POS`
+- `Catalog - Products`
+- `Catalog - Ingredients`
 - `Master Data Viewer`
 - `Finance Transactions`
 - `Inventory Overview`
@@ -208,6 +278,17 @@ Ez jo alap, de UI szinten meg kell erositeni az egyertelmu szerepkor-szetvalaszt
 - `GET /api/v1/imports/batches/{batch_id}/errors`
 - `POST /api/v1/imports/batches/{batch_id}/map/financial-transactions`
 
+### Demo POS
+- `GET /api/v1/demo-pos/catalog`
+- `POST /api/v1/demo-pos/receipts`
+
+### POS ingestion
+- `POST /api/v1/pos-ingestion/receipts`
+
+### Catalog
+- `GET /api/v1/catalog/products`
+- `GET /api/v1/catalog/ingredients`
+
 ### Procurement
 - `GET /api/v1/procurement/suppliers`
 - `POST /api/v1/procurement/suppliers`
@@ -219,17 +300,22 @@ Ez jo alap, de UI szinten meg kell erositeni az egyertelmu szerepkor-szetvalaszt
 - `GET /api/v1/analytics/dashboard`
 - `GET /api/v1/analytics/dashboard/categories`
 - `GET /api/v1/analytics/dashboard/products`
+- `GET /api/v1/analytics/dashboard/product-rows`
 - `GET /api/v1/analytics/dashboard/expenses`
+- `GET /api/v1/analytics/dashboard/expense-source`
+- `GET /api/v1/analytics/dashboard/basket-pairs`
+- `GET /api/v1/analytics/dashboard/basket-pair-receipts`
 
 ## 5. Jelenlegi adatbazis allapot
 
 Aktualis Alembic head:
-- `015_inventory_movement_source_ref`
+- `017_core_costing_foundation`
 
 Fontos fejlesztoi megjegyzes:
-- ezen a PC-n nincs local database
-- a fo fejlesztoi gepen munkakezdeskor `alembic upgrade head` futtatasa szukseges
-- az aktualis adatbazis-szinkron teendot a [DATABASE_SYNC_NOTES.md](C:\BizTracker\docs\DATABASE_SYNC_NOTES.md) rogziti
+- ezen a gepen a `015_inventory_movement_source_ref` migration lefutott
+- procurement posting + inventory movement validacio zold
+- Business Dashboard v1 integration validacio zold
+- az aktualis adatbazis-szinkron allapotot a [DATABASE_SYNC_NOTES.md](C:\BizTracker\docs\DATABASE_SYNC_NOTES.md) rogziti
 
 Schema-k:
 - `auth`
@@ -254,6 +340,9 @@ Fo tablak:
 - `core.supplier`
 - `core.supplier_invoice`
 - `core.supplier_invoice_line`
+- `core.recipe`
+- `core.recipe_version`
+- `core.recipe_ingredient`
 - `ingest.import_batch`
 - `ingest.import_file`
 - `ingest.import_row`
@@ -266,15 +355,17 @@ Fo tablak:
 - theoretical / estimated stock valodi becslesi logikaja
 - inventory valuation
 - FIFO kompatibilis costing reteg
+- POS eladas utan recipe alapu becsult keszletfogyas naplozasa
 
 ### Upload / procurement / source data
 - PDF alapu szamla workflow
 - manualis teteles beszerzes felvitel
 - supplier invoice / purchase alap kesz
-- purchase invoice -> inventory movement kapcsolat fo geps DB tesztelese
-- purchase invoice -> finance cost kapcsolat fo geps DB tesztelese
+- purchase invoice -> inventory movement posting alap kesz es validalva
+- purchase invoice -> finance cost posting alap kesz es validalva
 - forgalmi CSV/Excel upload tovabbfejlesztese
 - kesobbi POS API connector
+- hivatalos kasszaprogramhoz illesztheto kulso connector/adaptor szerzodes
 
 ### Dashboard / analytics direction
 - `Overall` osszesito dashboard v1 elinditva
@@ -300,13 +391,19 @@ Fo tablak:
 
 ### Procurement / Production / Events
 - procurement supplier es purchase invoice foundation utan mapping MVP
-- recipe es production MVP
+- recipe/BOM foundation megvan, production batch workflow meg hianyzik
 - events settlement MVP
 
 ### Analytics
-- dashboard aggregatumok fo geps DB tesztelese
+- receipt detail -> basket-level behavior kovetkezo elemzesi modell
 - actual vs estimated nezetek
 - drill downos KPI workflow kovetkezo endpointjai
+
+### Catalog
+- termek create/update parancsok
+- recept version create/update parancsok
+- alapanyag koltseg es becsult keszlet kezi modositasa
+- kategoria, sales UOM es uzletenkenti ar validaciok
 
 ## 7. Nyitott iranydontesek
 
@@ -335,11 +432,11 @@ A kovetkezo fazisban erre lehet raepiteni az elso valodi consumption / recipe al
 
 ## 8. Javasolt kovetkezo fokusz
 
-1. Procurement invoice -> inventory / finance mapping alap
-2. Identity auth MVP
-3. Inventory valuation es FIFO kompatibilis reteg elokeszitese
-4. Overall / business dashboard kovetkezo valodi adatos szelete
-5. Theoretical stock valodi becslesi alapjanak letetele
+1. Catalog write side: product, recipe es ingredient szerkesztes
+2. Recipe alapu estimated stock fogyas eladasok utan
+3. Dashboard basket-level behavior kovetkezo elemzesi modell
+4. Identity auth MVP
+5. Inventory valuation es FIFO kompatibilis reteg elokeszitese
 
 ## 9. Gyors lokal futtatas
 

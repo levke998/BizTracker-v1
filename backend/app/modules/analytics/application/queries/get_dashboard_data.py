@@ -4,11 +4,16 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from app.modules.analytics.domain.entities.dashboard_snapshot import (
+    DashboardBasketPairRow,
+    DashboardBasketReceipt,
     DashboardBreakdownRow,
     DashboardExpenseDetailRow,
+    DashboardExpenseSource,
+    DashboardPosSourceRow,
     DashboardProductDetailRow,
     DashboardSnapshot,
 )
@@ -26,6 +31,7 @@ SUPPORTED_PRESETS = {
     "last_30_days",
     "custom",
 }
+APP_TIME_ZONE = ZoneInfo("Europe/Budapest")
 class DashboardScopeError(ValueError):
     """Raised when an unsupported dashboard scope is requested."""
 
@@ -118,6 +124,38 @@ class ListDashboardProductBreakdownQuery:
 
 
 @dataclass(slots=True)
+class ListDashboardProductSourceRowsQuery:
+    """Return source POS rows for one selected dashboard product."""
+
+    repository: AnalyticsRepository
+
+    def execute(
+        self,
+        *,
+        scope: str,
+        business_unit_id: uuid.UUID | None,
+        period: DashboardPeriodInput,
+        product_name: str,
+        category_name: str | None,
+        limit: int,
+    ) -> list[DashboardPosSourceRow]:
+        normalized_scope = _normalize_scope(scope)
+        resolved_start, resolved_end, _grain = _resolve_period(period)
+        normalized_product_name = product_name.strip()
+        if not normalized_product_name:
+            raise DashboardPeriodError("Product name is required.")
+        return self.repository.list_product_source_rows(
+            scope=normalized_scope,
+            business_unit_id=business_unit_id,
+            start_date=resolved_start,
+            end_date=resolved_end,
+            product_name=normalized_product_name,
+            category_name=category_name.strip() if category_name else None,
+            limit=limit,
+        )
+
+
+@dataclass(slots=True)
 class ListDashboardExpenseDetailsQuery:
     """Return expense transaction rows for one dashboard context."""
 
@@ -141,6 +179,75 @@ class ListDashboardExpenseDetailsQuery:
             transaction_type=transaction_type.strip() if transaction_type else None,
         )
 
+
+@dataclass(slots=True)
+class GetDashboardExpenseSourceQuery:
+    """Return source detail for one dashboard expense transaction."""
+
+    repository: AnalyticsRepository
+
+    def execute(self, *, transaction_id: uuid.UUID) -> DashboardExpenseSource | None:
+        return self.repository.get_expense_source(transaction_id=transaction_id)
+
+
+@dataclass(slots=True)
+class ListDashboardBasketPairsQuery:
+    """Return frequently co-purchased product pairs for one dashboard context."""
+
+    repository: AnalyticsRepository
+
+    def execute(
+        self,
+        *,
+        scope: str,
+        business_unit_id: uuid.UUID | None,
+        period: DashboardPeriodInput,
+        limit: int,
+    ) -> list[DashboardBasketPairRow]:
+        normalized_scope = _normalize_scope(scope)
+        resolved_start, resolved_end, _grain = _resolve_period(period)
+        return self.repository.list_basket_pairs(
+            scope=normalized_scope,
+            business_unit_id=business_unit_id,
+            start_date=resolved_start,
+            end_date=resolved_end,
+            limit=limit,
+        )
+
+
+@dataclass(slots=True)
+class ListDashboardBasketPairReceiptsQuery:
+    """Return source receipt baskets for one co-purchased product pair."""
+
+    repository: AnalyticsRepository
+
+    def execute(
+        self,
+        *,
+        scope: str,
+        business_unit_id: uuid.UUID | None,
+        period: DashboardPeriodInput,
+        product_a: str,
+        product_b: str,
+        limit: int,
+    ) -> list[DashboardBasketReceipt]:
+        normalized_scope = _normalize_scope(scope)
+        resolved_start, resolved_end, _grain = _resolve_period(period)
+        normalized_product_a = product_a.strip()
+        normalized_product_b = product_b.strip()
+        if not normalized_product_a or not normalized_product_b:
+            raise DashboardPeriodError("Both product names are required.")
+        return self.repository.list_basket_pair_receipts(
+            scope=normalized_scope,
+            business_unit_id=business_unit_id,
+            start_date=resolved_start,
+            end_date=resolved_end,
+            product_a=normalized_product_a,
+            product_b=normalized_product_b,
+            limit=limit,
+        )
+
+
 def _normalize_scope(scope: str) -> str:
     normalized_scope = scope.strip().lower()
     if normalized_scope not in SUPPORTED_SCOPES:
@@ -153,7 +260,7 @@ def _resolve_period(period: DashboardPeriodInput) -> tuple[date, date, str]:
     if preset not in SUPPORTED_PRESETS:
         raise DashboardPeriodError(f"Unsupported dashboard period: {period.preset}.")
 
-    today = datetime.now(UTC).date()
+    today = datetime.now(APP_TIME_ZONE).date()
 
     if preset == "today":
         return today, today, "day"

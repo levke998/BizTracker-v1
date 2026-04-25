@@ -11,6 +11,30 @@ function getPageMeta(pathname: string) {
     };
   }
 
+  if (pathname.startsWith(routes.demoPos)) {
+    return {
+      title: "Demo POS",
+      subtitle:
+        "Standalone test register that sends receipt lines into the import, finance and dashboard pipeline.",
+    };
+  }
+
+  if (pathname.startsWith(routes.catalogProducts)) {
+    return {
+      title: "Catalog Products",
+      subtitle:
+        "Sellable product catalog with price, estimated cost, margin and recipe visibility.",
+    };
+  }
+
+  if (pathname.startsWith(routes.catalogIngredients)) {
+    return {
+      title: "Catalog Ingredients",
+      subtitle:
+        "Ingredient and material catalog with latest known costs, estimated stock and recipe usage.",
+    };
+  }
+
   if (pathname.startsWith(routes.finance)) {
     return {
       title: "Finance Transactions",

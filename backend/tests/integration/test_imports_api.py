@@ -114,6 +114,7 @@ def test_parse_succeeds_for_clean_csv(
     assert first_row.normalized_payload == {
         "date": "2026-04-22",
         "receipt_no": "RCPT-1001",
+        "category_name": None,
         "product_name": "Croissant",
         "quantity": 2,
         "gross_amount": 1200,
@@ -214,6 +215,7 @@ def test_parse_pos_sales_normalizes_whitespace_and_empty_values(
     assert stored_row.normalized_payload == {
         "date": "2026-04-22",
         "receipt_no": None,
+        "category_name": None,
         "product_name": "Latte Macchiato",
         "quantity": 2,
         "gross_amount": 1890,

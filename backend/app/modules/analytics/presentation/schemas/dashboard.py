@@ -41,6 +41,8 @@ class DashboardTrendPointResponse(BaseModel):
     revenue: Decimal
     cost: Decimal
     profit: Decimal
+    estimated_cogs: Decimal
+    margin_profit: Decimal
 
 
 class DashboardBreakdownRowResponse(BaseModel):
@@ -79,6 +81,23 @@ class DashboardProductDetailRowResponse(BaseModel):
     source_layer: str
 
 
+class DashboardPosSourceRowResponse(BaseModel):
+    """Source POS import row behind a product drill-down."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    row_id: uuid.UUID
+    row_number: int
+    date: date | None
+    receipt_no: str | None
+    category_name: str
+    product_name: str
+    quantity: Decimal
+    gross_amount: Decimal
+    payment_method: str | None
+    source_layer: str
+
+
 class DashboardExpenseDetailRowResponse(BaseModel):
     """Expense transaction drill-down response row."""
 
@@ -92,6 +111,80 @@ class DashboardExpenseDetailRowResponse(BaseModel):
     description: str
     source_type: str
     source_id: uuid.UUID
+    source_layer: str
+
+
+class DashboardExpenseSourceLineResponse(BaseModel):
+    """Line-level source detail for an expense transaction."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    line_id: uuid.UUID
+    inventory_item_id: uuid.UUID | None
+    description: str
+    quantity: Decimal
+    uom_id: uuid.UUID
+    unit_net_amount: Decimal
+    line_net_amount: Decimal
+
+
+class DashboardExpenseSourceResponse(BaseModel):
+    """Source record behind one expense transaction."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    transaction_id: uuid.UUID
+    transaction_type: str
+    amount: Decimal
+    currency: str
+    occurred_at: date
+    source_type: str
+    source_id: uuid.UUID
+    supplier_id: uuid.UUID | None
+    supplier_name: str | None
+    invoice_number: str | None
+    invoice_date: date | None
+    gross_total: Decimal | None
+    notes: str | None
+    lines: list[DashboardExpenseSourceLineResponse]
+
+
+class DashboardBasketPairRowResponse(BaseModel):
+    """Frequently co-purchased product pair response row."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    product_a: str
+    product_b: str
+    basket_count: int
+    total_gross_amount: Decimal
+    source_layer: str
+
+
+class DashboardBasketReceiptLineResponse(BaseModel):
+    """One POS source row inside a receipt basket."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    row_id: uuid.UUID
+    row_number: int
+    product_name: str
+    category_name: str
+    quantity: Decimal
+    gross_amount: Decimal
+    payment_method: str | None
+
+
+class DashboardBasketReceiptResponse(BaseModel):
+    """Source receipt basket for one product-pair drill-down."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    receipt_no: str
+    date: date | None
+    gross_amount: Decimal
+    quantity: Decimal
+    lines: list[DashboardBasketReceiptLineResponse]
     source_layer: str
 
 

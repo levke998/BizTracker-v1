@@ -14,7 +14,8 @@ def main() -> None:
 
     print(
         "Reference data bootstrap completed "
-        f"(created={summary.created_count}, updated={summary.updated_count})."
+        f"(created={summary.created_count}, updated={summary.updated_count}, "
+        f"archived={summary.archived_count}, deleted={summary.deleted_count})."
     )
 
 

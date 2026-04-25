@@ -29,6 +29,8 @@ export type DashboardTrendPoint = {
   revenue: string;
   cost: string;
   profit: string;
+  estimated_cogs: string;
+  margin_profit: string;
 };
 
 export type DashboardBreakdownRow = {
@@ -55,6 +57,19 @@ export type DashboardProductDetailRow = {
   source_layer: string;
 };
 
+export type DashboardPosSourceRow = {
+  row_id: string;
+  row_number: number;
+  date: string | null;
+  receipt_no: string | null;
+  category_name: string;
+  product_name: string;
+  quantity: string;
+  gross_amount: string;
+  payment_method: string | null;
+  source_layer: string;
+};
+
 export type DashboardExpenseDetailRow = {
   transaction_id: string;
   transaction_type: string;
@@ -64,6 +79,60 @@ export type DashboardExpenseDetailRow = {
   description: string;
   source_type: string;
   source_id: string;
+  source_layer: string;
+};
+
+export type DashboardExpenseSourceLine = {
+  line_id: string;
+  inventory_item_id: string | null;
+  description: string;
+  quantity: string;
+  uom_id: string;
+  unit_net_amount: string;
+  line_net_amount: string;
+};
+
+export type DashboardExpenseSource = {
+  transaction_id: string;
+  transaction_type: string;
+  amount: string;
+  currency: string;
+  occurred_at: string;
+  source_type: string;
+  source_id: string;
+  supplier_id: string | null;
+  supplier_name: string | null;
+  invoice_number: string | null;
+  invoice_date: string | null;
+  gross_total: string | null;
+  notes: string | null;
+  lines: DashboardExpenseSourceLine[];
+};
+
+export type DashboardBasketPairRow = {
+  product_a: string;
+  product_b: string;
+  basket_count: number;
+  total_gross_amount: string;
+  source_layer: string;
+};
+
+export type DashboardBasketReceiptLine = {
+  row_id: string;
+  row_number: number;
+  product_name: string;
+  category_name: string;
+  quantity: string;
+  gross_amount: string;
+  payment_method: string | null;
+};
+
+export type DashboardBasketReceipt = {
+  receipt_no: string;
+  date: string | null;
+  gross_amount: string;
+  quantity: string;
+  lines: DashboardBasketReceiptLine[];
   source_layer: string;
 };
 

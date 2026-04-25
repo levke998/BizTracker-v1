@@ -46,26 +46,37 @@ Kapcsolodo dokumentumok:
 - purchase invoice foundation
 - purchase invoice list/create backend
 - purchase invoice list/create frontend
+- purchase invoice posting foundation
+- purchase invoice -> finance outflow transaction
+- purchase invoice line -> inventory purchase movement
+
+### Analytics / Dashboard
+- Business Dashboard v1
+- dashboard snapshot endpoint
+- category -> product drill-down
+- product -> source POS rows drill-down
+- expense type -> transaction drill-down
+- expense transaction -> supplier invoice source drill-down
+- basket-pair / frequently bought together read model
+- basket-pair -> source receipt drill-down
+- KPI bovites: profit margin, average basket value, average basket quantity
+- dashboard integration tests against real DB
 
 ## 2. Aktiv irany
 
 Most az inventory modul van a legjobb allapotban ahhoz, hogy egy rendezett, vegiggondolt operativ es controlling resz alapja legyen.
 
 Ezert a kozvetlen fokusz:
-- procurement invoice -> inventory / finance kapcsolat
+- dashboard basket-level behavior bovites
 - inventory es controlling kapcsolat tisztan tartasa
-- a dashboard-first vegcel tudatos epitese
-- a source-data workflow erosites
+- source-data workflow erosites
+- identity/auth MVP elokeszitese
 
 ## 3. Kovetkezo 5 konkret implementacios lepes
 
-1. procurement invoice -> inventory / finance mapping foundation
-   - manual purchase invoice adatok bekotese
-   - inventory novekedes es penzugyi oldal kozelitese
-   - kesobbi PDF workflow elokeszitese
-   - fo gepen elso lepes: `alembic upgrade head`, lasd [DATABASE_SYNC_NOTES.md](C:\BizTracker\docs\DATABASE_SYNC_NOTES.md)
-   - kod szinten elkezdve: purchase invoice posting endpoint, finance transaction mapping, inventory movement mapping, frontend post action
-   - hatralevo: fo gepes DB migration es integration test futtatas
+1. dashboard kovetkezo drill-down melyseg
+   - basket-level behavior elso read modellje
+   - frontend detail panel melyites
 
 2. identity auth MVP
    - login
@@ -81,12 +92,10 @@ Ezert a kozvetlen fokusz:
    - costing szemlelet
    - FIFO kompatibilis adatelokeszites
 
-5. overall / business dashboard valodi adatos szelete
-   - revenue / cost / profit alap KPI
-   - drill-down kompatibilis read modellek
-   - kod szinten elkezdve: `GET /api/v1/analytics/dashboard`, scope-ok, period presetek, frontend business dashboard v1
-   - kod szinten elkezdve: category -> product es expense type -> transaction drill-down endpointok
-   - hatralevo: fo gepes DB integration test es source-row szintu drill-down endpointok
+5. PDF / manual procurement source workflow bovites
+   - invoice PDF upload elokeszites
+   - manual line item entry finomitas
+   - posting audit trail melyites
 
 ## 3/A. Strategiai hangsulyok
 
@@ -144,9 +153,9 @@ Minden kovetkezo implementacios korben tartsuk ezt a sorrendet:
 ## 7. Jelenlegi ajanlott kovetkezo konkret feladat
 
 Ha a kovetkezo kodolas-orientalt lepesrol kell donteni, a legjobb valasztas:
-- procurement invoice -> inventory / finance mapping foundation
+- dashboard basket-level behavior elso modellje
 
 Ez kozvetlenul segit:
-- megalapozni a PDF es manualis beszerzesi workflow-kat
-- osszekotni a kiadasi oldalt az inventory novekedessel es a penzuggyel
-- jobb alapot adni a FIFO es valuation kovetkezo lepesekhez
+- a dashboard-first vegcel fele haladni
+- az import-derived es financial_actual adatok forrasig kovethetoseget erositeni
+- a Gourmand / Flow uzleti elemzesi celokat kozelebb vinni a hasznalhato drill-down UX-hez

@@ -40,6 +40,11 @@ from app.modules.procurement.infrastructure.orm.purchase_invoice_model import (
 from app.modules.procurement.infrastructure.orm.purchase_invoice_line_model import (
     PurchaseInvoiceLineModel,
 )
+from app.modules.production.infrastructure.orm.recipe_model import (
+    RecipeIngredientModel,
+    RecipeModel,
+    RecipeVersionModel,
+)
 
 __all__ = [
     "BusinessUnitModel",
@@ -56,6 +61,9 @@ __all__ = [
     "PurchaseInvoiceLineModel",
     "PurchaseInvoiceModel",
     "ProductModel",
+    "RecipeIngredientModel",
+    "RecipeModel",
+    "RecipeVersionModel",
     "RoleModel",
     "RolePermissionModel",
     "SupplierModel",

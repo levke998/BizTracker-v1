@@ -4,6 +4,9 @@ import { routes } from "../../constants/routes";
 
 const navigation = [
   { to: routes.dashboard, label: "Dashboard" },
+  { to: routes.demoPos, label: "Demo POS" },
+  { to: routes.catalogProducts, label: "Catalog - Products" },
+  { to: routes.catalogIngredients, label: "Catalog - Ingredients" },
   { to: routes.masterData, label: "Master Data Viewer" },
   { to: routes.finance, label: "Finance Transactions" },
   { to: routes.inventory, label: "Inventory Overview" },

@@ -66,6 +66,26 @@ Aktualis fo response reszek:
 - `expense_breakdown`
 - `notes`
 
+Aktualis KPI-k:
+- `revenue`
+- `cost`
+- `profit`
+- `transaction_count`
+- `profit_margin`
+- `average_basket_value`
+- `average_basket_quantity`
+
+Fontos cost pontositas:
+- a `cost` jelenleg tenylegesen postolt penzugyi kiadas az adott idoszakban
+- ha egy napon nincs postolt kiadas, akkor arra a napra a cost `0`
+- ez nem jelenti azt, hogy az adott napi eladasnak nincs estimated COGS koltsege
+- estimated COGS kesobb a recipe / consumption / FIFO iranybol kerul be
+
+Fontos margin pontositas:
+- a `profit_margin` jelenleg `profit / revenue * 100`
+- a `profit` most `revenue - posted financial outflow`
+- ez actual controlling margin, nem teljes szamviteli vagy FIFO COGS margin
+
 ## 3/A. Drill-down endpointok v1
 
 Aktualis drill-down endpointok:
@@ -73,7 +93,11 @@ Aktualis drill-down endpointok:
 ```text
 GET /api/v1/analytics/dashboard/categories
 GET /api/v1/analytics/dashboard/products
+GET /api/v1/analytics/dashboard/product-rows
 GET /api/v1/analytics/dashboard/expenses
+GET /api/v1/analytics/dashboard/expense-source
+GET /api/v1/analytics/dashboard/basket-pairs
+GET /api/v1/analytics/dashboard/basket-pair-receipts
 ```
 
 Kozos query parameterek:
@@ -85,15 +109,40 @@ Kozos query parameterek:
 
 Specialis query parameterek:
 - `products`: `category_name`
+- `product-rows`: `product_name`, `category_name`, `limit`
 - `expenses`: `transaction_type`
+- `expense-source`: `transaction_id`
+- `basket-pairs`: `limit`
+- `basket-pair-receipts`: `product_a`, `product_b`, `limit`
 
 Jelenlegi drill-down jelentese:
 - category -> product detail rows
+- product -> source POS import rows
 - expense type -> financial transaction rows
+- expense transaction -> supplier invoice source record and invoice lines
+- receipt groups -> frequently co-purchased product pairs
+- product pair -> source receipt baskets and receipt POS rows
 
 Kovetkezo drill-down cel:
-- product -> source POS import rows
-- expense transaction -> source invoice / source record
+- receipt detail -> future basket-level behavior and recommendation analysis
+
+Kosar KPI-k:
+- `average_basket_value` = POS import sorok `receipt_no` csoportjai alapjan szamolt atlagos kosarertek
+- `average_basket_quantity` = POS import sorok `receipt_no` csoportjai alapjan szamolt atlagos termekmennyiseg
+- nepszeru egyutt vasarolt termekek a `basket-pairs` endpointon erhetok el
+
+Kosarpar modell:
+- forras: parsed `pos_sales` import sorok
+- csoportositas: `receipt_no`
+- egy kosarban szereplo kulonbozo termekekbol termekparok kepzodnek
+- `basket_count` = hany kosarban fordult elo a termekpar
+- `total_gross_amount` = a parhoz tartozo termeksorok bruttó osszege az erintett kosarakban
+- ez import-derived elemzes, nem domain mapping es nem predikcio
+
+Kosar source detail:
+- `basket-pair-receipts` visszaadja azokat a receipt-eket, amelyekben a kivalasztott termekpar egyutt szerepelt
+- minden receipt alatt latszanak a teljes POS sorok
+- ez segit megerteni, hogy egy par milyen nagyobb kosarkontextusban fordul elo
 
 ## 4. Data lineage
 
@@ -132,6 +181,12 @@ Pelda cost oldalon:
 Cost -> supplier_invoice -> invoice -> invoice lines -> inventory movements
 ```
 
+Aktualis cost oldali drill-down:
+
+```text
+Expense breakdown -> supplier_invoice transaction -> supplier invoice header -> invoice lines
+```
+
 Az elso implementacio meg aggregalt read model, de a response struktura mar a kesobbi drill-down iranyt kesziti elo.
 
 ## 6. Kiadások szerepe
@@ -154,8 +209,6 @@ Javasolt sorrend:
 1. fo gepen DB migration es procurement posting tesztek futtatasa
 2. fo gepen analytics dashboard endpoint integration test
 3. category_name mezovel bovitheto POS CSV fixture
-4. dashboard drill-down kovetkezo endpointok:
-   - product -> source rows
-   - expense transaction -> source invoice / source transaction detail
+4. receipt detail -> basket-level behavior kovetkezo elemzesi modell
 5. Flow event dashboard szelet
 6. Gourmand product/category dashboard szelet

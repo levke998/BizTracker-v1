@@ -31,9 +31,13 @@ class ListProductsQuery:
                 id=item.id,
                 business_unit_id=item.business_unit_id,
                 category_id=item.category_id,
+                sales_uom_id=item.sales_uom_id,
                 sku=item.sku,
                 name=item.name,
                 product_type=item.product_type,
+                sale_price_gross=item.sale_price_gross,
+                default_unit_cost=item.default_unit_cost,
+                currency=item.currency,
                 is_active=item.is_active,
             )
             for item in items

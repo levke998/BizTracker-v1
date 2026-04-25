@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from decimal import Decimal
 
 import sqlalchemy as sa
 from sqlalchemy.orm import Mapped, mapped_column
@@ -43,6 +44,14 @@ class InventoryItemModel(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         sa.Boolean,
         nullable=False,
         server_default=sa.text("true"),
+    )
+    default_unit_cost: Mapped[Decimal | None] = mapped_column(
+        sa.Numeric(14, 4),
+        nullable=True,
+    )
+    estimated_stock_quantity: Mapped[Decimal | None] = mapped_column(
+        sa.Numeric(14, 3),
+        nullable=True,
     )
     is_active: Mapped[bool] = mapped_column(
         sa.Boolean,

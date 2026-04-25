@@ -33,8 +33,12 @@ export type Product = {
   id: string;
   business_unit_id: string;
   category_id: string | null;
+  sales_uom_id: string | null;
   sku: string | null;
   name: string;
   product_type: string;
+  sale_price_gross: string | null;
+  default_unit_cost: string | null;
+  currency: string;
   is_active: boolean;
 };

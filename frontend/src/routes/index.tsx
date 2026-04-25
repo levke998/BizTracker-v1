@@ -1,6 +1,9 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 
 import { DashboardPage } from "../modules/analytics/pages/DashboardPage";
+import { CatalogIngredientsPage } from "../modules/catalog/pages/CatalogIngredientsPage";
+import { CatalogProductsPage } from "../modules/catalog/pages/CatalogProductsPage";
+import { DemoPosPage } from "../modules/demoPos/pages/DemoPosPage";
 import { TransactionsPage } from "../modules/finance/pages/TransactionsPage";
 import { ImportCenterPage } from "../modules/imports/pages/ImportCenterPage";
 import { InventoryOverviewPage } from "../modules/inventory/pages/InventoryOverviewPage";
@@ -20,6 +23,12 @@ export function AppRoutes() {
       <Route path="/" element={<AppLayout />}>
         <Route index element={<Navigate replace to={routes.dashboard} />} />
         <Route path={routes.dashboard.slice(1)} element={<DashboardPage />} />
+        <Route path={routes.demoPos.slice(1)} element={<DemoPosPage />} />
+        <Route path={routes.catalogProducts.slice(1)} element={<CatalogProductsPage />} />
+        <Route
+          path={routes.catalogIngredients.slice(1)}
+          element={<CatalogIngredientsPage />}
+        />
         <Route path={routes.finance.slice(1)} element={<TransactionsPage />} />
         <Route path={routes.inventory.slice(1)} element={<InventoryOverviewPage />} />
         <Route path={routes.inventoryItems.slice(1)} element={<InventoryListPage />} />

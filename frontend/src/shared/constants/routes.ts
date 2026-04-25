@@ -1,6 +1,9 @@
 export const routes = {
   home: "/",
   dashboard: "/dashboard",
+  demoPos: "/demo-pos",
+  catalogProducts: "/catalog/products",
+  catalogIngredients: "/catalog/ingredients",
   finance: "/finance",
   inventory: "/inventory",
   inventoryItems: "/inventory/items",

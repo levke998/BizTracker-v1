@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 import { Button } from "../../../shared/components/ui/Button";
 import { Card } from "../../../shared/components/ui/Card";
 import { useDashboard } from "../hooks/useDashboard";
@@ -9,6 +11,8 @@ import type {
   DashboardScope,
   DashboardTrendPoint,
 } from "../types/analytics";
+
+type TrendMetric = "revenue" | "cost" | "profit" | "estimated_cogs" | "margin_profit";
 
 const scopeOptions: Array<{ value: DashboardScope; label: string }> = [
   { value: "overall", label: "Overall" },
@@ -55,8 +59,35 @@ function getKpiValue(kpi: DashboardKpi) {
   if (kpi.unit === "HUF") {
     return formatMoney(kpi.value);
   }
+  if (kpi.unit === "%") {
+    return `${formatNumber(kpi.value)}%`;
+  }
 
   return formatNumber(kpi.value);
+}
+
+const kpiHelp: Record<string, string> = {
+  revenue: "Actual gross revenue from POS sale financial transactions. The secondary line shows recipe or unit-cost margin profit.",
+  cost: "Actual posted outflow transactions in the selected period.",
+  profit: "Actual finance profit: revenue minus posted outflows.",
+  estimated_cogs: "Estimated cost of sold products from recipes or default unit costs.",
+  profit_margin: "Estimated margin profit in HUF: revenue minus recipe or unit-cost COGS.",
+  gross_margin_percent: "Estimated gross margin percentage: margin profit divided by revenue.",
+  transaction_count: "Count of financial transaction records in the selected period.",
+  average_basket_value: "Average receipt value derived from POS receipt groups.",
+  average_basket_quantity: "Average sold quantity per receipt derived from POS receipt groups.",
+};
+
+function getKpiSecondary(kpi: DashboardKpi, allKpis: DashboardKpi[]) {
+  if (kpi.code === "revenue") {
+    const marginProfit = allKpis.find((item) => item.code === "profit_margin");
+    return marginProfit ? `Margin profit: ${formatMoney(marginProfit.value)}` : null;
+  }
+  if (kpi.code === "profit_margin") {
+    const marginPercent = allKpis.find((item) => item.code === "gross_margin_percent");
+    return marginPercent ? `${formatNumber(marginPercent.value)}% gross margin` : null;
+  }
+  return null;
 }
 
 function getKpiTone(code: string) {
@@ -68,6 +99,9 @@ function getKpiTone(code: string) {
   }
   if (code === "profit") {
     return "highlight" as const;
+  }
+  if (code === "profit_margin" || code === "average_basket_value") {
+    return "secondary" as const;
   }
   return "rainbow" as const;
 }
@@ -87,6 +121,8 @@ function buildLinePath(
     toNumber(point.revenue),
     toNumber(point.cost),
     toNumber(point.profit),
+    toNumber(point.estimated_cogs),
+    toNumber(point.margin_profit),
   ]);
   const maxValue = Math.max(...values, 1);
   const minValue = Math.min(...values, 0);
@@ -103,10 +139,53 @@ function buildLinePath(
     .join(" ");
 }
 
-function TrendChart({ points }: { points: DashboardTrendPoint[] }) {
-  const revenuePath = buildLinePath(points, (point) => toNumber(point.revenue));
-  const costPath = buildLinePath(points, (point) => toNumber(point.cost));
-  const profitPath = buildLinePath(points, (point) => toNumber(point.profit));
+const trendMetricConfig: Record<
+  TrendMetric,
+  { label: string; color: string; dash?: string; value: (point: DashboardTrendPoint) => number }
+> = {
+  revenue: {
+    label: "Revenue",
+    color: "url(#businessRevenueGradient)",
+    value: (point) => toNumber(point.revenue),
+  },
+  cost: {
+    label: "Cost",
+    color: "#fb7185",
+    dash: "7 8",
+    value: (point) => toNumber(point.cost),
+  },
+  profit: {
+    label: "Profit",
+    color: "#34d399",
+    value: (point) => toNumber(point.profit),
+  },
+  estimated_cogs: {
+    label: "Estimated COGS",
+    color: "#f59e0b",
+    dash: "5 7",
+    value: (point) => toNumber(point.estimated_cogs),
+  },
+  margin_profit: {
+    label: "Margin profit",
+    color: "#38bdf8",
+    value: (point) => toNumber(point.margin_profit),
+  },
+};
+
+function TrendChart({
+  points,
+  visibleMetrics,
+}: {
+  points: DashboardTrendPoint[];
+  visibleMetrics: TrendMetric[];
+}) {
+  const paths: Record<TrendMetric, string> = {
+    revenue: buildLinePath(points, (point) => toNumber(point.revenue)),
+    cost: buildLinePath(points, (point) => toNumber(point.cost)),
+    profit: buildLinePath(points, (point) => toNumber(point.profit)),
+    estimated_cogs: buildLinePath(points, (point) => toNumber(point.estimated_cogs)),
+    margin_profit: buildLinePath(points, (point) => toNumber(point.margin_profit)),
+  };
 
   return (
     <div className="business-chart-surface">
@@ -118,33 +197,40 @@ function TrendChart({ points }: { points: DashboardTrendPoint[] }) {
             <stop offset="100%" stopColor="#38bdf8" />
           </linearGradient>
         </defs>
-        <path
-          d={revenuePath}
-          fill="none"
-          stroke="url(#businessRevenueGradient)"
-          strokeWidth="4"
-          strokeLinecap="round"
-        />
-        <path
-          d={costPath}
-          fill="none"
-          stroke="#fb7185"
-          strokeWidth="3"
-          strokeLinecap="round"
-          strokeDasharray="7 8"
-        />
-        <path
-          d={profitPath}
-          fill="none"
-          stroke="#34d399"
-          strokeWidth="3"
-          strokeLinecap="round"
-        />
+        {visibleMetrics.map((metric) => (
+          <path
+            key={metric}
+            d={paths[metric]}
+            fill="none"
+            stroke={trendMetricConfig[metric].color}
+            strokeWidth={metric === "revenue" ? "4" : "3"}
+            strokeLinecap="round"
+            strokeDasharray={trendMetricConfig[metric].dash}
+          />
+        ))}
       </svg>
       <div className="business-chart-axis">
         {points.slice(0, 6).map((point) => (
           <span key={point.period_start}>{formatDate(point.period_start)}</span>
         ))}
+      </div>
+      <div className="business-chart-values">
+        {points
+          .filter((point) =>
+            visibleMetrics.some((metric) => trendMetricConfig[metric].value(point) > 0),
+          )
+          .slice(-8)
+          .map((point) => (
+            <div key={point.period_start}>
+              <strong>{formatDate(point.period_start)}</strong>
+              {visibleMetrics.map((metric) => (
+                <span key={metric}>
+                  {trendMetricConfig[metric].label}:{" "}
+                  {formatMoney(trendMetricConfig[metric].value(point))}
+                </span>
+              ))}
+            </div>
+          ))}
       </div>
     </div>
   );
@@ -197,12 +283,27 @@ function BreakdownBars({
 }
 
 export function DashboardPage() {
+  const [visibleTrendMetrics, setVisibleTrendMetrics] = useState<TrendMetric[]>([
+    "revenue",
+    "cost",
+    "profit",
+  ]);
   const {
     dashboard,
+    basketPairs,
+    basketReceipts,
     productDetails,
+    productSourceRows,
     expenseDetails,
+    expenseSource,
     drilldown,
     setDrilldown,
+    selectedProduct,
+    setSelectedProduct,
+    selectedExpense,
+    setSelectedExpense,
+    selectedBasketPair,
+    setSelectedBasketPair,
     scope,
     setScope,
     period,
@@ -294,8 +395,14 @@ export function DashboardPage() {
                 className="kpi-card"
                 hoverable
                 eyebrow={kpi.label}
+                data-tooltip={kpiHelp[kpi.code] ?? kpi.label}
               >
                 <span className="kpi-value">{getKpiValue(kpi)}</span>
+                {getKpiSecondary(kpi, dashboard.kpis) ? (
+                  <span className="kpi-caption">
+                    {getKpiSecondary(kpi, dashboard.kpis)}
+                  </span>
+                ) : null}
                 <span className="kpi-caption">{kpi.source_layer}</span>
               </Card>
             ))}
@@ -312,22 +419,42 @@ export function DashboardPage() {
                 subtitle={`Grouped by ${dashboard.period.grain}`}
                 actions={
                   <div className="chart-legend">
-                    <span className="chart-legend-item">
-                      <span className="chart-legend-swatch business-swatch-revenue" />
-                      Revenue
-                    </span>
-                    <span className="chart-legend-item">
-                      <span className="chart-legend-swatch business-swatch-cost" />
-                      Cost
-                    </span>
-                    <span className="chart-legend-item">
-                      <span className="chart-legend-swatch business-swatch-profit" />
-                      Profit
-                    </span>
+                    {(Object.keys(trendMetricConfig) as TrendMetric[]).map((metric) => (
+                      <button
+                        key={metric}
+                        type="button"
+                        className={
+                          visibleTrendMetrics.includes(metric)
+                            ? "chart-legend-item active"
+                            : "chart-legend-item"
+                        }
+                        onClick={() =>
+                          setVisibleTrendMetrics((current) =>
+                            current.includes(metric)
+                              ? current.filter((item) => item !== metric)
+                              : [...current, metric],
+                          )
+                        }
+                      >
+                        <span
+                          className="chart-legend-swatch"
+                          style={{
+                            background:
+                              metric === "revenue"
+                                ? "linear-gradient(135deg, #8b5cf6, #38bdf8)"
+                                : trendMetricConfig[metric].color,
+                          }}
+                        />
+                        {trendMetricConfig[metric].label}
+                      </button>
+                    ))}
                   </div>
                 }
               >
-                <TrendChart points={dashboard.revenue_trend} />
+                <TrendChart
+                  points={dashboard.revenue_trend}
+                  visibleMetrics={visibleTrendMetrics}
+                />
               </Card>
 
               <Card
@@ -338,6 +465,103 @@ export function DashboardPage() {
                 count={dashboard.top_products.length}
               >
                 <BreakdownBars rows={dashboard.top_products} valueKey="revenue" />
+              </Card>
+
+              <Card
+                hoverable
+                eyebrow="Basket analysis"
+                title="Frequently bought together"
+                subtitle="Product pairs derived from POS receipt groups"
+                count={basketPairs.length}
+              >
+                <div className="table-wrap">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Product pair</th>
+                        <th>Baskets</th>
+                        <th>Gross amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {basketPairs.map((row) => (
+                        <tr
+                          key={`${row.product_a}-${row.product_b}`}
+                          className={
+                            selectedBasketPair?.product_a === row.product_a &&
+                            selectedBasketPair?.product_b === row.product_b
+                              ? "selected-row"
+                              : undefined
+                          }
+                          onClick={() => setSelectedBasketPair(row)}
+                        >
+                          <td>
+                            {row.product_a} + {row.product_b}
+                          </td>
+                          <td>{row.basket_count}</td>
+                          <td>{formatMoney(row.total_gross_amount)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {basketPairs.length === 0 ? (
+                    <p className="info-message">No basket pairs for this period.</p>
+                  ) : null}
+                  {selectedBasketPair ? (
+                    <div className="drilldown-nested-panel">
+                      <div className="section-heading-row">
+                        <div>
+                          <h3>
+                            {selectedBasketPair.product_a} +{" "}
+                            {selectedBasketPair.product_b}
+                          </h3>
+                          <p className="section-note">
+                            Source receipts containing this product pair
+                          </p>
+                        </div>
+                        <span className="status-pill">
+                          {basketReceipts.length} receipts
+                        </span>
+                      </div>
+                      <div className="activity-list">
+                        {basketReceipts.map((receipt) => (
+                          <article className="activity-item" key={receipt.receipt_no}>
+                            <div className="activity-meta">
+                              <strong>{receipt.receipt_no}</strong>
+                              <span>{receipt.date ?? "-"}</span>
+                            </div>
+                            <p>
+                              {formatMoney(receipt.gross_amount)} -{" "}
+                              {formatNumber(receipt.quantity)} items
+                            </p>
+                            <table className="data-table">
+                              <thead>
+                                <tr>
+                                  <th>Product</th>
+                                  <th>Category</th>
+                                  <th>Quantity</th>
+                                  <th>Gross amount</th>
+                                  <th>Payment</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {receipt.lines.map((line) => (
+                                  <tr key={line.row_id}>
+                                    <td>{line.product_name}</td>
+                                    <td>{line.category_name}</td>
+                                    <td>{formatNumber(line.quantity)}</td>
+                                    <td>{formatMoney(line.gross_amount)}</td>
+                                    <td>{line.payment_method ?? "-"}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </article>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
               </Card>
             </div>
 
@@ -356,7 +580,10 @@ export function DashboardPage() {
                       key={row.label}
                       type="button"
                       className="business-drilldown-button"
-                      onClick={() => setDrilldown({ type: "category", label: row.label })}
+                      onClick={() => {
+                        setSelectedProduct(null);
+                        setDrilldown({ type: "category", label: row.label });
+                      }}
                     >
                       <span>{row.label}</span>
                       <strong>{formatMoney(row.revenue)}</strong>
@@ -379,7 +606,10 @@ export function DashboardPage() {
                       key={row.label}
                       type="button"
                       className="business-drilldown-button"
-                      onClick={() => setDrilldown({ type: "expense", label: row.label })}
+                      onClick={() => {
+                        setSelectedExpense(null);
+                        setDrilldown({ type: "expense", label: row.label });
+                      }}
                     >
                       <span>{row.label}</span>
                       <strong>{formatMoney(row.amount)}</strong>
@@ -411,7 +641,15 @@ export function DashboardPage() {
                   : "Expense transactions for the selected type"
               }
               actions={
-                <Button variant="secondary" onClick={() => setDrilldown(null)}>
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setSelectedProduct(null);
+                    setSelectedExpense(null);
+                    setSelectedBasketPair(null);
+                    setDrilldown(null);
+                  }}
+                >
                   Close
                 </Button>
               }
@@ -434,7 +672,16 @@ export function DashboardPage() {
                     </thead>
                     <tbody>
                       {productDetails.map((row) => (
-                        <tr key={`${row.product_name}-${row.category_name}`}>
+                        <tr
+                          key={`${row.product_name}-${row.category_name}`}
+                          className={
+                            selectedProduct?.product_name === row.product_name &&
+                            selectedProduct?.category_name === row.category_name
+                              ? "selected-row"
+                              : undefined
+                          }
+                          onClick={() => setSelectedProduct(row)}
+                        >
                           <td>{row.product_name}</td>
                           <td>{row.category_name}</td>
                           <td>{formatMoney(row.revenue)}</td>
@@ -444,6 +691,45 @@ export function DashboardPage() {
                       ))}
                     </tbody>
                   </table>
+                  {selectedProduct ? (
+                    <div className="drilldown-nested-panel">
+                      <div className="section-heading-row">
+                        <div>
+                          <h3>{selectedProduct.product_name}</h3>
+                          <p className="section-note">
+                            Source POS rows for this product
+                          </p>
+                        </div>
+                        <span className="status-pill">
+                          {productSourceRows.length} rows
+                        </span>
+                      </div>
+                      <table className="data-table">
+                        <thead>
+                          <tr>
+                            <th>Date</th>
+                            <th>Receipt</th>
+                            <th>Quantity</th>
+                            <th>Gross amount</th>
+                            <th>Payment</th>
+                            <th>Source row</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {productSourceRows.map((row) => (
+                            <tr key={row.row_id}>
+                              <td>{row.date ?? "—"}</td>
+                              <td>{row.receipt_no ?? "—"}</td>
+                              <td>{formatNumber(row.quantity)}</td>
+                              <td>{formatMoney(row.gross_amount)}</td>
+                              <td>{row.payment_method ?? "—"}</td>
+                              <td>{row.row_number}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
 
@@ -461,7 +747,15 @@ export function DashboardPage() {
                     </thead>
                     <tbody>
                       {expenseDetails.map((row) => (
-                        <tr key={row.transaction_id}>
+                        <tr
+                          key={row.transaction_id}
+                          className={
+                            selectedExpense?.transaction_id === row.transaction_id
+                              ? "selected-row"
+                              : undefined
+                          }
+                          onClick={() => setSelectedExpense(row)}
+                        >
                           <td>{row.occurred_at}</td>
                           <td>{row.transaction_type}</td>
                           <td>{formatMoney(row.amount)}</td>
@@ -471,6 +765,67 @@ export function DashboardPage() {
                       ))}
                     </tbody>
                   </table>
+                  {selectedExpense && expenseSource ? (
+                    <div className="drilldown-nested-panel">
+                      <div className="section-heading-row">
+                        <div>
+                          <h3>
+                            {expenseSource.invoice_number ??
+                              expenseSource.source_type}
+                          </h3>
+                          <p className="section-note">
+                            {expenseSource.supplier_name ?? "Source record"} ·{" "}
+                            {expenseSource.invoice_date ?? expenseSource.occurred_at}
+                          </p>
+                        </div>
+                        <span className="status-pill">
+                          {expenseSource.lines.length} lines
+                        </span>
+                      </div>
+                      <div className="details-grid">
+                        <article className="detail-item">
+                          <span>Gross total</span>
+                          <strong>
+                            {expenseSource.gross_total
+                              ? formatMoney(expenseSource.gross_total)
+                              : formatMoney(expenseSource.amount)}
+                          </strong>
+                        </article>
+                        <article className="detail-item">
+                          <span>Source</span>
+                          <strong>{expenseSource.source_type}</strong>
+                        </article>
+                      </div>
+                      {expenseSource.lines.length > 0 ? (
+                        <table className="data-table">
+                          <thead>
+                            <tr>
+                              <th>Description</th>
+                              <th>Quantity</th>
+                              <th>Unit net</th>
+                              <th>Line net</th>
+                              <th>Inventory item</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {expenseSource.lines.map((line) => (
+                              <tr key={line.line_id}>
+                                <td>{line.description}</td>
+                                <td>{formatNumber(line.quantity)}</td>
+                                <td>{formatMoney(line.unit_net_amount)}</td>
+                                <td>{formatMoney(line.line_net_amount)}</td>
+                                <td>{line.inventory_item_id ?? "—"}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      ) : (
+                        <p className="info-message">
+                          No structured source lines are available for this transaction.
+                        </p>
+                      )}
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
             </Card>
