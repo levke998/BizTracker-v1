@@ -20,8 +20,16 @@ from app.bootstrap.catalog_data import (
     UNITS_OF_MEASURE,
 )
 from app.modules.imports.infrastructure.orm.import_batch_model import ImportBatchModel
+from app.modules.imports.infrastructure.orm.import_file_model import ImportFileModel
+from app.modules.imports.infrastructure.orm.import_row_error_model import (
+    ImportRowErrorModel,
+)
+from app.modules.imports.infrastructure.orm.import_row_model import ImportRowModel
 from app.modules.finance.infrastructure.orm.transaction_model import (
     FinancialTransactionModel,
+)
+from app.modules.inventory.infrastructure.orm.estimated_consumption_model import (
+    EstimatedConsumptionAuditModel,
 )
 from app.modules.inventory.infrastructure.orm.inventory_item_model import (
     InventoryItemModel,
@@ -91,34 +99,35 @@ def bootstrap_reference_data(session: Session) -> BootstrapSummary:
             updated_count += int(updated)
         session.flush()
 
-        for payload in LOCATIONS:
-            created, updated = _upsert_location(session, payload)
-            created_count += int(created)
-            updated_count += int(updated)
-        session.flush()
+        if _should_seed_demo_catalog():
+            for payload in LOCATIONS:
+                created, updated = _upsert_location(session, payload)
+                created_count += int(created)
+                updated_count += int(updated)
+            session.flush()
 
-        for payload in CATEGORIES:
-            created, updated = _upsert_category(session, payload)
-            created_count += int(created)
-            updated_count += int(updated)
-        session.flush()
+            for payload in CATEGORIES:
+                created, updated = _upsert_category(session, payload)
+                created_count += int(created)
+                updated_count += int(updated)
+            session.flush()
 
-        for payload in INVENTORY_ITEMS:
-            created, updated = _upsert_inventory_item(session, payload)
-            created_count += int(created)
-            updated_count += int(updated)
-        session.flush()
+            for payload in INVENTORY_ITEMS:
+                created, updated = _upsert_inventory_item(session, payload)
+                created_count += int(created)
+                updated_count += int(updated)
+            session.flush()
 
-        for payload in PRODUCTS:
-            created, updated = _upsert_product(session, payload)
-            created_count += int(created)
-            updated_count += int(updated)
-        session.flush()
+            for payload in PRODUCTS:
+                created, updated = _upsert_product(session, payload)
+                created_count += int(created)
+                updated_count += int(updated)
+            session.flush()
 
-        for payload in RECIPES:
-            created, updated = _upsert_recipe(session, payload)
-            created_count += created
-            updated_count += updated
+            for payload in RECIPES:
+                created, updated = _upsert_recipe(session, payload)
+                created_count += created
+                updated_count += updated
 
         # Bootstrap must seed and refresh stable reference data only. User-created
         # catalog records are operational data, so they must not be archived just
@@ -308,24 +317,87 @@ def _cleanup_known_dummy_data(session: Session) -> int:
     if not real_business_unit_ids:
         return 0
 
+    demo_batch_ids = [
+        batch_id
+        for batch_id, in session.execute(
+            select(ImportBatchModel.id)
+            .join(ImportFileModel, ImportFileModel.batch_id == ImportBatchModel.id)
+            .where(
+                ImportBatchModel.business_unit_id.in_(real_business_unit_ids),
+                ImportBatchModel.import_type == "pos_sales",
+                ImportFileModel.original_name.like("%.demo-pos-api.json"),
+            )
+            .distinct()
+        ).all()
+    ]
+    failed_trial_batch_ids = [
+        batch_id
+        for batch_id, in session.execute(
+            select(ImportBatchModel.id).where(
+                ImportBatchModel.business_unit_id.in_(real_business_unit_ids),
+                ImportBatchModel.import_type == "pos_sales",
+                ImportBatchModel.parsed_rows == 0,
+                ImportBatchModel.error_rows > 0,
+            )
+        ).all()
+    ]
+    batch_ids = list({*demo_batch_ids, *failed_trial_batch_ids})
+    row_ids = []
+    if batch_ids:
+        row_ids = [
+            row_id
+            for row_id, in session.execute(
+                select(ImportRowModel.id).where(ImportRowModel.batch_id.in_(batch_ids))
+            ).all()
+        ]
+
     deleted_count = 0
-    deleted_count += (
-        session.execute(
-            delete(FinancialTransactionModel).where(
-                FinancialTransactionModel.business_unit_id.in_(real_business_unit_ids),
-                FinancialTransactionModel.source_type == "import_row",
-            )
-        ).rowcount
-        or 0
-    )
-    deleted_count += (
-        session.execute(
-            delete(ImportBatchModel).where(
-                ImportBatchModel.business_unit_id.in_(real_business_unit_ids)
-            )
-        ).rowcount
-        or 0
-    )
+    if row_ids:
+        deleted_count += (
+            session.execute(
+                delete(FinancialTransactionModel).where(
+                    FinancialTransactionModel.source_type == "import_row",
+                    FinancialTransactionModel.source_id.in_(row_ids),
+                )
+            ).rowcount
+            or 0
+        )
+        deleted_count += (
+            session.execute(
+                delete(EstimatedConsumptionAuditModel).where(
+                    EstimatedConsumptionAuditModel.source_type == "import_row",
+                    EstimatedConsumptionAuditModel.source_id.in_(row_ids),
+                )
+            ).rowcount
+            or 0
+        )
+    if batch_ids:
+        deleted_count += (
+            session.execute(
+                delete(ImportRowErrorModel).where(
+                    ImportRowErrorModel.batch_id.in_(batch_ids)
+                )
+            ).rowcount
+            or 0
+        )
+        deleted_count += (
+            session.execute(
+                delete(ImportRowModel).where(ImportRowModel.batch_id.in_(batch_ids))
+            ).rowcount
+            or 0
+        )
+        deleted_count += (
+            session.execute(
+                delete(ImportFileModel).where(ImportFileModel.batch_id.in_(batch_ids))
+            ).rowcount
+            or 0
+        )
+        deleted_count += (
+            session.execute(
+                delete(ImportBatchModel).where(ImportBatchModel.id.in_(batch_ids))
+            ).rowcount
+            or 0
+        )
     deleted_count += (
         session.execute(
             delete(SupplierModel).where(
@@ -359,6 +431,17 @@ def _cleanup_known_dummy_data(session: Session) -> int:
             or 0
         )
     return deleted_count
+
+
+def _should_seed_demo_catalog() -> bool:
+    """Keep demo catalog seeding opt-in once real POS data is present."""
+
+    return os.getenv("BIZTRACKER_SEED_DEMO_CATALOG", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
 
 
 def _archive_records_not_in_catalog(session: Session) -> int:

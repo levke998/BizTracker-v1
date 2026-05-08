@@ -44,6 +44,20 @@ function getUnitOfMeasureLabel(item: UnitOfMeasure) {
   return `${item.name} (${item.code})`;
 }
 
+function formatItemType(value: string) {
+  const labels: Record<string, string> = {
+    raw_material: "Alapanyag",
+    packaging: "Csomagolóanyag",
+    finished_good: "Késztermék",
+  };
+
+  return labels[value] ?? value;
+}
+
+function formatBoolean(value: boolean) {
+  return value ? "Igen" : "Nem";
+}
+
 export function InventoryListPage() {
   const {
     primaryBusinessUnits,
@@ -126,12 +140,12 @@ export function InventoryListPage() {
 
     try {
       await updateItem(editingItem.id, payload);
-      setActionMessage(`Inventory item "${payload.name}" updated successfully.`);
+      setActionMessage(`"${payload.name}" készletelem frissítve.`);
       setEditingItemId("");
       setEditForm(null);
     } catch (error) {
       setActionErrorMessage(
-        error instanceof Error ? error.message : "Failed to update inventory item."
+        error instanceof Error ? error.message : "Nem sikerült frissíteni a készletelemet."
       );
     }
   };
@@ -139,7 +153,7 @@ export function InventoryListPage() {
   const handleCreate = async () => {
     if (!selectedBusinessUnitId) {
       setActionMessage("");
-      setActionErrorMessage("Select a business unit before creating an inventory item.");
+      setActionErrorMessage("Válassz vállalkozást a készletelem létrehozása előtt.");
       return;
     }
 
@@ -157,7 +171,7 @@ export function InventoryListPage() {
 
     try {
       await createItem(payload);
-      setActionMessage(`Inventory item "${payload.name}" created successfully.`);
+      setActionMessage(`"${payload.name}" készletelem létrehozva.`);
       setCreateForm((current) => ({
         ...current,
         name: "",
@@ -167,13 +181,13 @@ export function InventoryListPage() {
       }));
     } catch (error) {
       setActionErrorMessage(
-        error instanceof Error ? error.message : "Failed to create inventory item."
+        error instanceof Error ? error.message : "Nem sikerült létrehozni a készletelemet."
       );
     }
   };
 
   const handleArchive = async (item: InventoryItem) => {
-    if (!window.confirm(`Archive inventory item "${item.name}"?`)) {
+    if (!window.confirm(`Archiváljuk ezt a készletelemet: "${item.name}"?`)) {
       return;
     }
 
@@ -186,10 +200,10 @@ export function InventoryListPage() {
         setEditingItemId("");
         setEditForm(null);
       }
-      setActionMessage(`Inventory item "${item.name}" archived successfully.`);
+      setActionMessage(`"${item.name}" készletelem archiválva.`);
     } catch (error) {
       setActionErrorMessage(
-        error instanceof Error ? error.message : "Failed to archive inventory item."
+        error instanceof Error ? error.message : "Nem sikerült archiválni a készletelemet."
       );
     }
   };
@@ -198,21 +212,21 @@ export function InventoryListPage() {
     <section className="page-section">
       <div className="panel">
         <div className="panel-header">
-          <h2>Inventory Items</h2>
+          <h2>Készletelemek</h2>
           <span className="panel-count">{items.length}</span>
         </div>
 
         <div className="form-grid inventory-filter-grid">
           <label className="field">
-            <span>Business unit</span>
+            <span>Vállalkozás</span>
             <select
               value={selectedBusinessUnitId}
               onChange={(event) => setSelectedBusinessUnitId(event.target.value)}
               className="field-input"
             >
-              <option value="">Select a business unit</option>
+              <option value="">Válassz vállalkozást</option>
               {primaryBusinessUnits.length > 0 ? (
-                <optgroup label="Business units">
+                <optgroup label="Vállalkozások">
                   {primaryBusinessUnits.map((businessUnit) => (
                     <option key={businessUnit.id} value={businessUnit.id}>
                       {businessUnit.name}
@@ -221,7 +235,7 @@ export function InventoryListPage() {
                 </optgroup>
               ) : null}
               {technicalBusinessUnits.length > 0 ? (
-                <optgroup label="Technical">
+                <optgroup label="Technikai">
                   {technicalBusinessUnits.map((businessUnit) => (
                     <option key={businessUnit.id} value={businessUnit.id}>
                       {businessUnit.name} ({businessUnit.code})
@@ -233,21 +247,21 @@ export function InventoryListPage() {
           </label>
 
           <label className="field">
-            <span>Item type</span>
+            <span>Tételtípus</span>
             <select
               value={selectedItemType}
               onChange={(event) => setSelectedItemType(event.target.value)}
               className="field-input"
             >
-              <option value="">All item types</option>
-              <option value="raw_material">raw_material</option>
-              <option value="packaging">packaging</option>
-              <option value="finished_good">finished_good</option>
+              <option value="">Minden tételtípus</option>
+              <option value="raw_material">Alapanyag</option>
+              <option value="packaging">Csomagolóanyag</option>
+              <option value="finished_good">Késztermék</option>
             </select>
           </label>
 
           <label className="field">
-            <span>Limit</span>
+            <span>Megjelenített sorok</span>
             <select
               value={String(limit)}
               onChange={(event) => setLimit(Number(event.target.value))}
@@ -264,18 +278,18 @@ export function InventoryListPage() {
         {actionMessage ? <p className="success-message">{actionMessage}</p> : null}
         {actionErrorMessage ? <p className="error-message">{actionErrorMessage}</p> : null}
         {errorMessage ? <p className="error-message">{errorMessage}</p> : null}
-        {isLoading ? <p className="info-message">Loading inventory items...</p> : null}
+        {isLoading ? <p className="info-message">Készletelemek betöltése...</p> : null}
       </div>
 
       <section className="panel">
         <div className="panel-header">
-          <h2>Create inventory item</h2>
-          <span className="panel-count">New</span>
+          <h2>Új készletelem</h2>
+          <span className="panel-count">Új</span>
         </div>
 
         <div className="form-grid inventory-edit-grid">
           <label className="field">
-            <span>Name</span>
+            <span>Név</span>
             <input
               value={createForm.name}
               onChange={(event) =>
@@ -286,7 +300,7 @@ export function InventoryListPage() {
           </label>
 
           <label className="field">
-            <span>Item type</span>
+            <span>Tételtípus</span>
             <select
               value={createForm.item_type}
               onChange={(event) =>
@@ -297,14 +311,14 @@ export function InventoryListPage() {
               }
               className="field-input"
             >
-              <option value="raw_material">raw_material</option>
-              <option value="packaging">packaging</option>
-              <option value="finished_good">finished_good</option>
+              <option value="raw_material">Alapanyag</option>
+              <option value="packaging">Csomagolóanyag</option>
+              <option value="finished_good">Késztermék</option>
             </select>
           </label>
 
           <label className="field">
-            <span>Unit of measure</span>
+            <span>Mértékegység</span>
             <select
               value={createForm.uom_id}
               onChange={(event) =>
@@ -321,7 +335,7 @@ export function InventoryListPage() {
           </label>
 
           <label className="field checkbox-field">
-            <span>Track stock</span>
+            <span>Készletkezelt</span>
             <input
               type="checkbox"
               checked={createForm.track_stock}
@@ -335,7 +349,7 @@ export function InventoryListPage() {
           </label>
 
           <label className="field checkbox-field">
-            <span>Active</span>
+            <span>Aktív</span>
             <input
               type="checkbox"
               checked={createForm.is_active}
@@ -356,7 +370,7 @@ export function InventoryListPage() {
             onClick={handleCreate}
             disabled={isSaving || !selectedBusinessUnitId || !createForm.name.trim() || !createForm.uom_id}
           >
-            Create item
+            Készletelem létrehozása
           </button>
         </div>
       </section>
@@ -364,13 +378,13 @@ export function InventoryListPage() {
       {editingItem && editForm ? (
         <section className="panel">
           <div className="panel-header">
-            <h2>Edit inventory item</h2>
+            <h2>Készletelem szerkesztése</h2>
             <span className="panel-count">1</span>
           </div>
 
           <div className="form-grid inventory-edit-grid">
             <label className="field">
-              <span>Name</span>
+              <span>Név</span>
               <input
                 value={editForm.name}
                 onChange={(event) =>
@@ -383,7 +397,7 @@ export function InventoryListPage() {
             </label>
 
             <label className="field">
-              <span>Item type</span>
+              <span>Tételtípus</span>
               <select
                 value={editForm.item_type}
                 onChange={(event) =>
@@ -393,14 +407,14 @@ export function InventoryListPage() {
                 }
                 className="field-input"
               >
-                <option value="raw_material">raw_material</option>
-                <option value="packaging">packaging</option>
-                <option value="finished_good">finished_good</option>
+                <option value="raw_material">Alapanyag</option>
+                <option value="packaging">Csomagolóanyag</option>
+                <option value="finished_good">Késztermék</option>
               </select>
             </label>
 
             <label className="field">
-              <span>Unit of measure</span>
+              <span>Mértékegység</span>
               <select
                 value={editForm.uom_id}
                 onChange={(event) =>
@@ -419,7 +433,7 @@ export function InventoryListPage() {
             </label>
 
             <label className="field checkbox-field">
-              <span>Track stock</span>
+              <span>Készletkezelt</span>
               <input
                 type="checkbox"
                 checked={editForm.track_stock}
@@ -434,7 +448,7 @@ export function InventoryListPage() {
             </label>
 
             <label className="field checkbox-field">
-              <span>Active</span>
+              <span>Aktív</span>
               <input
                 type="checkbox"
                 checked={editForm.is_active}
@@ -454,7 +468,7 @@ export function InventoryListPage() {
               onClick={handleSubmit}
               disabled={isSaving || !editForm.name.trim()}
             >
-              Save changes
+              Módosítások mentése
             </button>
             <button
               type="button"
@@ -462,7 +476,7 @@ export function InventoryListPage() {
               onClick={cancelEditing}
               disabled={isSaving}
             >
-              Cancel
+              Mégse
             </button>
           </div>
         </section>
@@ -470,13 +484,13 @@ export function InventoryListPage() {
 
       <section className="panel">
         <div className="panel-header">
-          <h2>Inventory item list</h2>
+          <h2>Készletelemek listája</h2>
           <span className="panel-count">{items.length}</span>
         </div>
 
         {!isLoading && items.length === 0 ? (
           <p className="empty-message">
-            No inventory items found for the selected filters.
+            Nincs készletelem a kiválasztott szűrőkkel.
           </p>
         ) : null}
 
@@ -485,22 +499,22 @@ export function InventoryListPage() {
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Name</th>
-                  <th>Item type</th>
-                  <th>Track stock</th>
-                  <th>Active</th>
-                  <th>Created at</th>
-                  <th>Updated at</th>
-                  <th>Actions</th>
+                  <th>Név</th>
+                  <th>Tételtípus</th>
+                  <th>Készletkezelt</th>
+                  <th>Aktív</th>
+                  <th>Létrehozva</th>
+                  <th>Frissítve</th>
+                  <th>Műveletek</th>
                 </tr>
               </thead>
               <tbody>
                 {items.map((item) => (
                   <tr key={item.id}>
                     <td>{item.name}</td>
-                    <td>{item.item_type}</td>
-                    <td>{item.track_stock ? "Yes" : "No"}</td>
-                    <td>{item.is_active ? "Yes" : "No"}</td>
+                    <td>{formatItemType(item.item_type)}</td>
+                    <td>{formatBoolean(item.track_stock)}</td>
+                    <td>{formatBoolean(item.is_active)}</td>
                     <td>{formatDateTime(item.created_at)}</td>
                     <td>{formatDateTime(item.updated_at)}</td>
                     <td>
@@ -511,7 +525,7 @@ export function InventoryListPage() {
                           onClick={() => startEditing(item)}
                           disabled={isSaving}
                         >
-                          Edit
+                          Szerkesztés
                         </button>
                         <button
                           type="button"
@@ -519,7 +533,7 @@ export function InventoryListPage() {
                           onClick={() => handleArchive(item)}
                           disabled={isSaving || !item.is_active}
                         >
-                          {item.is_active ? "Archive" : "Archived"}
+                          {item.is_active ? "Archiválás" : "Archiválva"}
                         </button>
                       </div>
                     </td>

@@ -48,6 +48,7 @@ class InventoryMovementModel(UUIDPrimaryKeyMixin, Base):
         nullable=False,
     )
     unit_cost: Mapped[Decimal | None] = mapped_column(sa.Numeric(12, 2), nullable=True)
+    reason_code: Mapped[str | None] = mapped_column(sa.String(50), nullable=True)
     note: Mapped[str | None] = mapped_column(sa.String(500), nullable=True)
     source_type: Mapped[str | None] = mapped_column(sa.String(100), nullable=True)
     source_id: Mapped[uuid.UUID | None] = mapped_column(sa.Uuid(as_uuid=True), nullable=True)

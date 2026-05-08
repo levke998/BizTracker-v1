@@ -41,6 +41,16 @@ class PurchaseInvoiceLineModel(UUIDPrimaryKeyMixin, Base):
     )
     unit_net_amount: Mapped[Decimal] = mapped_column(sa.Numeric(14, 2), nullable=False)
     line_net_amount: Mapped[Decimal] = mapped_column(sa.Numeric(14, 2), nullable=False)
+    vat_rate_id: Mapped[uuid.UUID | None] = mapped_column(
+        sa.Uuid(as_uuid=True),
+        sa.ForeignKey("core.vat_rate.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    vat_amount: Mapped[Decimal | None] = mapped_column(sa.Numeric(14, 2), nullable=True)
+    line_gross_amount: Mapped[Decimal | None] = mapped_column(
+        sa.Numeric(14, 2),
+        nullable=True,
+    )
 
     invoice: Mapped["PurchaseInvoiceModel"] = relationship(
         "PurchaseInvoiceModel",

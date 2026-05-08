@@ -42,6 +42,9 @@ from app.modules.imports.infrastructure.storage.local_import_file_storage import
 from app.modules.pos_ingestion.application.services.pos_sale_inventory import (
     PosSaleInventoryConsumptionService,
 )
+from app.modules.pos_ingestion.application.services.pos_sale_catalog_sync import (
+    PosSaleCatalogSyncService,
+)
 
 DbSession = Annotated[Session, Depends(get_db_session)]
 
@@ -80,7 +83,11 @@ def get_parse_import_batch_command(session: DbSession) -> ParseImportBatchComman
 
     repository = SqlAlchemyImportBatchRepository(session)
     parser = CsvImportParser()
-    return ParseImportBatchCommand(repository, parser)
+    return ParseImportBatchCommand(
+        repository,
+        parser,
+        catalog_sync=PosSaleCatalogSyncService(session),
+    )
 
 
 def get_map_pos_sales_batch_to_transactions_command(

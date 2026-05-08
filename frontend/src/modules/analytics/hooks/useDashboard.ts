@@ -13,6 +13,7 @@ import {
 import type {
   DashboardBasketPairRow,
   DashboardBasketReceipt,
+  DashboardBreakdownRow,
   DashboardData,
   DashboardExpenseDetailRow,
   DashboardExpenseSource,
@@ -27,10 +28,17 @@ export type DashboardDrilldown =
   | { type: "expense"; label: string }
   | null;
 
+export type DashboardTopProductRow = DashboardBreakdownRow & {
+  category_name?: string;
+  previous_revenue?: string;
+  revenue_change_percent?: string;
+};
+
 type DashboardState = {
   dashboard: DashboardData | null;
   basketPairs: DashboardBasketPairRow[];
   basketReceipts: DashboardBasketReceipt[];
+  topProducts: DashboardTopProductRow[];
   productDetails: DashboardProductDetailRow[];
   productSourceRows: DashboardPosSourceRow[];
   expenseDetails: DashboardExpenseDetailRow[];
@@ -51,8 +59,12 @@ type DashboardState = {
   setStartDate: (value: string) => void;
   endDate: string;
   setEndDate: (value: string) => void;
+  topProductCategory: string;
+  setTopProductCategory: (value: string) => void;
   isLoading: boolean;
   isDrilldownLoading: boolean;
+  isTopProductsLoading: boolean;
+  isBasketReceiptsLoading: boolean;
   errorMessage: string;
 };
 
@@ -68,6 +80,7 @@ export function useDashboard(): DashboardState {
     useState<DashboardExpenseDetailRow | null>(null);
   const [selectedBasketPair, setSelectedBasketPair] =
     useState<DashboardBasketPairRow | null>(null);
+  const [topProductCategory, setTopProductCategory] = useState("all");
 
   const baseFilters = {
     scope,
@@ -75,6 +88,34 @@ export function useDashboard(): DashboardState {
     start_date: period === "custom" ? startDate : undefined,
     end_date: period === "custom" ? endDate : undefined,
   };
+
+  function getPreviousProductFilters() {
+    const periodStart = dashboardQuery.data?.period.start_date;
+    const periodEnd = dashboardQuery.data?.period.end_date;
+    if (!periodStart || !periodEnd) {
+      return null;
+    }
+
+    const start = new Date(`${periodStart}T00:00:00`);
+    const end = new Date(`${periodEnd}T00:00:00`);
+    const dayCount = Math.max(
+      1,
+      Math.round((end.getTime() - start.getTime()) / 86_400_000) + 1,
+    );
+    const previousEnd = new Date(start);
+    previousEnd.setDate(previousEnd.getDate() - 1);
+    const previousStart = new Date(previousEnd);
+    previousStart.setDate(previousStart.getDate() - dayCount + 1);
+    const toDateInput = (value: Date) => value.toISOString().slice(0, 10);
+
+    return {
+      scope,
+      period: "custom" as const,
+      start_date: toDateInput(previousStart),
+      end_date: toDateInput(previousEnd),
+      category_name: topProductCategory === "all" ? undefined : topProductCategory,
+    };
+  }
 
   const dashboardQuery = useQuery({
     queryKey: ["analytics-dashboard", scope, period, startDate, endDate],
@@ -118,6 +159,43 @@ export function useDashboard(): DashboardState {
       }),
     enabled:
       drilldown?.type === "expense" &&
+      (period !== "custom" || (Boolean(startDate) && Boolean(endDate))),
+  });
+
+  const topProductsQuery = useQuery({
+    queryKey: [
+      "analytics-dashboard-top-products",
+      scope,
+      period,
+      startDate,
+      endDate,
+      topProductCategory,
+    ],
+    queryFn: () =>
+      listDashboardProducts({
+        ...baseFilters,
+        category_name: topProductCategory === "all" ? undefined : topProductCategory,
+      }),
+    enabled: period !== "custom" || (Boolean(startDate) && Boolean(endDate)),
+  });
+
+  const previousTopProductsQuery = useQuery({
+    queryKey: [
+      "analytics-dashboard-top-products-previous",
+      scope,
+      dashboardQuery.data?.period.start_date ?? "",
+      dashboardQuery.data?.period.end_date ?? "",
+      topProductCategory,
+    ],
+    queryFn: () => {
+      const previousFilters = getPreviousProductFilters();
+      if (!previousFilters) {
+        return [];
+      }
+      return listDashboardProducts(previousFilters);
+    },
+    enabled:
+      Boolean(dashboardQuery.data) &&
       (period !== "custom" || (Boolean(startDate) && Boolean(endDate))),
   });
 
@@ -185,6 +263,33 @@ export function useDashboard(): DashboardState {
     dashboard: dashboardQuery.data ?? null,
     basketPairs: basketPairsQuery.data ?? [],
     basketReceipts: basketReceiptsQuery.data ?? [],
+    topProducts: (topProductsQuery.data ?? []).map((row) => {
+      const previousRow = (previousTopProductsQuery.data ?? []).find(
+        (item) =>
+          item.product_name === row.product_name &&
+          item.category_name === row.category_name,
+      );
+      const previousRevenue = previousRow?.revenue ?? "0";
+      const currentRevenue = Number(row.revenue);
+      const previousRevenueNumber = Number(previousRevenue);
+      const revenueChangePercent =
+        Number.isFinite(previousRevenueNumber) && previousRevenueNumber > 0
+          ? ((currentRevenue - previousRevenueNumber) / previousRevenueNumber) * 100
+          : currentRevenue > 0
+            ? 100
+            : 0;
+
+      return {
+        label: row.product_name,
+        category_name: row.category_name,
+        revenue: row.revenue,
+        quantity: row.quantity,
+        transaction_count: row.transaction_count,
+        source_layer: row.source_layer,
+        previous_revenue: previousRevenue,
+        revenue_change_percent: String(revenueChangePercent),
+      };
+    }),
     productDetails: productDetailsQuery.data ?? [],
     productSourceRows: productSourceRowsQuery.data ?? [],
     expenseDetails: expenseDetailsQuery.data ?? [],
@@ -205,6 +310,8 @@ export function useDashboard(): DashboardState {
     setStartDate,
     endDate,
     setEndDate,
+    topProductCategory,
+    setTopProductCategory,
     isLoading: dashboardQuery.isLoading,
     isDrilldownLoading:
       productDetailsQuery.isLoading ||
@@ -212,12 +319,19 @@ export function useDashboard(): DashboardState {
       expenseSourceQuery.isLoading ||
       basketReceiptsQuery.isLoading ||
       expenseDetailsQuery.isLoading,
+    isTopProductsLoading:
+      topProductsQuery.isLoading || previousTopProductsQuery.isLoading,
+    isBasketReceiptsLoading: basketReceiptsQuery.isLoading,
     errorMessage:
       (dashboardQuery.error instanceof Error && dashboardQuery.error.message) ||
       (productDetailsQuery.error instanceof Error &&
         productDetailsQuery.error.message) ||
       (productSourceRowsQuery.error instanceof Error &&
         productSourceRowsQuery.error.message) ||
+      (topProductsQuery.error instanceof Error &&
+        topProductsQuery.error.message) ||
+      (previousTopProductsQuery.error instanceof Error &&
+        previousTopProductsQuery.error.message) ||
       (expenseDetailsQuery.error instanceof Error &&
         expenseDetailsQuery.error.message) ||
       (expenseSourceQuery.error instanceof Error &&

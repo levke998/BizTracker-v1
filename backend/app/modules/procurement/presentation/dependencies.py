@@ -11,8 +11,17 @@ from app.db.session import get_db_session
 from app.modules.procurement.application.commands.create_purchase_invoice import (
     CreatePurchaseInvoiceCommand,
 )
+from app.modules.procurement.application.commands.create_purchase_invoice_from_pdf_review import (
+    CreatePurchaseInvoiceFromPdfReviewCommand,
+)
 from app.modules.procurement.application.commands.post_purchase_invoice import (
     PostPurchaseInvoiceCommand,
+)
+from app.modules.procurement.application.commands.upload_purchase_invoice_pdf_draft import (
+    UploadPurchaseInvoicePdfDraftCommand,
+)
+from app.modules.procurement.application.commands.update_purchase_invoice_pdf_review import (
+    UpdatePurchaseInvoicePdfReviewCommand,
 )
 from app.modules.procurement.application.commands.create_supplier import (
     CreateSupplierCommand,
@@ -20,7 +29,14 @@ from app.modules.procurement.application.commands.create_supplier import (
 from app.modules.procurement.application.queries.list_purchase_invoices import (
     ListPurchaseInvoicesQuery,
 )
+from app.modules.procurement.application.queries.list_purchase_invoice_pdf_drafts import (
+    ListPurchaseInvoicePdfDraftsQuery,
+)
 from app.modules.procurement.application.queries.list_suppliers import ListSuppliersQuery
+from app.modules.procurement.application.services.supplier_item_alias_mapping import (
+    SupplierItemAliasMappingService,
+)
+from app.core.config import get_settings
 from app.modules.procurement.infrastructure.repositories.sqlalchemy_purchase_invoice_repository import (
     SqlAlchemyPurchaseInvoiceRepository,
 )
@@ -64,3 +80,51 @@ def get_post_purchase_invoice_command(session: DbSession) -> PostPurchaseInvoice
 
     repository = SqlAlchemyPurchaseInvoiceRepository(session)
     return PostPurchaseInvoiceCommand(repository=repository)
+
+
+def get_upload_purchase_invoice_pdf_draft_command(
+    session: DbSession,
+) -> UploadPurchaseInvoicePdfDraftCommand:
+    """Wire the PDF invoice draft upload command."""
+
+    settings = get_settings()
+    return UploadPurchaseInvoicePdfDraftCommand(
+        session=session,
+        storage_dir=settings.imports_storage_dir,
+    )
+
+
+def get_list_purchase_invoice_pdf_drafts_query(
+    session: DbSession,
+) -> ListPurchaseInvoicePdfDraftsQuery:
+    """Wire the PDF invoice draft list query."""
+
+    return ListPurchaseInvoicePdfDraftsQuery(session=session)
+
+
+def get_update_purchase_invoice_pdf_review_command(
+    session: DbSession,
+) -> UpdatePurchaseInvoicePdfReviewCommand:
+    """Wire the PDF invoice draft review command."""
+
+    return UpdatePurchaseInvoicePdfReviewCommand(session=session)
+
+
+def get_create_purchase_invoice_from_pdf_review_command(
+    session: DbSession,
+) -> CreatePurchaseInvoiceFromPdfReviewCommand:
+    """Wire the PDF review conversion command."""
+
+    repository = SqlAlchemyPurchaseInvoiceRepository(session)
+    return CreatePurchaseInvoiceFromPdfReviewCommand(
+        session=session,
+        repository=repository,
+    )
+
+
+def get_supplier_item_alias_mapping_service(
+    session: DbSession,
+) -> SupplierItemAliasMappingService:
+    """Wire supplier item alias review operations."""
+
+    return SupplierItemAliasMappingService(session=session)

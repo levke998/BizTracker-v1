@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 from decimal import Decimal
 
 import sqlalchemy as sa
@@ -40,6 +41,11 @@ class InventoryItemModel(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         sa.ForeignKey("core.unit_of_measure.id", ondelete="RESTRICT"),
         nullable=False,
     )
+    default_vat_rate_id: Mapped[uuid.UUID | None] = mapped_column(
+        sa.Uuid(as_uuid=True),
+        sa.ForeignKey("core.vat_rate.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     track_stock: Mapped[bool] = mapped_column(
         sa.Boolean,
         nullable=False,
@@ -47,6 +53,18 @@ class InventoryItemModel(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     default_unit_cost: Mapped[Decimal | None] = mapped_column(
         sa.Numeric(14, 4),
+        nullable=True,
+    )
+    default_unit_cost_last_seen_at: Mapped[datetime | None] = mapped_column(
+        sa.DateTime(timezone=True),
+        nullable=True,
+    )
+    default_unit_cost_source_type: Mapped[str | None] = mapped_column(
+        sa.String(80),
+        nullable=True,
+    )
+    default_unit_cost_source_id: Mapped[uuid.UUID | None] = mapped_column(
+        sa.Uuid(as_uuid=True),
         nullable=True,
     )
     estimated_stock_quantity: Mapped[Decimal | None] = mapped_column(

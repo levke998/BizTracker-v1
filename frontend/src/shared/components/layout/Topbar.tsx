@@ -1,149 +1,125 @@
 import { useLocation } from "react-router-dom";
 
-import { useCurrentUser, useLogout } from "../../../modules/identity/hooks/useLogin";
-import { Button } from "../ui/Button";
 import { routes } from "../../constants/routes";
+import { useTopbarControls } from "./TopbarControlsContext";
 
 function getPageMeta(pathname: string) {
   if (pathname.startsWith(routes.dashboard)) {
     return {
-      title: "Business Dashboard",
-      subtitle:
-        "Overall, Flow and Gourmand business performance with KPI tiles, trends, costs and drill-down ready breakdowns.",
+      title: "Dashboard",
+      subtitle: "",
     };
   }
 
   if (pathname.startsWith(routes.demoPos)) {
     return {
-      title: "Demo POS",
-      subtitle:
-        "Standalone test register that sends receipt lines into the import, finance and dashboard pipeline.",
+      title: "Demo kassza",
+      subtitle: "Bemutató felület valós adatok módosítása nélkül.",
     };
   }
 
   if (pathname.startsWith(routes.catalogProducts)) {
     return {
-      title: "Catalog Products",
-      subtitle:
-        "Sellable product catalog with price, estimated cost, margin and recipe visibility.",
+      title: "Termékkatalógus",
+      subtitle: "Árak, kategóriák, receptek és készletkockázatok kezelése.",
     };
   }
 
   if (pathname.startsWith(routes.catalogIngredients)) {
     return {
-      title: "Catalog Ingredients",
-      subtitle:
-        "Ingredient and material catalog with latest known costs, estimated stock and recipe usage.",
+      title: "Alapanyag-katalógus",
+      subtitle: "Alapanyagköltségek, becsült készlet és receptkapcsolatok.",
+    };
+  }
+
+  if (pathname.startsWith(routes.productionRecipes)) {
+    return {
+      title: "Recept readiness",
+      subtitle: "Recept, onkoltseg es keszletjelzes munkanezet.",
     };
   }
 
   if (pathname.startsWith(routes.finance)) {
     return {
-      title: "Finance Transactions",
-      subtitle:
-        "Transaction lists and filters using the same dark surface, hierarchy and table styling.",
+      title: "Pénzügy",
+      subtitle: "Bevételek, kiadások és forráshoz köthető pénzügyi tételek.",
     };
   }
 
   if (pathname.startsWith(routes.inventoryStockLevels)) {
     return {
-      title: "Stock Levels",
-      subtitle:
-        "Operational inventory data with calmer table surfaces and more polished filter states.",
+      title: "Készletszintek",
+      subtitle: "Aktuális készletösszesítés mozgásnapló alapján.",
     };
   }
 
   if (pathname.startsWith(routes.inventoryTheoreticalStock)) {
     return {
-      title: "Theoretical Stock",
-      subtitle:
-        "Variance and reconciliation views aligned to the same panel, input and feedback language.",
+      title: "Becsült készlet",
+      subtitle: "Elméleti készlet és fogyási magyarázatok előkészítő nézete.",
     };
   }
 
   if (pathname.startsWith(routes.inventoryMovements)) {
     return {
-      title: "Inventory Movements",
-      subtitle:
-        "Readable movement tracking with subtle separators and consistent dark controls.",
+      title: "Készletmozgások",
+      subtitle: "Bevételezések, korrekciók és készletnapló.",
     };
   }
 
   if (pathname.startsWith(routes.inventoryItems)) {
     return {
-      title: "Inventory Items",
-      subtitle:
-        "Master item maintenance presented with rounded surfaces, focus glow and improved spacing.",
+      title: "Készletelemek",
+      subtitle: "Alapanyagok és készletkezelt termékek törzsadatai.",
     };
   }
 
   if (pathname.startsWith(routes.inventory)) {
     return {
-      title: "Inventory Overview",
-      subtitle:
-        "Overview panels, KPIs and tables styled to feel modern without changing the functional flow.",
+      title: "Készletáttekintés",
+      subtitle: "Készletállapot, mozgások és becsült fogyás.",
     };
   }
 
   if (pathname.startsWith(routes.procurementSuppliers)) {
     return {
-      title: "Suppliers",
-      subtitle:
-        "Procurement partner registry with the same panel, filter and maintenance patterns used across the platform.",
+      title: "Beszállítók",
+      subtitle: "Beszerzési partnerek és kapcsolattartási adatok.",
     };
   }
 
   if (pathname.startsWith(routes.procurementInvoices)) {
     return {
-      title: "Purchase Invoices",
-      subtitle:
-        "Manual procurement invoice capture prepared for later PDF ingestion, inventory growth and cost-side workflows.",
+      title: "Beszerzési számlák",
+      subtitle: "Költségek, készletnövekedés és számlasorok kezelése.",
     };
   }
 
   if (pathname.startsWith(routes.imports)) {
     return {
-      title: "Import Center",
-      subtitle:
-        "Workflow-focused dark UI for uploads, statuses and parsing details with softer emphasis.",
+      title: "Import központ",
+      subtitle: "POS CSV feltöltés, rögzítés és ellenőrzés.",
     };
   }
 
   return {
-    title: "Master Data Viewer",
-    subtitle:
-      "Core master data screens using the same visual system so the app feels cohesive as it grows.",
+    title: "Törzsadatok",
+    subtitle: "Üzleti egységek, telephelyek, kategóriák és alapadatok.",
   };
 }
 
 export function Topbar() {
   const location = useLocation();
-  const currentUser = useCurrentUser();
-  const logout = useLogout();
+  const { controls } = useTopbarControls();
   const pageMeta = getPageMeta(location.pathname);
-  const formattedDate = new Intl.DateTimeFormat("hu-HU", {
-    month: "short",
-    day: "2-digit",
-    year: "numeric",
-  }).format(new Date());
 
   return (
     <header className="topbar">
       <div className="topbar-copy">
-        <span className="topbar-eyebrow">BizTracker Internal Platform</span>
         <h1 className="topbar-title">{pageMeta.title}</h1>
-        <p className="topbar-subtitle">{pageMeta.subtitle}</p>
+        {pageMeta.subtitle ? <p className="topbar-subtitle">{pageMeta.subtitle}</p> : null}
       </div>
-      <div className="topbar-actions">
-        <span className="topbar-chip topbar-chip-primary">Business read model</span>
-        {currentUser.data ? (
-          <span className="topbar-chip">{currentUser.data.full_name}</span>
-        ) : null}
-        <span className="topbar-chip">{formattedDate}</span>
-        <Button variant="secondary" className="topbar-logout-button" onClick={logout}>
-          Log out
-        </Button>
-      </div>
+      {controls ? <div className="topbar-actions">{controls}</div> : null}
     </header>
   );
 }

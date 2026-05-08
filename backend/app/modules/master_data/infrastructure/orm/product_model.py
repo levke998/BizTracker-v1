@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import TYPE_CHECKING
 from decimal import Decimal
 import uuid
@@ -46,11 +47,24 @@ class ProductModel(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         sa.ForeignKey("core.unit_of_measure.id", ondelete="RESTRICT"),
         nullable=True,
     )
+    default_vat_rate_id: Mapped[uuid.UUID | None] = mapped_column(
+        sa.Uuid(as_uuid=True),
+        sa.ForeignKey("core.vat_rate.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     sku: Mapped[str | None] = mapped_column(sa.String(64), nullable=True)
     name: Mapped[str] = mapped_column(sa.String(200), nullable=False)
     product_type: Mapped[str] = mapped_column(sa.String(50), nullable=False)
     sale_price_gross: Mapped[Decimal | None] = mapped_column(
         sa.Numeric(12, 2),
+        nullable=True,
+    )
+    sale_price_last_seen_at: Mapped[datetime | None] = mapped_column(
+        sa.DateTime(timezone=True),
+        nullable=True,
+    )
+    sale_price_source: Mapped[str | None] = mapped_column(
+        sa.String(50),
         nullable=True,
     )
     default_unit_cost: Mapped[Decimal | None] = mapped_column(

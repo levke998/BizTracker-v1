@@ -9,6 +9,20 @@ type TableProps = {
   emptyMessage: string;
 };
 
+function formatBoolean(value: boolean) {
+  return value ? "Igen" : "Nem";
+}
+
+function formatProductType(value: string) {
+  const labels: Record<string, string> = {
+    menu_item: "Eladott termék",
+    modifier: "Kiegészítő",
+    service: "Szolgáltatás",
+  };
+
+  return labels[value] ?? value;
+}
+
 function DataTable({ title, columns, rows, emptyMessage }: TableProps) {
   return (
     <section className="panel">
@@ -61,17 +75,17 @@ export function MasterDataViewerPage() {
     <section className="page-section">
       <div className="panel filter-panel">
         <div className="panel-header">
-          <h2>Master Data Viewer</h2>
+          <h2>Törzsadatok</h2>
         </div>
 
         <label className="field">
-          <span>Business unit</span>
+          <span>Vállalkozás</span>
           <select
             value={selectedBusinessUnitId}
             onChange={(event) => setSelectedBusinessUnitId(event.target.value)}
             className="field-input"
           >
-            <option value="">Select a business unit</option>
+            <option value="">Válassz vállalkozást</option>
             {businessUnits.map((businessUnit) => (
               <option key={businessUnit.id} value={businessUnit.id}>
                 {businessUnit.name}
@@ -81,38 +95,38 @@ export function MasterDataViewerPage() {
         </label>
 
         {errorMessage ? <p className="error-message">{errorMessage}</p> : null}
-        {isLoading ? <p className="info-message">Loading data...</p> : null}
+        {isLoading ? <p className="info-message">Törzsadatok betöltése...</p> : null}
       </div>
 
       <div className="grid-panels">
         <DataTable
-          title="Locations"
-          columns={["Name", "Kind", "Active"]}
-          rows={locations.map((item) => [item.name, item.kind, item.is_active ? "Yes" : "No"])}
-          emptyMessage="No locations found for the selected business unit."
+          title="Telephelyek"
+          columns={["Név", "Típus", "Aktív"]}
+          rows={locations.map((item) => [item.name, item.kind, formatBoolean(item.is_active)])}
+          emptyMessage="Nincs telephely a kiválasztott vállalkozáshoz."
         />
 
         <DataTable
-          title="Categories"
-          columns={["Name", "Parent category", "Active"]}
+          title="Kategóriák"
+          columns={["Név", "Szülő kategória", "Aktív"]}
           rows={categories.map((item) => [
             item.name,
             item.parent_id ?? "-",
-            item.is_active ? "Yes" : "No",
+            formatBoolean(item.is_active),
           ])}
-          emptyMessage="No categories found for the selected business unit."
+          emptyMessage="Nincs kategória a kiválasztott vállalkozáshoz."
         />
 
         <DataTable
-          title="Products"
-          columns={["Name", "SKU", "Type", "Active"]}
+          title="Termékek"
+          columns={["Név", "SKU", "Típus", "Aktív"]}
           rows={products.map((item) => [
             item.name,
             item.sku ?? "-",
-            item.product_type,
-            item.is_active ? "Yes" : "No",
+            formatProductType(item.product_type),
+            formatBoolean(item.is_active),
           ])}
-          emptyMessage="No products found for the selected business unit."
+          emptyMessage="Nincs termék a kiválasztott vállalkozáshoz."
         />
       </div>
     </section>

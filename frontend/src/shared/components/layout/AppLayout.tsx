@@ -1,18 +1,32 @@
 import { Outlet } from "react-router-dom";
+import { useState } from "react";
 
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
+import { TopbarControlsProvider } from "./TopbarControlsContext";
 
 export function AppLayout() {
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+
   return (
-    <div className="app-shell">
-      <Sidebar />
-      <div className="app-main">
-        <Topbar />
-        <main className="app-content">
-          <Outlet />
-        </main>
+    <TopbarControlsProvider>
+      <div
+        className={
+          isSidebarCollapsed ? "app-shell app-shell-sidebar-collapsed" : "app-shell"
+        }
+      >
+        <Sidebar
+          collapsed={isSidebarCollapsed}
+          onToggleCollapsed={() => setIsSidebarCollapsed((current) => !current)}
+          onNavigate={() => setIsSidebarCollapsed(true)}
+        />
+        <div className="app-main">
+          <Topbar />
+          <main className="app-content">
+            <Outlet />
+          </main>
+        </div>
       </div>
-    </div>
+    </TopbarControlsProvider>
   );
 }

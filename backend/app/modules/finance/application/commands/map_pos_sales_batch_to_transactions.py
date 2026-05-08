@@ -49,6 +49,7 @@ class FinancialTransactionMappingResult:
 class MapPosSalesBatchToTransactionsCommand:
     """Create finance transactions from a parsed pos_sales import batch."""
 
+    supported_import_types = {"pos_sales", "gourmand_pos_sales", "flow_pos_sales"}
     source_type = "import_row"
     direction = "inflow"
     transaction_type = "pos_sale"
@@ -74,9 +75,10 @@ class MapPosSalesBatchToTransactionsCommand:
                 "Only parsed batches can be mapped to financial transactions."
             )
 
-        if batch.import_type != "pos_sales":
+        if batch.import_type not in self.supported_import_types:
             raise ImportBatchMappingStateError(
-                f"Only pos_sales batches are supported. Current type: {batch.import_type}."
+                "Only POS sales batches are supported. "
+                f"Current type: {batch.import_type}."
             )
 
         parsed_rows = [row for row in batch.rows if row.parse_status == "parsed"]
@@ -105,11 +107,16 @@ class MapPosSalesBatchToTransactionsCommand:
                 if transaction.dedupe_key is not None
             ]
         )
-        new_row_transactions = [
-            (row, transaction)
-            for row, transaction in row_transactions
-            if transaction.dedupe_key not in existing_dedupe_keys
-        ]
+        seen_dedupe_keys: set[str] = set()
+        new_row_transactions = []
+        for row, transaction in row_transactions:
+            if transaction.dedupe_key in existing_dedupe_keys:
+                continue
+            if transaction.dedupe_key is not None:
+                if transaction.dedupe_key in seen_dedupe_keys:
+                    continue
+                seen_dedupe_keys.add(transaction.dedupe_key)
+            new_row_transactions.append((row, transaction))
         transactions = [transaction for _row, transaction in new_row_transactions]
         created = self._finance_repository.create_many(transactions)
         for row, transaction in new_row_transactions:
@@ -176,6 +183,18 @@ class MapPosSalesBatchToTransactionsCommand:
 
     @staticmethod
     def _extract_occurred_at(payload: Mapping[str, Any]) -> datetime:
+        occurred_at = payload.get("occurred_at")
+        if isinstance(occurred_at, str) and occurred_at:
+            try:
+                parsed_datetime = datetime.fromisoformat(occurred_at)
+            except ValueError as exc:
+                raise ImportBatchMappingValueError(
+                    f"Invalid occurred_at value for finance mapping: {occurred_at!r}."
+                ) from exc
+            if parsed_datetime.tzinfo is None:
+                return parsed_datetime.replace(tzinfo=UTC)
+            return parsed_datetime.astimezone(UTC)
+
         value = payload.get("date")
         if not isinstance(value, str) or not value:
             raise ImportBatchMappingValueError(

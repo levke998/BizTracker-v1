@@ -19,6 +19,9 @@ class PurchaseInvoiceLine:
     uom_id: uuid.UUID
     unit_net_amount: Decimal
     line_net_amount: Decimal
+    vat_rate_id: uuid.UUID | None
+    vat_amount: Decimal | None
+    line_gross_amount: Decimal | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -31,6 +34,9 @@ class NewPurchaseInvoiceLine:
     uom_id: uuid.UUID
     unit_net_amount: Decimal
     line_net_amount: Decimal
+    vat_rate_id: uuid.UUID | None = None
+    vat_amount: Decimal | None = None
+    line_gross_amount: Decimal | None = None
 
 
 @dataclass(frozen=True, slots=True)

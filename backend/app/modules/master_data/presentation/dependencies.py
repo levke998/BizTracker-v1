@@ -23,6 +23,7 @@ from app.modules.master_data.application.queries.list_products import (
 from app.modules.master_data.application.queries.list_units_of_measure import (
     ListUnitsOfMeasureQuery,
 )
+from app.modules.master_data.application.queries.list_vat_rates import ListVatRatesQuery
 from app.modules.master_data.infrastructure.repositories.sqlalchemy_business_unit_repository import (
     SqlAlchemyBusinessUnitRepository,
 )
@@ -37,6 +38,9 @@ from app.modules.master_data.infrastructure.repositories.sqlalchemy_product_repo
 )
 from app.modules.master_data.infrastructure.repositories.sqlalchemy_unit_of_measure_repository import (
     SqlAlchemyUnitOfMeasureRepository,
+)
+from app.modules.master_data.infrastructure.repositories.sqlalchemy_vat_rate_repository import (
+    SqlAlchemyVatRateRepository,
 )
 
 DbSession = Annotated[Session, Depends(get_db_session)]
@@ -75,3 +79,10 @@ def get_unit_of_measure_query(session: DbSession) -> ListUnitsOfMeasureQuery:
 
     repository = SqlAlchemyUnitOfMeasureRepository(session)
     return ListUnitsOfMeasureQuery(repository)
+
+
+def get_vat_rate_query(session: DbSession) -> ListVatRatesQuery:
+    """Wire the VAT rate list query to its repository."""
+
+    repository = SqlAlchemyVatRateRepository(session)
+    return ListVatRatesQuery(repository)

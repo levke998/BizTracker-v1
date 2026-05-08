@@ -49,6 +49,10 @@ class ProcurementInvoiceInventoryItemUnitMismatchError(Exception):
     """Raised when the inventory item uses a different unit of measure."""
 
 
+class ProcurementInvoiceVatRateNotFoundError(Exception):
+    """Raised when a referenced VAT rate does not exist."""
+
+
 @dataclass(frozen=True, slots=True)
 class CreatePurchaseInvoiceLineInput:
     """One draft purchase invoice line coming from the API layer."""
@@ -59,6 +63,9 @@ class CreatePurchaseInvoiceLineInput:
     uom_id: uuid.UUID
     unit_net_amount: Decimal
     line_net_amount: Decimal
+    vat_rate_id: uuid.UUID | None = None
+    vat_amount: Decimal | None = None
+    line_gross_amount: Decimal | None = None
 
 
 @dataclass(slots=True)
@@ -133,6 +140,13 @@ class CreatePurchaseInvoiceCommand:
                         "The inventory item unit of measure does not match the provided line unit."
                     )
 
+            if line.vat_rate_id is not None and not self.repository.vat_rate_exists(
+                line.vat_rate_id
+            ):
+                raise ProcurementInvoiceVatRateNotFoundError(
+                    f"VAT rate {line.vat_rate_id} was not found."
+                )
+
             normalized_lines.append(
                 NewPurchaseInvoiceLine(
                     inventory_item_id=line.inventory_item_id,
@@ -141,6 +155,9 @@ class CreatePurchaseInvoiceCommand:
                     uom_id=line.uom_id,
                     unit_net_amount=line.unit_net_amount,
                     line_net_amount=line.line_net_amount,
+                    vat_rate_id=line.vat_rate_id,
+                    vat_amount=line.vat_amount,
+                    line_gross_amount=line.line_gross_amount,
                 )
             )
 

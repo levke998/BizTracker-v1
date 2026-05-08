@@ -107,6 +107,24 @@ export async function apiPatchJson<TBody extends object, TResponse>(
   return (await response.json()) as TResponse;
 }
 
+export async function apiPutJson<TBody extends object, TResponse>(
+  path: string,
+  body: TBody,
+): Promise<TResponse> {
+  const response = await fetch(buildUrl(path), {
+    method: "PUT",
+    headers: buildHeaders({ contentType: "application/json" }),
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const message = await extractErrorMessage(response);
+    throw new Error(message || `Request failed with status ${response.status}`);
+  }
+
+  return (await response.json()) as TResponse;
+}
+
 export async function apiDelete<T>(path: string): Promise<T> {
   const response = await fetch(buildUrl(path), {
     method: "DELETE",

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import {
   listBusinessUnits,
@@ -69,7 +69,7 @@ export function useSuppliers(): SuppliersState {
 
   const businessUnits = businessUnitsQuery.data ?? [];
   const { primary: primaryBusinessUnits, technical: technicalBusinessUnits } =
-    splitBusinessUnits(businessUnits);
+    useMemo(() => splitBusinessUnits(businessUnits), [businessUnits]);
 
   const effectiveBusinessUnitId =
     selectedBusinessUnitId ||

@@ -2,14 +2,18 @@ import { useEffect, useMemo, useState } from "react";
 
 import { listBusinessUnits } from "../../masterData/api/masterDataApi";
 import {
+  ensureImportBatchWeatherCoverage,
+  getImportBatchWeatherRecommendation,
   getImportErrors,
   getImportRows,
   listImportBatches,
+  mapImportBatchToFinancialTransactions,
   parseImportBatch,
   uploadImportFile,
 } from "../api/importsApi";
 import type {
   ImportBatch,
+  ImportBatchWeatherRecommendation,
   ImportErrorPreview,
   ImportRowPreview,
   UploadImportFilePayload,
@@ -18,6 +22,8 @@ import type { BusinessUnit } from "../../masterData/types/masterData";
 
 const DEFAULT_IMPORT_TYPES = [
   "pos_sales",
+  "gourmand_pos_sales",
+  "flow_pos_sales",
   "supplier_invoice",
   "ticket_sales",
   "bar_sales",
@@ -39,14 +45,19 @@ type ImportCenterState = {
   isLoading: boolean;
   isUploading: boolean;
   parsingBatchId: string;
+  mappingBatchId: string;
+  weatherBackfillBatchId: string;
   expandedBatchIds: Record<string, boolean>;
   detailsByBatchId: Record<string, BatchDetails | undefined>;
+  weatherByBatchId: Record<string, ImportBatchWeatherRecommendation | undefined>;
   detailLoadingByBatchId: Record<string, boolean>;
   detailErrorByBatchId: Record<string, string>;
   errorMessage: string;
   successMessage: string;
-  uploadFile: (file: File | null) => Promise<void>;
+  uploadFile: (files: File[]) => Promise<void>;
   parseBatch: (batchId: string) => Promise<void>;
+  mapBatch: (batchId: string) => Promise<void>;
+  prepareWeatherForBatch: (batchId: string) => Promise<void>;
   toggleBatchDetails: (batchId: string) => Promise<void>;
   refresh: () => Promise<void>;
 };
@@ -59,9 +70,14 @@ export function useImportBatches(): ImportCenterState {
   const [isLoading, setIsLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
   const [parsingBatchId, setParsingBatchId] = useState("");
+  const [mappingBatchId, setMappingBatchId] = useState("");
+  const [weatherBackfillBatchId, setWeatherBackfillBatchId] = useState("");
   const [expandedBatchIds, setExpandedBatchIds] = useState<Record<string, boolean>>({});
   const [detailsByBatchId, setDetailsByBatchId] = useState<
     Record<string, BatchDetails | undefined>
+  >({});
+  const [weatherByBatchId, setWeatherByBatchId] = useState<
+    Record<string, ImportBatchWeatherRecommendation | undefined>
   >({});
   const [detailLoadingByBatchId, setDetailLoadingByBatchId] = useState<
     Record<string, boolean>
@@ -92,7 +108,9 @@ export function useImportBatches(): ImportCenterState {
       } catch (error) {
         if (!cancelled) {
           setErrorMessage(
-            error instanceof Error ? error.message : "Failed to load business units.",
+            error instanceof Error
+              ? error.message
+              : "Nem sikerült betölteni a vállalkozásokat.",
           );
         }
       } finally {
@@ -118,7 +136,7 @@ export function useImportBatches(): ImportCenterState {
       setBatches(items);
     } catch (error) {
       setErrorMessage(
-        error instanceof Error ? error.message : "Failed to load import batches.",
+        error instanceof Error ? error.message : "Nem sikerült betölteni az import csomagokat.",
       );
     } finally {
       setIsLoading(false);
@@ -130,14 +148,19 @@ export function useImportBatches(): ImportCenterState {
     setDetailErrorByBatchId((current) => ({ ...current, [batchId]: "" }));
 
     try {
-      const [rows, errors] = await Promise.all([
+      const [rows, errors, weather] = await Promise.all([
         getImportRows(batchId),
         getImportErrors(batchId),
+        getImportBatchWeatherRecommendation(batchId),
       ]);
 
       setDetailsByBatchId((current) => ({
         ...current,
         [batchId]: { rows, errors },
+      }));
+      setWeatherByBatchId((current) => ({
+        ...current,
+        [batchId]: weather,
       }));
     } catch (error) {
       setDetailErrorByBatchId((current) => ({
@@ -145,7 +168,7 @@ export function useImportBatches(): ImportCenterState {
         [batchId]:
           error instanceof Error
             ? error.message
-            : "Failed to load batch details.",
+            : "Nem sikerült betölteni az import részleteit.",
       }));
     } finally {
       setDetailLoadingByBatchId((current) => ({ ...current, [batchId]: false }));
@@ -156,16 +179,26 @@ export function useImportBatches(): ImportCenterState {
     void refresh();
   }, [selectedBusinessUnitId]);
 
-  async function uploadFile(file: File | null) {
+  async function uploadFile(files: File[]) {
     setSuccessMessage("");
 
     if (!selectedBusinessUnitId) {
-      setErrorMessage("Please select a business unit first.");
+      setErrorMessage("Először válassz vállalkozást.");
       return;
     }
 
-    if (!file) {
-      setErrorMessage("Please choose a file to upload.");
+    if (files.length === 0) {
+      setErrorMessage("Válassz feltöltendő fájlt.");
+      return;
+    }
+
+    if (
+      ["gourmand_pos_sales", "flow_pos_sales"].includes(selectedImportType) &&
+      files.length < 2
+    ) {
+      setErrorMessage(
+        "A POS CSV csomaghoz töltsd fel együtt az összesítő és legalább egy tételes CSV fájlt.",
+      );
       return;
     }
 
@@ -176,14 +209,16 @@ export function useImportBatches(): ImportCenterState {
       const payload: UploadImportFilePayload = {
         businessUnitId: selectedBusinessUnitId,
         importType: selectedImportType,
-        file,
+        files,
       };
       await uploadImportFile(payload);
-      setSuccessMessage("File uploaded successfully.");
+      setSuccessMessage(
+        files.length > 1 ? "A fájlok feltöltése sikeres." : "A fájl feltöltése sikeres.",
+      );
       await refresh();
     } catch (error) {
       setErrorMessage(
-        error instanceof Error ? error.message : "Failed to upload import file.",
+        error instanceof Error ? error.message : "Nem sikerült feltölteni az import fájlt.",
       );
     } finally {
       setIsUploading(false);
@@ -197,9 +232,30 @@ export function useImportBatches(): ImportCenterState {
 
     try {
       await parseImportBatch(batchId);
-      setSuccessMessage("Batch parsed successfully.");
+      let automaticWeatherMessage = "";
+      setSuccessMessage("Az import feldolgozása sikeres.");
       setDetailsByBatchId((current) => ({ ...current, [batchId]: undefined }));
+      setWeatherByBatchId((current) => ({ ...current, [batchId]: undefined }));
       setDetailErrorByBatchId((current) => ({ ...current, [batchId]: "" }));
+      try {
+        const result = await ensureImportBatchWeatherCoverage(batchId);
+        if (result.status === "backfilled" && result.created_count > 0) {
+          automaticWeatherMessage = ` ${result.created_count} órányi időjárásadat automatikusan előkészítve.`;
+        } else if (result.status === "covered") {
+          automaticWeatherMessage = " Az import időjárásadatai már elő voltak készítve.";
+        } else if (result.status === "skipped" && result.reason) {
+          automaticWeatherMessage = ` Időjárás-előkészítés kihagyva: ${result.reason}`;
+        }
+        const updatedWeather = await getImportBatchWeatherRecommendation(batchId);
+        setWeatherByBatchId((current) => ({
+          ...current,
+          [batchId]: updatedWeather,
+        }));
+      } catch {
+        automaticWeatherMessage =
+          " Az időjárás-előkészítés most nem futott le automatikusan, később újraindítható.";
+      }
+      setSuccessMessage(`Az import feldolgozása sikeres.${automaticWeatherMessage}`);
       await refresh();
 
       if (expandedBatchIds[batchId]) {
@@ -207,10 +263,64 @@ export function useImportBatches(): ImportCenterState {
       }
     } catch (error) {
       setErrorMessage(
-        error instanceof Error ? error.message : "Failed to parse import batch.",
+        error instanceof Error ? error.message : "Nem sikerült feldolgozni az import csomagot.",
       );
     } finally {
       setParsingBatchId("");
+    }
+  }
+
+  async function mapBatch(batchId: string) {
+    setSuccessMessage("");
+    setErrorMessage("");
+    setMappingBatchId(batchId);
+
+    try {
+      const result = await mapImportBatchToFinancialTransactions(batchId);
+      setSuccessMessage(
+        result.created_transactions > 0
+          ? `${result.created_transactions} pénzügyi tranzakció rögzítve.`
+          : "Nem jött létre új pénzügyi tranzakció, a sorok már szerepeltek az adatbázisban.",
+      );
+      await refresh();
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Nem sikerült pénzügyi tranzakciókat rögzíteni az importból.",
+      );
+    } finally {
+      setMappingBatchId("");
+    }
+  }
+
+  async function prepareWeatherForBatch(batchId: string) {
+    setSuccessMessage("");
+    setErrorMessage("");
+    setWeatherBackfillBatchId(batchId);
+
+    try {
+      const result = await ensureImportBatchWeatherCoverage(batchId);
+      setSuccessMessage(
+        result.status === "backfilled" && result.created_count > 0
+          ? `${result.created_count} órányi időjárási adat előkészítve.`
+          : result.status === "covered"
+            ? "Az import időszakához tartozó időjárási adatok már elő voltak készítve."
+            : result.reason ?? "Ehhez az importhoz most nincs időjárás-előkészítés.",
+      );
+      const weather = await getImportBatchWeatherRecommendation(batchId);
+      setWeatherByBatchId((current) => ({
+        ...current,
+        [batchId]: weather,
+      }));
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Nem sikerült előkészíteni az időjárási adatokat.",
+      );
+    } finally {
+      setWeatherBackfillBatchId("");
     }
   }
 
@@ -239,14 +349,19 @@ export function useImportBatches(): ImportCenterState {
     isLoading,
     isUploading,
     parsingBatchId,
+    mappingBatchId,
+    weatherBackfillBatchId,
     expandedBatchIds,
     detailsByBatchId,
+    weatherByBatchId,
     detailLoadingByBatchId,
     detailErrorByBatchId,
     errorMessage,
     successMessage,
     uploadFile,
     parseBatch,
+    mapBatch,
+    prepareWeatherForBatch,
     toggleBatchDetails,
     refresh,
   };

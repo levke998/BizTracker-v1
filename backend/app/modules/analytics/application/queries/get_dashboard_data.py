@@ -23,6 +23,9 @@ from app.modules.analytics.domain.repositories.analytics_repository import (
 
 SUPPORTED_SCOPES = {"overall", "flow", "gourmand"}
 SUPPORTED_PRESETS = {
+    "last_1_hour",
+    "last_6_hours",
+    "last_12_hours",
     "today",
     "week",
     "month",
@@ -69,8 +72,8 @@ class GetDashboardDataQuery:
             scope=normalized_scope,
             business_unit_id=business_unit_id,
             preset=period.preset.strip().lower(),
-            start_date=resolved_start,
-            end_date=resolved_end,
+            start_at=resolved_start,
+            end_at=resolved_end,
             grain=grain,
         )
 
@@ -93,8 +96,8 @@ class ListDashboardCategoryBreakdownQuery:
         return self.repository.list_category_breakdown(
             scope=normalized_scope,
             business_unit_id=business_unit_id,
-            start_date=resolved_start,
-            end_date=resolved_end,
+            start_at=resolved_start,
+            end_at=resolved_end,
         )
 
 
@@ -117,8 +120,8 @@ class ListDashboardProductBreakdownQuery:
         return self.repository.list_product_breakdown(
             scope=normalized_scope,
             business_unit_id=business_unit_id,
-            start_date=resolved_start,
-            end_date=resolved_end,
+            start_at=resolved_start,
+            end_at=resolved_end,
             category_name=category_name.strip() if category_name else None,
         )
 
@@ -147,8 +150,8 @@ class ListDashboardProductSourceRowsQuery:
         return self.repository.list_product_source_rows(
             scope=normalized_scope,
             business_unit_id=business_unit_id,
-            start_date=resolved_start,
-            end_date=resolved_end,
+            start_at=resolved_start,
+            end_at=resolved_end,
             product_name=normalized_product_name,
             category_name=category_name.strip() if category_name else None,
             limit=limit,
@@ -174,8 +177,8 @@ class ListDashboardExpenseDetailsQuery:
         return self.repository.list_expense_details(
             scope=normalized_scope,
             business_unit_id=business_unit_id,
-            start_date=resolved_start,
-            end_date=resolved_end,
+            start_at=resolved_start,
+            end_at=resolved_end,
             transaction_type=transaction_type.strip() if transaction_type else None,
         )
 
@@ -209,8 +212,8 @@ class ListDashboardBasketPairsQuery:
         return self.repository.list_basket_pairs(
             scope=normalized_scope,
             business_unit_id=business_unit_id,
-            start_date=resolved_start,
-            end_date=resolved_end,
+            start_at=resolved_start,
+            end_at=resolved_end,
             limit=limit,
         )
 
@@ -240,8 +243,8 @@ class ListDashboardBasketPairReceiptsQuery:
         return self.repository.list_basket_pair_receipts(
             scope=normalized_scope,
             business_unit_id=business_unit_id,
-            start_date=resolved_start,
-            end_date=resolved_end,
+            start_at=resolved_start,
+            end_at=resolved_end,
             product_a=normalized_product_a,
             product_b=normalized_product_b,
             limit=limit,
@@ -255,26 +258,33 @@ def _normalize_scope(scope: str) -> str:
     return normalized_scope
 
 
-def _resolve_period(period: DashboardPeriodInput) -> tuple[date, date, str]:
+def _resolve_period(period: DashboardPeriodInput) -> tuple[datetime, datetime, str]:
     preset = period.preset.strip().lower()
     if preset not in SUPPORTED_PRESETS:
         raise DashboardPeriodError(f"Unsupported dashboard period: {period.preset}.")
 
-    today = datetime.now(APP_TIME_ZONE).date()
+    now = datetime.now(APP_TIME_ZONE)
+    today = now.date()
 
+    if preset == "last_1_hour":
+        return now - timedelta(hours=1), now, "hour"
+    if preset == "last_6_hours":
+        return now - timedelta(hours=6), now, "hour"
+    if preset == "last_12_hours":
+        return now - timedelta(hours=12), now, "hour"
     if preset == "today":
-        return today, today, "day"
+        return _day_start(today), now, "hour"
     if preset == "week":
         start = today - timedelta(days=today.weekday())
-        return start, today, "day"
+        return _day_start(start), _day_end(today), "day"
     if preset == "month":
-        return today.replace(day=1), today, "day"
+        return _day_start(today.replace(day=1)), _day_end(today), "day"
     if preset == "year":
-        return today.replace(month=1, day=1), today, "month"
+        return _day_start(today.replace(month=1, day=1)), _day_end(today), "month"
     if preset == "last_7_days":
-        return today - timedelta(days=6), today, "day"
+        return _day_start(today - timedelta(days=6)), _day_end(today), "day"
     if preset == "last_30_days":
-        return today - timedelta(days=29), today, "day"
+        return _day_start(today - timedelta(days=29)), _day_end(today), "day"
 
     if period.start_date is None or period.end_date is None:
         raise DashboardPeriodError(
@@ -285,4 +295,12 @@ def _resolve_period(period: DashboardPeriodInput) -> tuple[date, date, str]:
 
     delta_days = (period.end_date - period.start_date).days
     grain = "month" if delta_days > 120 else "day"
-    return period.start_date, period.end_date, grain
+    return _day_start(period.start_date), _day_end(period.end_date), grain
+
+
+def _day_start(value: date) -> datetime:
+    return datetime.combine(value, datetime.min.time(), tzinfo=APP_TIME_ZONE)
+
+
+def _day_end(value: date) -> datetime:
+    return datetime.combine(value, datetime.max.time(), tzinfo=APP_TIME_ZONE)

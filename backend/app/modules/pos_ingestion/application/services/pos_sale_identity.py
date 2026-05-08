@@ -24,6 +24,9 @@ def build_pos_sale_dedupe_key(
         "quantity": _normalize_decimal(payload.get("quantity"), places="0.001"),
         "gross_amount": _normalize_decimal(payload.get("gross_amount"), places="0.01"),
     }
+    source_line_key = _normalize_text(payload.get("source_line_key"))
+    if source_line_key:
+        components["source_line_key"] = source_line_key
     serialized = json.dumps(components, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 

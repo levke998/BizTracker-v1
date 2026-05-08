@@ -2,7 +2,7 @@ import { useStockLevels } from "../hooks/useStockLevels";
 
 function formatDateTime(value: string | null) {
   if (!value) {
-    return "—";
+    return "-";
   }
 
   return new Intl.DateTimeFormat("hu-HU", {
@@ -12,6 +12,20 @@ function formatDateTime(value: string | null) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(value));
+}
+
+function formatItemType(value: string) {
+  const labels: Record<string, string> = {
+    raw_material: "Alapanyag",
+    packaging: "Csomagolóanyag",
+    finished_good: "Késztermék",
+  };
+
+  return labels[value] ?? value;
+}
+
+function formatBoolean(value: boolean) {
+  return value ? "Igen" : "Nem";
 }
 
 export function StockLevelsPage() {
@@ -33,21 +47,21 @@ export function StockLevelsPage() {
     <section className="page-section">
       <div className="panel">
         <div className="panel-header">
-          <h2>Stock Levels</h2>
+          <h2>Készletszintek</h2>
           <span className="panel-count">{stockLevels.length}</span>
         </div>
 
         <div className="form-grid inventory-filter-grid">
           <label className="field">
-            <span>Business unit</span>
+            <span>Vállalkozás</span>
             <select
               value={selectedBusinessUnitId}
               onChange={(event) => setSelectedBusinessUnitId(event.target.value)}
               className="field-input"
             >
-              <option value="">Select a business unit</option>
+              <option value="">Válassz vállalkozást</option>
               {primaryBusinessUnits.length > 0 ? (
-                <optgroup label="Business units">
+                <optgroup label="Vállalkozások">
                   {primaryBusinessUnits.map((businessUnit) => (
                     <option key={businessUnit.id} value={businessUnit.id}>
                       {businessUnit.name}
@@ -56,7 +70,7 @@ export function StockLevelsPage() {
                 </optgroup>
               ) : null}
               {technicalBusinessUnits.length > 0 ? (
-                <optgroup label="Technical">
+                <optgroup label="Technikai">
                   {technicalBusinessUnits.map((businessUnit) => (
                     <option key={businessUnit.id} value={businessUnit.id}>
                       {businessUnit.name} ({businessUnit.code})
@@ -68,21 +82,21 @@ export function StockLevelsPage() {
           </label>
 
           <label className="field">
-            <span>Item type</span>
+            <span>Tételtípus</span>
             <select
               value={selectedItemType}
               onChange={(event) => setSelectedItemType(event.target.value)}
               className="field-input"
             >
-              <option value="">All item types</option>
-              <option value="raw_material">raw_material</option>
-              <option value="packaging">packaging</option>
-              <option value="finished_good">finished_good</option>
+              <option value="">Minden tételtípus</option>
+              <option value="raw_material">Alapanyag</option>
+              <option value="packaging">Csomagolóanyag</option>
+              <option value="finished_good">Késztermék</option>
             </select>
           </label>
 
           <label className="field">
-            <span>Limit</span>
+            <span>Megjelenített sorok</span>
             <select
               value={String(limit)}
               onChange={(event) => setLimit(Number(event.target.value))}
@@ -97,18 +111,18 @@ export function StockLevelsPage() {
         </div>
 
         {errorMessage ? <p className="error-message">{errorMessage}</p> : null}
-        {isLoading ? <p className="info-message">Loading stock levels...</p> : null}
+        {isLoading ? <p className="info-message">Készletszintek betöltése...</p> : null}
       </div>
 
       <section className="panel">
         <div className="panel-header">
-          <h2>Actual stock levels</h2>
+          <h2>Aktuális készletszintek</h2>
           <span className="panel-count">{stockLevels.length}</span>
         </div>
 
         {!isLoading && stockLevels.length === 0 ? (
           <p className="empty-message">
-            No stock levels found for the selected filters.
+            Nincs készletszint a kiválasztott szűrőkkel.
           </p>
         ) : null}
 
@@ -117,27 +131,27 @@ export function StockLevelsPage() {
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Name</th>
-                  <th>Item type</th>
-                  <th>Current quantity</th>
-                  <th>UOM ID</th>
-                  <th>Movement count</th>
-                  <th>Last movement at</th>
-                  <th>Track stock</th>
-                  <th>Active</th>
+                  <th>Név</th>
+                  <th>Tételtípus</th>
+                  <th>Aktuális mennyiség</th>
+                  <th>Egység</th>
+                  <th>Mozgások</th>
+                  <th>Utolsó mozgás</th>
+                  <th>Készletkezelt</th>
+                  <th>Aktív</th>
                 </tr>
               </thead>
               <tbody>
                 {stockLevels.map((item) => (
                   <tr key={item.inventory_item_id}>
                     <td>{item.name}</td>
-                    <td>{item.item_type}</td>
+                    <td>{formatItemType(item.item_type)}</td>
                     <td>{item.current_quantity}</td>
                     <td>{item.uom_id}</td>
                     <td>{item.movement_count}</td>
                     <td>{formatDateTime(item.last_movement_at)}</td>
-                    <td>{item.track_stock ? "Yes" : "No"}</td>
-                    <td>{item.is_active ? "Yes" : "No"}</td>
+                    <td>{formatBoolean(item.track_stock)}</td>
+                    <td>{formatBoolean(item.is_active)}</td>
                   </tr>
                 ))}
               </tbody>

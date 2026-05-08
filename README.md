@@ -1,21 +1,20 @@
 # BizTracker
 
-BizTracker egy belso uzleti elemzo es controlling rendszer a `Gourmand` es a `Flow Music Club` mukodesenek kovetesere. A cel nem egy egyszeru CRUD admin, hanem KPI-, grafikon-, drill-down- es adatforras-kovetesi fokuszu alkalmazas.
+BizTracker egy belso uzleti elemzo es controlling rendszer a `Gourmand` es a `Flow Music Club` mukodesenek kovetesere.
+
+Fo irany: biztonsagos CSV importokra epulo, forrasadatig visszakovetheto dashboard es operativ dontestamogatas. Nem realtime kassza API-ra epulunk.
 
 ## Dokumentacios rend
 
-Fejlesztes elott ezeket olvasd ebben a sorrendben:
+Fejlesztes elott ezt olvasd:
 
-1. [docs/CURRENT_STATUS.md](docs/CURRENT_STATUS.md) - tenyleges jelenlegi allapot, implementalt es hianyzo reszek.
-2. [docs/ROADMAP.md](docs/ROADMAP.md) - aktiv fejlesztesi irany es kovetkezo fokuszok.
-3. [docs/DOCUMENTATION_STATUS.md](docs/DOCUMENTATION_STATUS.md) - melyik dokumentum mire valo, mi elavult, milyen ellentmondasok vannak.
-4. [docs/DATABASE_SYNC_NOTES.md](docs/DATABASE_SYNC_NOTES.md) - Alembic head, DB-validacio es tesztelt migracios allapot.
+1. [docs/ROADMAP.md](docs/ROADMAP.md) - egyseges sorvezeto, kesz/felkesz/kritikus/jovo feladatok.
+2. [docs/DOMAIN_MODEL.md](docs/DOMAIN_MODEL.md) - Gourmand, Flow, inventory, procurement, recept es dashboard domain.
+3. [docs/DATA_PIPELINE.md](docs/DATA_PIPELINE.md) - CSV-first import, dedupe, mapping, PDF szamla pipeline.
+4. [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) - modularis monolit, clean architecture, frontend/backend felelossegek.
+5. [docs/OPERATIONS.md](docs/OPERATIONS.md) - futtatas, migration, teszt, dokumentaciofrissites.
 
-Termek- es architektura-hatter:
-- [PROJECT_DESCRIPTION.md](PROJECT_DESCRIPTION.md) - eredeti termekvizió es hosszabb tavu scope.
-- [docs/BUSINESS_DIRECTION.md](docs/BUSINESS_DIRECTION.md) - uzleti elemzesi celok.
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) - modularis monolit, Clean Architecture irany.
-- [docs/ACCOUNTING_AND_CONTROLLING_MODEL.md](docs/ACCOUNTING_AND_CONTROLLING_MODEL.md) - actual vs estimated controlling modell.
+Dokumentacios index: [docs/DOCUMENTATION_STATUS.md](docs/DOCUMENTATION_STATUS.md).
 
 ## Gyors lokal futtatas
 
@@ -35,4 +34,9 @@ npm.cmd run dev
 
 ## Jelenlegi fokusz
 
-A projekt mar tul van az alap scaffoldon: mukodik a POS/import -> finance -> analytics/dashboard tobb szelete, a catalog/costing alap, az inventory CRUD/movement/stock read, valamint a procurement invoice posting alap. A kovetkezo fejlesztesi iranyt a [docs/ROADMAP.md](docs/ROADMAP.md) vezeti.
+1. CSV-first import pipeline tokeletesitese.
+2. POS/SKU/barcode mapping es missing mapping quarantine.
+3. Gourmand recept, stock es inventory accounting-ready erosites.
+4. Beszerzesi szamla PDF review workflow.
+5. Flow event rendszer es Event elemzo befejezese.
+6. Dashboard tovabbi uzlet-specifikus melyitese.

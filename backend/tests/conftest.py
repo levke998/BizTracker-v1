@@ -17,6 +17,10 @@ from app.db.session import SessionLocal
 from app.modules.finance.infrastructure.orm.transaction_model import (
     FinancialTransactionModel,
 )
+from app.modules.events.infrastructure.orm.event_model import EventModel
+from app.modules.events.infrastructure.orm.event_ticket_actual_model import (
+    EventTicketActualModel,
+)
 from app.main import app
 from app.modules.imports.infrastructure.orm.import_batch_model import ImportBatchModel
 from app.modules.imports.infrastructure.orm.import_file_model import ImportFileModel
@@ -36,15 +40,34 @@ from app.modules.inventory.infrastructure.orm.inventory_movement_model import (
 from app.modules.master_data.infrastructure.orm.business_unit_model import (
     BusinessUnitModel,
 )
+from app.modules.master_data.infrastructure.orm.product_model import ProductModel
 from app.modules.master_data.infrastructure.orm.unit_of_measure_model import (
     UnitOfMeasureModel,
+)
+from app.modules.pos_ingestion.infrastructure.orm.pos_product_alias_model import (
+    PosProductAliasModel,
 )
 from app.modules.procurement.infrastructure.orm.supplier_model import SupplierModel
 from app.modules.procurement.infrastructure.orm.purchase_invoice_model import (
     PurchaseInvoiceModel,
 )
+from app.modules.procurement.infrastructure.orm.purchase_invoice_draft_model import (
+    PurchaseInvoiceDraftModel,
+)
 from app.modules.procurement.infrastructure.orm.purchase_invoice_line_model import (
     PurchaseInvoiceLineModel,
+)
+from app.modules.procurement.infrastructure.orm.supplier_item_alias_model import (
+    SupplierItemAliasModel,
+)
+from app.modules.production.infrastructure.orm.recipe_model import (
+    RecipeIngredientModel,
+    RecipeModel,
+    RecipeVersionModel,
+)
+from app.modules.weather.infrastructure.orm.weather_model import (
+    WeatherLocationModel,
+    WeatherObservationHourlyModel,
 )
 
 TEST_BUSINESS_UNIT_CODE = "test-integration"
@@ -86,11 +109,27 @@ def _cleanup_business_unit_data(
         db_session,
         business_unit_ids=business_unit_ids,
     )
+    file_paths.extend(
+        Path(stored_path)
+        for stored_path, in db_session.execute(
+            select(PurchaseInvoiceDraftModel.stored_path).where(
+                PurchaseInvoiceDraftModel.business_unit_id.in_(business_unit_ids)
+            )
+        ).all()
+    )
     batch_ids = [
         batch_id
         for batch_id, in db_session.execute(
             select(ImportBatchModel.id).where(
                 ImportBatchModel.business_unit_id.in_(business_unit_ids)
+            )
+        ).all()
+    ]
+    inventory_item_ids = [
+        item_id
+        for item_id, in db_session.execute(
+            select(InventoryItemModel.id).where(
+                InventoryItemModel.business_unit_id.in_(business_unit_ids)
             )
         ).all()
     ]
@@ -105,11 +144,59 @@ def _cleanup_business_unit_data(
             InventoryMovementModel.business_unit_id.in_(business_unit_ids)
         )
     )
+    if inventory_item_ids:
+        db_session.execute(
+            delete(InventoryMovementModel).where(
+                InventoryMovementModel.inventory_item_id.in_(inventory_item_ids)
+            )
+        )
     db_session.execute(
         delete(EstimatedConsumptionAuditModel).where(
             EstimatedConsumptionAuditModel.business_unit_id.in_(business_unit_ids)
         )
     )
+    db_session.execute(
+        delete(PosProductAliasModel).where(
+            PosProductAliasModel.business_unit_id.in_(business_unit_ids)
+        )
+    )
+    db_session.execute(
+        delete(SupplierItemAliasModel).where(
+            SupplierItemAliasModel.business_unit_id.in_(business_unit_ids)
+        )
+    )
+    event_ids = [
+        event_id
+        for event_id, in db_session.execute(
+            select(EventModel.id).where(EventModel.business_unit_id.in_(business_unit_ids))
+        ).all()
+    ]
+    if event_ids:
+        db_session.execute(
+            delete(EventTicketActualModel).where(
+                EventTicketActualModel.event_id.in_(event_ids)
+            )
+        )
+        db_session.execute(delete(EventModel).where(EventModel.id.in_(event_ids)))
+    weather_location_ids = [
+        weather_location_id
+        for weather_location_id, in db_session.execute(
+            select(WeatherLocationModel.id).where(
+                WeatherLocationModel.business_unit_id.in_(business_unit_ids)
+            )
+        ).all()
+    ]
+    if weather_location_ids:
+        db_session.execute(
+            delete(WeatherObservationHourlyModel).where(
+                WeatherObservationHourlyModel.weather_location_id.in_(weather_location_ids)
+            )
+        )
+        db_session.execute(
+            delete(WeatherLocationModel).where(
+                WeatherLocationModel.id.in_(weather_location_ids)
+            )
+        )
     invoice_ids = [
         invoice_id
         for invoice_id, in db_session.execute(
@@ -128,9 +215,49 @@ def _cleanup_business_unit_data(
             delete(PurchaseInvoiceModel).where(PurchaseInvoiceModel.id.in_(invoice_ids))
         )
     db_session.execute(
-        delete(InventoryItemModel).where(
-            InventoryItemModel.business_unit_id.in_(business_unit_ids)
+        delete(PurchaseInvoiceDraftModel).where(
+            PurchaseInvoiceDraftModel.business_unit_id.in_(business_unit_ids)
         )
+    )
+    product_ids = [
+        product_id
+        for product_id, in db_session.execute(
+            select(ProductModel.id).where(
+                ProductModel.business_unit_id.in_(business_unit_ids)
+            )
+        ).all()
+    ]
+    if product_ids:
+        recipe_ids = [
+            recipe_id
+            for recipe_id, in db_session.execute(
+                select(RecipeModel.id).where(RecipeModel.product_id.in_(product_ids))
+            ).all()
+        ]
+        if recipe_ids:
+            recipe_version_ids = [
+                recipe_version_id
+                for recipe_version_id, in db_session.execute(
+                    select(RecipeVersionModel.id).where(
+                        RecipeVersionModel.recipe_id.in_(recipe_ids)
+                    )
+                ).all()
+            ]
+            if recipe_version_ids:
+                db_session.execute(
+                    delete(RecipeIngredientModel).where(
+                        RecipeIngredientModel.recipe_version_id.in_(recipe_version_ids)
+                    )
+                )
+                db_session.execute(
+                    delete(RecipeVersionModel).where(
+                        RecipeVersionModel.id.in_(recipe_version_ids)
+                    )
+                )
+            db_session.execute(delete(RecipeModel).where(RecipeModel.id.in_(recipe_ids)))
+        db_session.execute(delete(ProductModel).where(ProductModel.id.in_(product_ids)))
+    db_session.execute(
+        delete(InventoryItemModel).where(InventoryItemModel.id.in_(inventory_item_ids))
     )
     db_session.execute(
         delete(SupplierModel).where(SupplierModel.business_unit_id.in_(business_unit_ids))

@@ -23,6 +23,16 @@ class ImportFile:
 
 
 @dataclass(frozen=True, slots=True)
+class NewImportFile:
+    """Draft uploaded file metadata used before persistence."""
+
+    original_name: str
+    stored_path: str
+    mime_type: str | None
+    size_bytes: int
+
+
+@dataclass(frozen=True, slots=True)
 class ImportRow:
     """Represents one staging row produced by the parsing pipeline."""
 
@@ -87,6 +97,8 @@ class ImportBatch:
     total_rows: int
     parsed_rows: int
     error_rows: int
+    first_occurred_at: str | None
+    last_occurred_at: str | None
     created_at: datetime
     updated_at: datetime
     files: tuple[ImportFile, ...]

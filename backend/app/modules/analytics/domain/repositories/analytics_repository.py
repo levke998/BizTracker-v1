@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date
+from datetime import datetime
 from typing import Protocol
 
 from app.modules.analytics.domain.entities.dashboard_snapshot import (
@@ -27,8 +27,8 @@ class AnalyticsRepository(Protocol):
         scope: str,
         business_unit_id: uuid.UUID | None,
         preset: str,
-        start_date: date,
-        end_date: date,
+        start_at: datetime,
+        end_at: datetime,
         grain: str,
     ) -> DashboardSnapshot:
         """Return one aggregated dashboard snapshot."""
@@ -38,8 +38,8 @@ class AnalyticsRepository(Protocol):
         *,
         scope: str,
         business_unit_id: uuid.UUID | None,
-        start_date: date,
-        end_date: date,
+        start_at: datetime,
+        end_at: datetime,
     ) -> list[DashboardBreakdownRow]:
         """Return category revenue breakdown for a dashboard period."""
 
@@ -48,8 +48,8 @@ class AnalyticsRepository(Protocol):
         *,
         scope: str,
         business_unit_id: uuid.UUID | None,
-        start_date: date,
-        end_date: date,
+        start_at: datetime,
+        end_at: datetime,
         category_name: str | None = None,
     ) -> list[DashboardProductDetailRow]:
         """Return product revenue breakdown for a dashboard period."""
@@ -59,8 +59,8 @@ class AnalyticsRepository(Protocol):
         *,
         scope: str,
         business_unit_id: uuid.UUID | None,
-        start_date: date,
-        end_date: date,
+        start_at: datetime,
+        end_at: datetime,
         product_name: str,
         category_name: str | None = None,
         limit: int = 50,
@@ -72,8 +72,8 @@ class AnalyticsRepository(Protocol):
         *,
         scope: str,
         business_unit_id: uuid.UUID | None,
-        start_date: date,
-        end_date: date,
+        start_at: datetime,
+        end_at: datetime,
         transaction_type: str | None = None,
     ) -> list[DashboardExpenseDetailRow]:
         """Return expense transaction details for a dashboard period."""
@@ -90,8 +90,8 @@ class AnalyticsRepository(Protocol):
         *,
         scope: str,
         business_unit_id: uuid.UUID | None,
-        start_date: date,
-        end_date: date,
+        start_at: datetime,
+        end_at: datetime,
         limit: int = 20,
     ) -> list[DashboardBasketPairRow]:
         """Return frequently co-purchased product pairs from POS receipts."""
@@ -101,8 +101,8 @@ class AnalyticsRepository(Protocol):
         *,
         scope: str,
         business_unit_id: uuid.UUID | None,
-        start_date: date,
-        end_date: date,
+        start_at: datetime,
+        end_at: datetime,
         product_a: str,
         product_b: str,
         limit: int = 20,

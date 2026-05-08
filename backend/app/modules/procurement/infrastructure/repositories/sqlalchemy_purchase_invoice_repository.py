@@ -24,6 +24,7 @@ from app.modules.master_data.infrastructure.orm.business_unit_model import (
 from app.modules.master_data.infrastructure.orm.unit_of_measure_model import (
     UnitOfMeasureModel,
 )
+from app.modules.master_data.infrastructure.orm.vat_rate_model import VatRateModel
 from app.modules.procurement.domain.entities.purchase_invoice import (
     NewPurchaseInvoice,
     PurchaseInvoice,
@@ -110,6 +111,9 @@ class SqlAlchemyPurchaseInvoiceRepository:
                     uom_id=line.uom_id,
                     unit_net_amount=line.unit_net_amount,
                     line_net_amount=line.line_net_amount,
+                    vat_rate_id=line.vat_rate_id,
+                    vat_amount=line.vat_amount,
+                    line_gross_amount=line.line_gross_amount,
                 )
                 for line in invoice.lines
             ],
@@ -170,6 +174,10 @@ class SqlAlchemyPurchaseInvoiceRepository:
 
     def post_to_actuals(self, invoice: PurchaseInvoice) -> PurchaseInvoicePostingResult:
         occurred_at = datetime.combine(invoice.invoice_date, time.min, tzinfo=UTC)
+        updated_inventory_item_costs = self._update_inventory_item_default_costs(
+            invoice=invoice,
+            occurred_at=occurred_at,
+        )
         finance_transaction = FinancialTransactionModel(
             business_unit_id=invoice.business_unit_id,
             direction=FINANCE_DIRECTION,
@@ -213,9 +221,45 @@ class SqlAlchemyPurchaseInvoiceRepository:
             purchase_invoice_id=invoice.id,
             created_financial_transactions=1,
             created_inventory_movements=len(inventory_movements),
+            updated_inventory_item_costs=updated_inventory_item_costs,
             finance_source_type=FINANCE_SOURCE_TYPE,
             inventory_source_type=INVENTORY_SOURCE_TYPE,
         )
+
+    def _update_inventory_item_default_costs(
+        self,
+        *,
+        invoice: PurchaseInvoice,
+        occurred_at: datetime,
+    ) -> int:
+        updated_count = 0
+        for line in invoice.lines:
+            if line.inventory_item_id is None:
+                continue
+
+            item = self._session.get(InventoryItemModel, line.inventory_item_id)
+            if item is None:
+                continue
+            if item.default_unit_cost_last_seen_at is not None and (
+                item.default_unit_cost_last_seen_at > occurred_at
+            ):
+                continue
+
+            unit_cost = (line.line_net_amount / line.quantity).quantize(UNIT_COST_QUANT)
+            if (
+                item.default_unit_cost == unit_cost
+                and item.default_unit_cost_source_id == line.id
+                and item.default_unit_cost_source_type == INVENTORY_SOURCE_TYPE
+            ):
+                continue
+
+            item.default_unit_cost = unit_cost
+            item.default_unit_cost_last_seen_at = occurred_at
+            item.default_unit_cost_source_type = INVENTORY_SOURCE_TYPE
+            item.default_unit_cost_source_id = line.id
+            updated_count += 1
+
+        return updated_count
 
     def _get_posting_metadata(
         self,
@@ -349,6 +393,12 @@ class SqlAlchemyPurchaseInvoiceRepository:
         )
         return bool(count)
 
+    def vat_rate_exists(self, vat_rate_id: uuid.UUID) -> bool:
+        count = self._session.scalar(
+            select(func.count()).select_from(VatRateModel).where(VatRateModel.id == vat_rate_id)
+        )
+        return bool(count)
+
     @staticmethod
     def _to_entity(
         *,
@@ -381,6 +431,9 @@ class SqlAlchemyPurchaseInvoiceRepository:
                     uom_id=line.uom_id,
                     unit_net_amount=line.unit_net_amount,
                     line_net_amount=line.line_net_amount,
+                    vat_rate_id=line.vat_rate_id,
+                    vat_amount=line.vat_amount,
+                    line_gross_amount=line.line_gross_amount,
                 )
                 for line in sorted(model.lines, key=lambda item: str(item.id))
             ),

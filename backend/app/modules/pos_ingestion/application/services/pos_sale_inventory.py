@@ -20,6 +20,9 @@ from app.modules.master_data.infrastructure.orm.product_model import ProductMode
 from app.modules.master_data.infrastructure.orm.unit_of_measure_model import (
     UnitOfMeasureModel,
 )
+from app.modules.pos_ingestion.infrastructure.orm.pos_product_alias_model import (
+    PosProductAliasModel,
+)
 from app.modules.production.infrastructure.orm.recipe_model import (
     RecipeIngredientModel,
     RecipeModel,
@@ -104,6 +107,13 @@ class PosSaleInventoryConsumptionService:
             if product is not None and product.business_unit_id == business_unit_id:
                 return product
 
+        alias_product = self._resolve_mapped_alias_product(
+            business_unit_id=business_unit_id,
+            payload=payload,
+        )
+        if alias_product is not None:
+            return alias_product
+
         sku = payload.get("sku")
         if isinstance(sku, str) and sku.strip():
             product = self._session.scalar(
@@ -127,6 +137,35 @@ class PosSaleInventoryConsumptionService:
             )
 
         return None
+
+    def _resolve_mapped_alias_product(
+        self,
+        *,
+        business_unit_id: uuid.UUID,
+        payload: Mapping[str, Any],
+    ) -> ProductModel | None:
+        product_name = _optional_text(payload.get("product_name"))
+        if product_name is None:
+            return None
+
+        source_system = _source_system(payload)
+        source_product_key = _source_product_key(payload, product_name)
+        alias = self._session.scalar(
+            select(PosProductAliasModel)
+            .where(PosProductAliasModel.business_unit_id == business_unit_id)
+            .where(PosProductAliasModel.source_system == source_system)
+            .where(PosProductAliasModel.source_product_key == source_product_key)
+            .where(PosProductAliasModel.status == "mapped")
+            .where(PosProductAliasModel.product_id.is_not(None))
+            .limit(1)
+        )
+        if alias is None or alias.product_id is None:
+            return None
+
+        product = self._session.get(ProductModel, alias.product_id)
+        if product is None or product.business_unit_id != business_unit_id:
+            return None
+        return product
 
     def _consume_recipe_stock(
         self,
@@ -318,6 +357,29 @@ def _optional_text(value: Any) -> str | None:
         return None
     stripped = value.strip()
     return stripped or None
+
+
+def _source_system(payload: Mapping[str, Any]) -> str:
+    source_import_profile = _optional_text(payload.get("source_import_profile"))
+    return source_import_profile or "pos_sales"
+
+
+def _source_product_key(payload: Mapping[str, Any], product_name: str) -> str:
+    source_product_id = _optional_text(
+        payload.get("source_product_id") or payload.get("pos_product_id")
+    )
+    if source_product_id is not None:
+        return f"id:{source_product_id.casefold()}"
+
+    source_sku = _optional_text(payload.get("sku"))
+    if source_sku is not None:
+        return f"sku:{source_sku.casefold()}"
+
+    source_barcode = _optional_text(payload.get("barcode"))
+    if source_barcode is not None:
+        return f"barcode:{source_barcode.casefold()}"
+
+    return f"name:{product_name.casefold()}"
 
 
 def _extract_occurred_at(payload: Mapping[str, Any]) -> datetime:

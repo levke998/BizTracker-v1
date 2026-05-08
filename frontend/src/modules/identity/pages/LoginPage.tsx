@@ -47,14 +47,14 @@ export function LoginPage() {
     <main className="login-page">
       <section className="login-panel">
         <div className="login-copy">
-          <span className="page-eyebrow">BizTracker Internal Platform</span>
-          <h1>Sign in</h1>
-          <p>Internal controlling workspace for Gourmand and Flow operations.</p>
+          <span className="page-eyebrow">BizTracker</span>
+          <h1>Bejelentkezés</h1>
+          <p>Üzleti iránytű a Gourmand és a Flow napi döntéseihez.</p>
         </div>
 
         <form className="login-form" onSubmit={handleSubmit}>
           <label className="field login-field">
-            <span>Email</span>
+            <span>E-mail</span>
             <input
               className="field-input"
               type="email"
@@ -66,7 +66,7 @@ export function LoginPage() {
           </label>
 
           <label className="field login-field">
-            <span>Password</span>
+            <span>Jelszó</span>
             <input
               className="field-input"
               type="password"
@@ -82,7 +82,7 @@ export function LoginPage() {
           ) : null}
 
           <Button type="submit" glow disabled={loginMutation.isPending}>
-            {loginMutation.isPending ? "Signing in..." : "Sign in"}
+            {loginMutation.isPending ? "Bejelentkezés..." : "Belépés"}
           </Button>
         </form>
       </section>

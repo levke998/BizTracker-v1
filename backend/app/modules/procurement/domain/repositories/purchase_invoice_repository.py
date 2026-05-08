@@ -19,6 +19,7 @@ class PurchaseInvoicePostingResult:
     purchase_invoice_id: uuid.UUID
     created_financial_transactions: int
     created_inventory_movements: int
+    updated_inventory_item_costs: int
     finance_source_type: str
     inventory_source_type: str
 
@@ -91,3 +92,6 @@ class PurchaseInvoiceRepository(Protocol):
         uom_id: uuid.UUID,
     ) -> bool:
         """Return whether the inventory item uses the provided unit of measure."""
+
+    def vat_rate_exists(self, vat_rate_id: uuid.UUID) -> bool:
+        """Return whether the referenced VAT rate exists."""

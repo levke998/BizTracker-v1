@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from decimal import Decimal
 
 from fastapi.testclient import TestClient
@@ -16,6 +17,7 @@ from app.modules.master_data.infrastructure.orm.product_model import ProductMode
 from app.modules.master_data.infrastructure.orm.unit_of_measure_model import (
     UnitOfMeasureModel,
 )
+from app.modules.master_data.infrastructure.orm.vat_rate_model import VatRateModel
 from app.modules.production.infrastructure.orm.recipe_model import (
     RecipeIngredientModel,
     RecipeModel,
@@ -43,11 +45,17 @@ def test_catalog_creates_product_with_recipe_and_updates_ingredient_stock(
         uom_id=pcs_unit_of_measure.id,
         track_stock=True,
         default_unit_cost=Decimal("120"),
+        default_unit_cost_last_seen_at=datetime(2026, 4, 24, tzinfo=UTC),
+        default_unit_cost_source_type="supplier_invoice_line",
         estimated_stock_quantity=Decimal("50"),
         is_active=True,
     )
     db_session.add_all([category, ingredient])
     db_session.commit()
+    category_id = category.id
+    ingredient_id = ingredient.id
+    vat_rate = db_session.scalar(select(VatRateModel).where(VatRateModel.code == "HU_27"))
+    assert vat_rate is not None
 
     created_product_id = None
     try:
@@ -57,6 +65,7 @@ def test_catalog_creates_product_with_recipe_and_updates_ingredient_stock(
                 "business_unit_id": str(test_business_unit.id),
                 "category_id": str(category.id),
                 "sales_uom_id": str(pcs_unit_of_measure.id),
+                "default_vat_rate_id": str(vat_rate.id),
                 "sku": "CAT-TEST-001",
                 "name": "Catalog Test Cake",
                 "product_type": "finished_good",
@@ -83,16 +92,31 @@ def test_catalog_creates_product_with_recipe_and_updates_ingredient_stock(
         payload = response.json()
         created_product_id = payload["id"]
         assert payload["has_recipe"] is True
+        assert payload["default_vat_rate_id"] == str(vat_rate.id)
+        assert payload["vat_rate_name"] == "27% AFA"
         assert Decimal(payload["estimated_unit_cost"]) == Decimal("24")
         assert Decimal(payload["estimated_margin_amount"]) == Decimal("966")
         assert payload["ingredients"][0]["name"] == "Catalog Test Flour"
 
+        ingredient_list_response = client.get(
+            f"{API_PREFIX}/ingredients",
+            params={"business_unit_id": str(test_business_unit.id)},
+        )
+        assert ingredient_list_response.status_code == 200
+        ingredient_list_payload = ingredient_list_response.json()
+        ingredient_row = next(
+                item for item in ingredient_list_payload if item["id"] == str(ingredient_id)
+        )
+        assert ingredient_row["default_unit_cost_source_type"] == "supplier_invoice_line"
+        assert ingredient_row["default_unit_cost_last_seen_at"].startswith("2026-04-24T")
+
         ingredient_response = client.patch(
-            f"{API_PREFIX}/ingredients/{ingredient.id}",
+            f"{API_PREFIX}/ingredients/{ingredient_id}",
             json={
                 "name": "Catalog Test Flour",
                 "item_type": "raw_material",
                 "uom_id": str(pcs_unit_of_measure.id),
+                "default_vat_rate_id": str(vat_rate.id),
                 "track_stock": True,
                 "default_unit_cost": "140",
                 "estimated_stock_quantity": "75",
@@ -102,7 +126,11 @@ def test_catalog_creates_product_with_recipe_and_updates_ingredient_stock(
 
         assert ingredient_response.status_code == 200
         ingredient_payload = ingredient_response.json()
+        assert ingredient_payload["default_vat_rate_id"] == str(vat_rate.id)
+        assert ingredient_payload["vat_rate_name"] == "27% AFA"
         assert Decimal(ingredient_payload["default_unit_cost"]) == Decimal("140")
+        assert ingredient_payload["default_unit_cost_source_type"] == "manual"
+        assert ingredient_payload["default_unit_cost_source_id"] is None
         assert Decimal(ingredient_payload["estimated_stock_quantity"]) == Decimal("75")
 
         delete_product_response = client.delete(
@@ -133,7 +161,7 @@ def test_catalog_creates_product_with_recipe_and_updates_ingredient_stock(
         ]
 
         delete_ingredient_response = client.delete(
-            f"{API_PREFIX}/ingredients/{ingredient.id}"
+            f"{API_PREFIX}/ingredients/{ingredient_id}"
         )
         assert delete_ingredient_response.status_code == 200
         assert delete_ingredient_response.json()["is_active"] is False
@@ -168,6 +196,6 @@ def test_catalog_creates_product_with_recipe_and_updates_ingredient_stock(
                 )
                 db_session.execute(delete(RecipeModel).where(RecipeModel.id.in_(recipe_ids)))
             db_session.execute(delete(ProductModel).where(ProductModel.id == created_product_id))
-        db_session.execute(delete(InventoryItemModel).where(InventoryItemModel.id == ingredient.id))
-        db_session.execute(delete(CategoryModel).where(CategoryModel.id == category.id))
+        db_session.execute(delete(InventoryItemModel).where(InventoryItemModel.id == ingredient_id))
+        db_session.execute(delete(CategoryModel).where(CategoryModel.id == category_id))
         db_session.commit()

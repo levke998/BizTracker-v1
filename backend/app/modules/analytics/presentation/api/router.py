@@ -46,6 +46,9 @@ router = APIRouter(prefix="/analytics", tags=["analytics"])
 
 DashboardScope = Literal["overall", "flow", "gourmand"]
 DashboardPeriodPreset = Literal[
+    "last_1_hour",
+    "last_6_hours",
+    "last_12_hours",
     "today",
     "week",
     "month",

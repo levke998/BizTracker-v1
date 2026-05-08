@@ -26,6 +26,17 @@ function formatDateTime(value: string | null) {
   }).format(new Date(value));
 }
 
+function formatMovementType(value: string) {
+  const labels: Record<string, string> = {
+    purchase: "Beszerzés",
+    adjustment: "Korrekció",
+    waste: "Selejt",
+    initial_stock: "Nyitókészlet",
+  };
+
+  return labels[value] ?? value;
+}
+
 const INITIAL_FORM_STATE: MovementFormState = {
   inventory_item_id: "",
   movement_type: "purchase",
@@ -84,13 +95,13 @@ export function InventoryMovementsPage() {
   const handleCreate = async () => {
     if (!selectedBusinessUnitId) {
       setActionMessage("");
-      setActionErrorMessage("Select a business unit before creating a movement.");
+      setActionErrorMessage("Válassz vállalkozást a készletmozgás rögzítése előtt.");
       return;
     }
 
     if (!selectedInventoryItem) {
       setActionMessage("");
-      setActionErrorMessage("Select an inventory item before creating a movement.");
+      setActionErrorMessage("Válassz készletelemet a mozgás rögzítése előtt.");
       return;
     }
 
@@ -112,14 +123,14 @@ export function InventoryMovementsPage() {
     if (requiresUnitCost && createForm.unit_cost.trim()) {
       payload.unit_cost = createForm.unit_cost.trim();
     } else if (requiresUnitCost && !createForm.unit_cost.trim()) {
-      setActionErrorMessage("Unit cost is required for purchase movements.");
+      setActionErrorMessage("Beszerzési mozgásnál kötelező az egységköltség.");
       return;
     }
 
     try {
       await createMovement(payload);
       setActionMessage(
-        `Inventory movement for "${selectedInventoryItem.name}" created successfully.`
+        `"${selectedInventoryItem.name}" készletmozgása rögzítve.`
       );
       setCreateForm((current) => ({
         ...INITIAL_FORM_STATE,
@@ -127,7 +138,7 @@ export function InventoryMovementsPage() {
       }));
     } catch (error) {
       setActionErrorMessage(
-        error instanceof Error ? error.message : "Failed to create inventory movement."
+        error instanceof Error ? error.message : "Nem sikerült rögzíteni a készletmozgást."
       );
     }
   };
@@ -136,21 +147,21 @@ export function InventoryMovementsPage() {
     <section className="page-section">
       <div className="panel">
         <div className="panel-header">
-          <h2>Inventory Movements</h2>
+          <h2>Készletmozgások</h2>
           <span className="panel-count">{movements.length}</span>
         </div>
 
         <div className="form-grid inventory-filter-grid">
           <label className="field">
-            <span>Business unit</span>
+            <span>Vállalkozás</span>
             <select
               value={selectedBusinessUnitId}
               onChange={(event) => setSelectedBusinessUnitId(event.target.value)}
               className="field-input"
             >
-              <option value="">Select a business unit</option>
+              <option value="">Válassz vállalkozást</option>
               {primaryBusinessUnits.length > 0 ? (
-                <optgroup label="Business units">
+                <optgroup label="Vállalkozások">
                   {primaryBusinessUnits.map((businessUnit) => (
                     <option key={businessUnit.id} value={businessUnit.id}>
                       {businessUnit.name}
@@ -159,7 +170,7 @@ export function InventoryMovementsPage() {
                 </optgroup>
               ) : null}
               {technicalBusinessUnits.length > 0 ? (
-                <optgroup label="Technical">
+                <optgroup label="Technikai">
                   {technicalBusinessUnits.map((businessUnit) => (
                     <option key={businessUnit.id} value={businessUnit.id}>
                       {businessUnit.name} ({businessUnit.code})
@@ -171,22 +182,22 @@ export function InventoryMovementsPage() {
           </label>
 
           <label className="field">
-            <span>Movement type</span>
+            <span>Mozgástípus</span>
             <select
               value={selectedMovementType}
               onChange={(event) => setSelectedMovementType(event.target.value)}
               className="field-input"
             >
-              <option value="">All movement types</option>
-              <option value="purchase">purchase</option>
-              <option value="adjustment">adjustment</option>
-              <option value="waste">waste</option>
-              <option value="initial_stock">initial_stock</option>
+              <option value="">Minden mozgástípus</option>
+              <option value="purchase">Beszerzés</option>
+              <option value="adjustment">Korrekció</option>
+              <option value="waste">Selejt</option>
+              <option value="initial_stock">Nyitókészlet</option>
             </select>
           </label>
 
           <label className="field">
-            <span>Limit</span>
+            <span>Megjelenített sorok</span>
             <select
               value={String(limit)}
               onChange={(event) => setLimit(Number(event.target.value))}
@@ -203,18 +214,18 @@ export function InventoryMovementsPage() {
         {actionMessage ? <p className="success-message">{actionMessage}</p> : null}
         {actionErrorMessage ? <p className="error-message">{actionErrorMessage}</p> : null}
         {errorMessage ? <p className="error-message">{errorMessage}</p> : null}
-        {isLoading ? <p className="info-message">Loading inventory movements...</p> : null}
+        {isLoading ? <p className="info-message">Készletmozgások betöltése...</p> : null}
       </div>
 
       <section className="panel">
         <div className="panel-header">
-          <h2>Create movement</h2>
-          <span className="panel-count">New</span>
+          <h2>Új készletmozgás</h2>
+          <span className="panel-count">Új</span>
         </div>
 
         <div className="form-grid inventory-movement-create-grid">
           <label className="field">
-            <span>Inventory item</span>
+            <span>Készletelem</span>
             <select
               value={createForm.inventory_item_id}
               onChange={(event) =>
@@ -234,7 +245,7 @@ export function InventoryMovementsPage() {
           </label>
 
           <label className="field">
-            <span>Movement type</span>
+            <span>Mozgástípus</span>
             <select
               value={createForm.movement_type}
               onChange={(event) =>
@@ -245,39 +256,39 @@ export function InventoryMovementsPage() {
               }
               className="field-input"
             >
-              <option value="purchase">purchase</option>
-              <option value="adjustment">adjustment</option>
-              <option value="waste">waste</option>
-              <option value="initial_stock">initial_stock</option>
+              <option value="purchase">Beszerzés</option>
+              <option value="adjustment">Korrekció</option>
+              <option value="waste">Selejt</option>
+              <option value="initial_stock">Nyitókészlet</option>
             </select>
           </label>
 
           <label className="field">
-            <span>Quantity</span>
+            <span>Mennyiség</span>
             <input
               value={createForm.quantity}
               onChange={(event) =>
                 setCreateForm((current) => ({ ...current, quantity: event.target.value }))
               }
               className="field-input"
-              placeholder="e.g. 12.500"
+              placeholder="pl. 12.500"
             />
           </label>
 
           <label className="field">
-            <span>Unit cost {requiresUnitCost ? "(required)" : "(optional)"}</span>
+            <span>Egységköltség {requiresUnitCost ? "(kötelező)" : "(opcionális)"}</span>
             <input
               value={createForm.unit_cost}
               onChange={(event) =>
                 setCreateForm((current) => ({ ...current, unit_cost: event.target.value }))
               }
               className="field-input"
-              placeholder="e.g. 435.50"
+              placeholder="pl. 435.50"
             />
           </label>
 
           <label className="field">
-            <span>Occurred at</span>
+            <span>Időpont</span>
             <input
               type="datetime-local"
               value={createForm.occurred_at}
@@ -292,21 +303,21 @@ export function InventoryMovementsPage() {
           </label>
 
           <label className="field inventory-movement-uom-field">
-            <span>UOM</span>
+            <span>Egység</span>
             <div className="field-input field-readonly">
               {selectedInventoryItem?.uom_id ?? "-"}
             </div>
           </label>
 
           <label className="field inventory-movement-note-field">
-            <span>Note</span>
+            <span>Megjegyzés</span>
             <input
               value={createForm.note}
               onChange={(event) =>
                 setCreateForm((current) => ({ ...current, note: event.target.value }))
               }
               className="field-input"
-              placeholder="Optional note"
+              placeholder="Opcionális megjegyzés"
             />
           </label>
         </div>
@@ -324,20 +335,20 @@ export function InventoryMovementsPage() {
               (requiresUnitCost && !createForm.unit_cost.trim())
             }
           >
-            Create movement
+            Mozgás rögzítése
           </button>
         </div>
       </section>
 
       <section className="panel">
         <div className="panel-header">
-          <h2>Movement log</h2>
+          <h2>Mozgásnapló</h2>
           <span className="panel-count">{movements.length}</span>
         </div>
 
         {!isLoading && movements.length === 0 ? (
           <p className="empty-message">
-            No inventory movements found for the selected filters.
+            Nincs készletmozgás a kiválasztott szűrőkkel.
           </p>
         ) : null}
 
@@ -346,21 +357,21 @@ export function InventoryMovementsPage() {
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Occurred at</th>
-                  <th>Movement type</th>
-                  <th>Quantity</th>
-                  <th>Unit cost</th>
-                  <th>Item ID</th>
-                  <th>UOM ID</th>
-                  <th>Note</th>
-                  <th>Created at</th>
+                  <th>Időpont</th>
+                  <th>Mozgástípus</th>
+                  <th>Mennyiség</th>
+                  <th>Egységköltség</th>
+                  <th>Tétel azonosító</th>
+                  <th>Egység azonosító</th>
+                  <th>Megjegyzés</th>
+                  <th>Létrehozva</th>
                 </tr>
               </thead>
               <tbody>
                 {movements.map((movement) => (
                   <tr key={movement.id}>
                     <td>{formatDateTime(movement.occurred_at)}</td>
-                    <td>{movement.movement_type}</td>
+                    <td>{formatMovementType(movement.movement_type)}</td>
                     <td>{movement.quantity}</td>
                     <td>{movement.unit_cost ?? "-"}</td>
                     <td>{movement.inventory_item_id}</td>

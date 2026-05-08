@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { listBusinessUnits } from "../../masterData/api/masterDataApi";
 import type { BusinessUnit } from "../../masterData/types/masterData";
@@ -139,7 +139,7 @@ export function useTransactions(): TransactionsState {
   }, [selectedBusinessUnitId, selectedTransactionType, selectedSourceType, limit]);
 
   const { primary: primaryBusinessUnits, technical: technicalBusinessUnits } =
-    splitBusinessUnits(businessUnits);
+    useMemo(() => splitBusinessUnits(businessUnits), [businessUnits]);
 
   return {
     businessUnits,

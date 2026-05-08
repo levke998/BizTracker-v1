@@ -21,6 +21,19 @@ export type UnitOfMeasure = {
   symbol: string | null;
 };
 
+export type VatRate = {
+  id: string;
+  code: string;
+  name: string;
+  rate_percent: string;
+  rate_type: string;
+  nav_code: string | null;
+  description: string | null;
+  valid_from: string | null;
+  valid_to: string | null;
+  is_active: boolean;
+};
+
 export type Category = {
   id: string;
   business_unit_id: string;
@@ -34,10 +47,13 @@ export type Product = {
   business_unit_id: string;
   category_id: string | null;
   sales_uom_id: string | null;
+  default_vat_rate_id: string | null;
   sku: string | null;
   name: string;
   product_type: string;
   sale_price_gross: string | null;
+  sale_price_last_seen_at: string | null;
+  sale_price_source: string | null;
   default_unit_cost: string | null;
   currency: string;
   is_active: boolean;

@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from fastapi.testclient import TestClient
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
+from app.main import app
 from app.modules.finance.infrastructure.orm.transaction_model import (
     FinancialTransactionModel,
 )
@@ -33,8 +36,67 @@ from app.modules.production.infrastructure.orm.recipe_model import (
     RecipeModel,
     RecipeVersionModel,
 )
+from app.modules.weather.application.commands.sync_shared_weather import (
+    SHARED_WEATHER_LOCATION_NAME,
+)
+from app.modules.weather.application.services.weather_provider import (
+    FetchedWeatherObservation,
+)
+from app.modules.weather.infrastructure.orm.weather_model import (
+    WeatherLocationModel,
+    WeatherObservationHourlyModel,
+)
+from app.modules.weather.presentation.dependencies import get_weather_provider
 
 API_PREFIX = "/api/v1/demo-pos"
+POS_INGESTION_API_PREFIX = "/api/v1/pos-ingestion"
+
+
+class FakeWeatherProvider:
+    """Deterministic provider for POS ingestion weather trigger tests."""
+
+    provider_name = "open_meteo"
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def fetch_hourly(
+        self,
+        *,
+        latitude: Decimal,
+        longitude: Decimal,
+        timezone_name: str,
+        start_date: date,
+        end_date: date,
+    ) -> list[FetchedWeatherObservation]:
+        self.calls += 1
+        zone = ZoneInfo(timezone_name)
+        current = datetime.combine(start_date, time.min, tzinfo=zone)
+        end = datetime.combine(end_date, time(hour=23), tzinfo=zone)
+        observations: list[FetchedWeatherObservation] = []
+        while current <= end:
+            observations.append(
+                FetchedWeatherObservation(
+                    observed_at=current.astimezone(timezone.utc),
+                    provider=self.provider_name,
+                    provider_model="pos-ingestion-weather-test",
+                    weather_code=1,
+                    weather_condition="napos",
+                    temperature_c=Decimal("22"),
+                    apparent_temperature_c=Decimal("23"),
+                    relative_humidity_percent=Decimal("50"),
+                    precipitation_mm=Decimal("0"),
+                    rain_mm=Decimal("0"),
+                    snowfall_cm=Decimal("0"),
+                    cloud_cover_percent=Decimal("20"),
+                    wind_speed_kmh=Decimal("8"),
+                    wind_gust_kmh=Decimal("12"),
+                    pressure_hpa=Decimal("1014"),
+                    source_payload={"pos_ingestion_test": True},
+                )
+            )
+            current += timedelta(hours=1)
+        return observations
 
 
 def test_demo_pos_creates_import_rows_and_finance_transactions(
@@ -71,7 +133,7 @@ def test_demo_pos_creates_import_rows_and_finance_transactions(
                 "business_unit_id": str(test_business_unit.id),
                 "receipt_no": receipt_no,
                 "payment_method": "card",
-                "occurred_at": "2026-04-24T14:20:00+02:00",
+                "occurred_at": "2024-04-24T14:20:00+02:00",
                 "lines": [
                     {
                         "product_id": str(product.id),
@@ -130,7 +192,7 @@ def test_demo_pos_creates_import_rows_and_finance_transactions(
                 "business_unit_id": str(test_business_unit.id),
                 "receipt_no": receipt_no,
                 "payment_method": "card",
-                "occurred_at": "2026-04-24T14:20:00+02:00",
+                "occurred_at": "2024-04-24T14:20:00+02:00",
                 "lines": [
                     {
                         "product_id": str(product.id),
@@ -150,6 +212,98 @@ def test_demo_pos_creates_import_rows_and_finance_transactions(
         )
         assert transaction_count == 1
     finally:
+        row_ids = [
+            row_id
+            for row_id, in db_session.execute(
+                select(ImportRowModel.id)
+                .join(ImportBatchModel, ImportRowModel.batch_id == ImportBatchModel.id)
+                .where(ImportBatchModel.business_unit_id == test_business_unit.id)
+            ).all()
+        ]
+        if row_ids:
+            db_session.execute(
+                delete(FinancialTransactionModel).where(
+                    FinancialTransactionModel.source_id.in_(row_ids)
+                )
+            )
+        db_session.execute(
+            delete(ImportBatchModel).where(
+                ImportBatchModel.business_unit_id == test_business_unit.id
+            )
+        )
+        db_session.execute(delete(ProductModel).where(ProductModel.id == product.id))
+        db_session.execute(delete(CategoryModel).where(CategoryModel.id == category.id))
+        db_session.commit()
+
+
+def test_pos_ingestion_receipt_starts_best_effort_weather_coverage(
+    client: TestClient,
+    db_session: Session,
+    test_business_unit: BusinessUnitModel,
+) -> None:
+    category = CategoryModel(
+        business_unit_id=test_business_unit.id,
+        name="POS Weather Category",
+        is_active=True,
+    )
+    product = ProductModel(
+        business_unit_id=test_business_unit.id,
+        category_id=category.id,
+        sku="TEST-POS-WEATHER-001",
+        name="POS Weather Product",
+        product_type="beverage",
+        sale_price_gross=Decimal("900"),
+        default_unit_cost=Decimal("300"),
+        currency="HUF",
+        is_active=True,
+    )
+    db_session.add_all([category, product])
+    db_session.commit()
+    provider = FakeWeatherProvider()
+    app.dependency_overrides[get_weather_provider] = lambda: provider
+
+    try:
+        response = client.post(
+            f"{POS_INGESTION_API_PREFIX}/receipts",
+            json={
+                "business_unit_id": str(test_business_unit.id),
+                "receipt_no": "TEST-POS-WEATHER-001",
+                "payment_method": "card",
+                "occurred_at": "2024-04-24T14:20:00+02:00",
+                "lines": [{"product_id": str(product.id), "quantity": 1}],
+            },
+        )
+
+        assert response.status_code == 201
+        assert response.json()["transaction_count"] == 1
+        db_session.expire_all()
+        weather_location = db_session.scalar(
+            select(WeatherLocationModel).where(
+                WeatherLocationModel.name == SHARED_WEATHER_LOCATION_NAME
+            )
+        )
+        assert weather_location is not None
+        observation_count = db_session.scalar(
+            select(func.count())
+            .select_from(WeatherObservationHourlyModel)
+            .where(
+                WeatherObservationHourlyModel.weather_location_id == weather_location.id
+            )
+            .where(
+                WeatherObservationHourlyModel.provider_model
+                == "pos-ingestion-weather-test"
+            )
+        )
+        assert observation_count and observation_count > 0
+        assert provider.calls <= 1
+    finally:
+        app.dependency_overrides.clear()
+        db_session.execute(
+            delete(WeatherObservationHourlyModel).where(
+                WeatherObservationHourlyModel.provider_model
+                == "pos-ingestion-weather-test"
+            )
+        )
         row_ids = [
             row_id
             for row_id, in db_session.execute(

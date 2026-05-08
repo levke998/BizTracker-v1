@@ -183,3 +183,67 @@ def test_duplicate_pos_sales_csv_does_not_create_duplicate_transactions(
         .where(FinancialTransactionModel.business_unit_id == test_business_unit.id)
     )
     assert count == 4
+
+
+def test_gourmand_file_set_maps_to_finance_and_skips_reimport_duplicates(
+    client: TestClient,
+    db_session: Session,
+    imports_fixtures_dir: Path,
+    test_business_unit: BusinessUnitModel,
+) -> None:
+    def upload_gourmand_file_set() -> str:
+        files = []
+        file_objects = []
+        for fixture_name in (
+            "gourmand_summary_0412_0427.csv",
+            "gourmand_detail_0412_0419.csv",
+            "gourmand_detail_0420_0427.csv",
+        ):
+            file_path = imports_fixtures_dir / fixture_name
+            file_object = file_path.open("rb")
+            file_objects.append(file_object)
+            files.append(("files", (file_path.name, file_object, "text/csv")))
+
+        try:
+            upload_response = client.post(
+                f"{IMPORTS_API_PREFIX}/file-set",
+                data={
+                    "business_unit_id": str(test_business_unit.id),
+                    "import_type": "gourmand_pos_sales",
+                },
+                files=files,
+            )
+        finally:
+            for file_object in file_objects:
+                file_object.close()
+
+        assert upload_response.status_code == 201
+        batch_id = upload_response.json()["id"]
+        parse_response = client.post(f"{IMPORTS_API_PREFIX}/batches/{batch_id}/parse")
+        assert parse_response.status_code == 200
+        return batch_id
+
+    first_batch_id = upload_gourmand_file_set()
+    first_mapping_response = client.post(
+        f"{IMPORTS_API_PREFIX}/batches/{first_batch_id}/map/financial-transactions"
+    )
+    assert first_mapping_response.status_code == 200
+    assert first_mapping_response.json()["created_transactions"] == 4
+
+    second_batch_id = upload_gourmand_file_set()
+    second_mapping_response = client.post(
+        f"{IMPORTS_API_PREFIX}/batches/{second_batch_id}/map/financial-transactions"
+    )
+    assert second_mapping_response.status_code == 200
+    assert second_mapping_response.json()["created_transactions"] == 0
+
+    db_session.expire_all()
+    transactions = db_session.scalars(
+        select(FinancialTransactionModel)
+        .where(FinancialTransactionModel.business_unit_id == test_business_unit.id)
+        .order_by(FinancialTransactionModel.occurred_at.asc())
+    ).all()
+    assert len(transactions) == 4
+    assert transactions[0].amount == Decimal("1200")
+    assert transactions[0].occurred_at.isoformat() == "2026-04-12T10:07:00+02:00"
+    assert transactions[0].description == "Fagylalt (GOURMAND-20260412-1007-gourmandcuki)"

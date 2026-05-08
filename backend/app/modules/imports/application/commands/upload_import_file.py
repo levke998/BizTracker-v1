@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
 from fastapi import UploadFile
 
-from app.modules.imports.domain.entities.import_batch import ImportBatch
+from app.modules.imports.domain.entities.import_batch import ImportBatch, NewImportFile
 from app.modules.imports.domain.repositories.import_batch_repository import (
     ImportBatchRepository,
 )
@@ -57,4 +58,26 @@ class UploadImportFileCommand:
             stored_path=stored_file.stored_path,
             mime_type=stored_file.mime_type,
             size_bytes=stored_file.size_bytes,
+        )
+
+    def execute_many(
+        self,
+        *,
+        business_unit_id: uuid.UUID,
+        import_type: str,
+        uploads: Sequence[UploadFile],
+    ) -> ImportBatch:
+        stored_files = [self._storage.store(upload) for upload in uploads]
+        return self._repository.create_uploaded_batch_with_files(
+            business_unit_id=business_unit_id,
+            import_type=import_type,
+            files=[
+                NewImportFile(
+                    original_name=file.original_name,
+                    stored_path=file.stored_path,
+                    mime_type=file.mime_type,
+                    size_bytes=file.size_bytes,
+                )
+                for file in stored_files
+            ],
         )

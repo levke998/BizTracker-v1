@@ -73,6 +73,33 @@ def upload_import_file(
     return ImportBatchResponse.model_validate(batch)
 
 
+@router.post(
+    "/file-set",
+    response_model=ImportBatchResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def upload_import_file_set(
+    business_unit_id: Annotated[uuid.UUID, Form(...)],
+    import_type: Annotated[str, Form(...)],
+    files: Annotated[list[UploadFile], File(...)],
+    command: Annotated[UploadImportFileCommand, Depends(get_upload_import_file_command)],
+) -> ImportBatchResponse:
+    """Accept multiple files that belong to one logical import batch."""
+
+    if not files:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="At least one import file must be uploaded.",
+        )
+
+    batch = command.execute_many(
+        business_unit_id=business_unit_id,
+        import_type=import_type,
+        uploads=files,
+    )
+    return ImportBatchResponse.model_validate(batch)
+
+
 @router.get("/batches", response_model=list[ImportBatchResponse])
 def list_import_batches(
     query: Annotated[ListImportBatchesQuery, Depends(get_list_import_batches_query)],

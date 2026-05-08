@@ -11,6 +11,9 @@ from app.db.session import get_db_session
 from app.modules.inventory.application.commands.create_inventory_movement import (
     CreateInventoryMovementCommand,
 )
+from app.modules.inventory.application.commands.register_physical_stock_count import (
+    RegisterPhysicalStockCountCommand,
+)
 from app.modules.inventory.application.commands.archive_inventory_item import (
     ArchiveInventoryItemCommand,
 )
@@ -20,8 +23,17 @@ from app.modules.inventory.application.commands.create_inventory_item import (
 from app.modules.inventory.application.commands.update_inventory_item import (
     UpdateInventoryItemCommand,
 )
+from app.modules.inventory.application.commands.upsert_variance_threshold import (
+    UpsertInventoryVarianceThresholdCommand,
+)
 from app.modules.inventory.application.queries.list_inventory_items import (
     ListInventoryItemsQuery,
+)
+from app.modules.inventory.application.queries.get_variance_period_comparison import (
+    GetInventoryVariancePeriodComparisonQuery,
+)
+from app.modules.inventory.application.queries.get_variance_threshold import (
+    GetInventoryVarianceThresholdQuery,
 )
 from app.modules.inventory.application.queries.list_estimated_consumption import (
     ListEstimatedConsumptionAuditQuery,
@@ -34,6 +46,15 @@ from app.modules.inventory.application.queries.list_stock_levels import (
 )
 from app.modules.inventory.application.queries.list_theoretical_stock import (
     ListInventoryTheoreticalStockQuery,
+)
+from app.modules.inventory.application.queries.list_variance_reason_summary import (
+    ListInventoryVarianceReasonSummaryQuery,
+)
+from app.modules.inventory.application.queries.list_variance_trend import (
+    ListInventoryVarianceTrendQuery,
+)
+from app.modules.inventory.application.queries.list_variance_item_summary import (
+    ListInventoryVarianceItemSummaryQuery,
 )
 from app.modules.inventory.infrastructure.repositories.sqlalchemy_inventory_item_repository import (
     SqlAlchemyInventoryItemRepository,
@@ -85,6 +106,60 @@ def get_list_inventory_theoretical_stock_query(
     return ListInventoryTheoreticalStockQuery(repository=repository)
 
 
+def get_list_inventory_variance_reason_summary_query(
+    session: DbSession,
+) -> ListInventoryVarianceReasonSummaryQuery:
+    """Wire the variance reason summary query to its repository."""
+
+    repository = SqlAlchemyInventoryItemRepository(session)
+    return ListInventoryVarianceReasonSummaryQuery(repository=repository)
+
+
+def get_list_inventory_variance_trend_query(
+    session: DbSession,
+) -> ListInventoryVarianceTrendQuery:
+    """Wire the variance trend query to its repository."""
+
+    repository = SqlAlchemyInventoryItemRepository(session)
+    return ListInventoryVarianceTrendQuery(repository=repository)
+
+
+def get_list_inventory_variance_item_summary_query(
+    session: DbSession,
+) -> ListInventoryVarianceItemSummaryQuery:
+    """Wire the variance item summary query to its repository."""
+
+    repository = SqlAlchemyInventoryItemRepository(session)
+    return ListInventoryVarianceItemSummaryQuery(repository=repository)
+
+
+def get_inventory_variance_period_comparison_query(
+    session: DbSession,
+) -> GetInventoryVariancePeriodComparisonQuery:
+    """Wire the variance period comparison query to its repository."""
+
+    repository = SqlAlchemyInventoryItemRepository(session)
+    return GetInventoryVariancePeriodComparisonQuery(repository=repository)
+
+
+def get_inventory_variance_threshold_query(
+    session: DbSession,
+) -> GetInventoryVarianceThresholdQuery:
+    """Wire the variance threshold query to its repository."""
+
+    repository = SqlAlchemyInventoryItemRepository(session)
+    return GetInventoryVarianceThresholdQuery(repository=repository)
+
+
+def get_upsert_inventory_variance_threshold_command(
+    session: DbSession,
+) -> UpsertInventoryVarianceThresholdCommand:
+    """Wire the variance threshold upsert command to its repository."""
+
+    repository = SqlAlchemyInventoryItemRepository(session)
+    return UpsertInventoryVarianceThresholdCommand(repository=repository)
+
+
 def get_create_inventory_item_command(session: DbSession) -> CreateInventoryItemCommand:
     """Wire the inventory create command to its repository."""
 
@@ -113,3 +188,12 @@ def get_create_inventory_movement_command(
 
     repository = SqlAlchemyInventoryItemRepository(session)
     return CreateInventoryMovementCommand(repository=repository)
+
+
+def get_register_physical_stock_count_command(
+    session: DbSession,
+) -> RegisterPhysicalStockCountCommand:
+    """Wire the physical stock count command to its repository."""
+
+    repository = SqlAlchemyInventoryItemRepository(session)
+    return RegisterPhysicalStockCountCommand(repository=repository)

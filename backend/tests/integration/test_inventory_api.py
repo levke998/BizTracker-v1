@@ -5,7 +5,12 @@ from __future__ import annotations
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
+from sqlalchemy import delete
+from sqlalchemy.orm import Session
 
+from app.modules.inventory.infrastructure.orm.inventory_item_model import (
+    InventoryItemModel,
+)
 from app.modules.master_data.infrastructure.orm.business_unit_model import (
     BusinessUnitModel,
 )
@@ -104,36 +109,43 @@ def test_create_inventory_item_rejects_duplicate_name_in_same_business_unit(
 
 def test_create_inventory_item_allows_same_name_in_different_business_units(
     client: TestClient,
+    db_session: Session,
     test_business_unit: BusinessUnitModel,
     gourmand_business_unit: BusinessUnitModel,
     pcs_unit_of_measure: UnitOfMeasureModel,
 ) -> None:
     shared_name = f"Reusable Demo Item {uuid4().hex[:8]}"
 
-    first_response = client.post(
-        f"{API_PREFIX}/items",
-        json={
-            "business_unit_id": str(test_business_unit.id),
-            "name": shared_name,
-            "item_type": "finished_good",
-            "uom_id": str(pcs_unit_of_measure.id),
-            "track_stock": True,
-        },
-    )
-    second_response = client.post(
-        f"{API_PREFIX}/items",
-        json={
-            "business_unit_id": str(gourmand_business_unit.id),
-            "name": shared_name,
-            "item_type": "finished_good",
-            "uom_id": str(pcs_unit_of_measure.id),
-            "track_stock": True,
-        },
-    )
+    try:
+        first_response = client.post(
+            f"{API_PREFIX}/items",
+            json={
+                "business_unit_id": str(test_business_unit.id),
+                "name": shared_name,
+                "item_type": "finished_good",
+                "uom_id": str(pcs_unit_of_measure.id),
+                "track_stock": True,
+            },
+        )
+        second_response = client.post(
+            f"{API_PREFIX}/items",
+            json={
+                "business_unit_id": str(gourmand_business_unit.id),
+                "name": shared_name,
+                "item_type": "finished_good",
+                "uom_id": str(pcs_unit_of_measure.id),
+                "track_stock": True,
+            },
+        )
 
-    assert first_response.status_code == 201
-    assert second_response.status_code == 201
-    assert first_response.json()["business_unit_id"] != second_response.json()["business_unit_id"]
+        assert first_response.status_code == 201
+        assert second_response.status_code == 201
+        assert first_response.json()["business_unit_id"] != second_response.json()["business_unit_id"]
+    finally:
+        db_session.execute(
+            delete(InventoryItemModel).where(InventoryItemModel.name == shared_name)
+        )
+        db_session.commit()
 
 
 def test_update_inventory_item_succeeds(

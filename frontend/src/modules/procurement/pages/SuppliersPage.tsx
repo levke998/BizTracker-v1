@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
-import type { SupplierCreatePayload } from "../types/procurement";
+import { useTopbarControls } from "../../../shared/components/layout/TopbarControlsContext";
+import type { BusinessUnit } from "../../masterData/types/masterData";
+import type { Supplier, SupplierCreatePayload } from "../types/procurement";
 import { useSuppliers } from "../hooks/useSuppliers";
 
 type SupplierFormState = {
@@ -23,6 +25,14 @@ const INITIAL_FORM: SupplierFormState = {
   is_active: true,
 };
 
+const statusOptions = [
+  { value: "active", label: "Aktív" },
+  { value: "inactive", label: "Inaktív" },
+  { value: "all", label: "Összes" },
+];
+
+const limitOptions = [25, 50, 100, 200];
+
 function formatDateTime(value: string) {
   return new Intl.DateTimeFormat("hu-HU", {
     year: "numeric",
@@ -38,7 +48,95 @@ function toOptionalValue(value: string) {
   return trimmedValue.length > 0 ? trimmedValue : undefined;
 }
 
+function getActiveSuppliers(suppliers: Supplier[]) {
+  return suppliers.filter((supplier) => supplier.is_active).length;
+}
+
+function SuppliersHeaderControls({
+  primaryBusinessUnits,
+  technicalBusinessUnits,
+  selectedBusinessUnitId,
+  setSelectedBusinessUnitId,
+  selectedStatus,
+  setSelectedStatus,
+  limit,
+  setLimit,
+}: {
+  primaryBusinessUnits: BusinessUnit[];
+  technicalBusinessUnits: BusinessUnit[];
+  selectedBusinessUnitId: string;
+  setSelectedBusinessUnitId: (value: string) => void;
+  selectedStatus: string;
+  setSelectedStatus: (value: string) => void;
+  limit: number;
+  setLimit: (value: number) => void;
+}) {
+  return (
+    <div className="business-dashboard-filters topbar-dashboard-filters">
+      <label className="field topbar-field">
+        <span>Vállalkozás</span>
+        <select
+          value={selectedBusinessUnitId}
+          onChange={(event) => setSelectedBusinessUnitId(event.target.value)}
+          className="field-input"
+        >
+          <option value="">Válassz vállalkozást</option>
+          {primaryBusinessUnits.length > 0 ? (
+            <optgroup label="Vállalkozások">
+              {primaryBusinessUnits.map((businessUnit) => (
+                <option key={businessUnit.id} value={businessUnit.id}>
+                  {businessUnit.name}
+                </option>
+              ))}
+            </optgroup>
+          ) : null}
+          {technicalBusinessUnits.length > 0 ? (
+            <optgroup label="Technikai adatok">
+              {technicalBusinessUnits.map((businessUnit) => (
+                <option key={businessUnit.id} value={businessUnit.id}>
+                  {businessUnit.name} ({businessUnit.code})
+                </option>
+              ))}
+            </optgroup>
+          ) : null}
+        </select>
+      </label>
+
+      <label className="field topbar-field">
+        <span>Státusz</span>
+        <select
+          value={selectedStatus}
+          onChange={(event) => setSelectedStatus(event.target.value)}
+          className="field-input"
+        >
+          {statusOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <label className="field topbar-field topbar-field-compact">
+        <span>Találat</span>
+        <select
+          value={String(limit)}
+          onChange={(event) => setLimit(Number(event.target.value))}
+          className="field-input"
+        >
+          {limitOptions.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
+      </label>
+    </div>
+  );
+}
+
 export function SuppliersPage() {
+  const { setControls } = useTopbarControls();
   const {
     primaryBusinessUnits,
     technicalBusinessUnits,
@@ -58,11 +156,39 @@ export function SuppliersPage() {
   const [createForm, setCreateForm] = useState<SupplierFormState>(INITIAL_FORM);
   const [actionMessage, setActionMessage] = useState("");
   const [actionErrorMessage, setActionErrorMessage] = useState("");
+  const activeSuppliers = getActiveSuppliers(suppliers);
+
+  useEffect(() => {
+    setControls(
+      <SuppliersHeaderControls
+        primaryBusinessUnits={primaryBusinessUnits}
+        technicalBusinessUnits={technicalBusinessUnits}
+        selectedBusinessUnitId={selectedBusinessUnitId}
+        setSelectedBusinessUnitId={setSelectedBusinessUnitId}
+        selectedStatus={selectedStatus}
+        setSelectedStatus={setSelectedStatus}
+        limit={limit}
+        setLimit={setLimit}
+      />,
+    );
+
+    return () => setControls(null);
+  }, [
+    limit,
+    primaryBusinessUnits,
+    selectedBusinessUnitId,
+    selectedStatus,
+    setControls,
+    setLimit,
+    setSelectedBusinessUnitId,
+    setSelectedStatus,
+    technicalBusinessUnits,
+  ]);
 
   const handleCreate = async () => {
     if (!selectedBusinessUnitId) {
       setActionMessage("");
-      setActionErrorMessage("Select a business unit before creating a supplier.");
+      setActionErrorMessage("Beszállító létrehozásához válassz vállalkozást.");
       return;
     }
 
@@ -82,99 +208,52 @@ export function SuppliersPage() {
 
     try {
       await createSupplier(payload);
-      setActionMessage(`Supplier "${payload.name}" created successfully.`);
+      setActionMessage(`A(z) "${payload.name}" beszállító létrejött.`);
       setCreateForm({
         ...INITIAL_FORM,
         is_active: createForm.is_active,
       });
     } catch (error) {
       setActionErrorMessage(
-        error instanceof Error ? error.message : "Failed to create supplier."
+        error instanceof Error ? error.message : "Nem sikerült létrehozni a beszállítót."
       );
     }
   };
 
   return (
     <section className="page-section">
-      <section className="panel">
-        <div className="panel-header">
-          <h2>Suppliers</h2>
-          <span className="panel-count">{suppliers.length}</span>
-        </div>
+      {actionMessage ? <p className="success-message">{actionMessage}</p> : null}
+      {actionErrorMessage ? <p className="error-message">{actionErrorMessage}</p> : null}
+      {errorMessage ? <p className="error-message">{errorMessage}</p> : null}
+      {isLoading ? <p className="info-message">Beszállítók betöltése...</p> : null}
 
-        <div className="form-grid inventory-filter-grid">
-          <label className="field">
-            <span>Business unit</span>
-            <select
-              value={selectedBusinessUnitId}
-              onChange={(event) => setSelectedBusinessUnitId(event.target.value)}
-              className="field-input"
-            >
-              <option value="">Select a business unit</option>
-              {primaryBusinessUnits.length > 0 ? (
-                <optgroup label="Business units">
-                  {primaryBusinessUnits.map((businessUnit) => (
-                    <option key={businessUnit.id} value={businessUnit.id}>
-                      {businessUnit.name}
-                    </option>
-                  ))}
-                </optgroup>
-              ) : null}
-              {technicalBusinessUnits.length > 0 ? (
-                <optgroup label="Technical">
-                  {technicalBusinessUnits.map((businessUnit) => (
-                    <option key={businessUnit.id} value={businessUnit.id}>
-                      {businessUnit.name} ({businessUnit.code})
-                    </option>
-                  ))}
-                </optgroup>
-              ) : null}
-            </select>
-          </label>
-
-          <label className="field">
-            <span>Status</span>
-            <select
-              value={selectedStatus}
-              onChange={(event) => setSelectedStatus(event.target.value)}
-              className="field-input"
-            >
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
-              <option value="all">All</option>
-            </select>
-          </label>
-
-          <label className="field">
-            <span>Limit</span>
-            <select
-              value={String(limit)}
-              onChange={(event) => setLimit(Number(event.target.value))}
-              className="field-input"
-            >
-              <option value="25">25</option>
-              <option value="50">50</option>
-              <option value="100">100</option>
-              <option value="200">200</option>
-            </select>
-          </label>
-        </div>
-
-        {actionMessage ? <p className="success-message">{actionMessage}</p> : null}
-        {actionErrorMessage ? <p className="error-message">{actionErrorMessage}</p> : null}
-        {errorMessage ? <p className="error-message">{errorMessage}</p> : null}
-        {isLoading ? <p className="info-message">Loading suppliers...</p> : null}
-      </section>
+      <div className="finance-summary-grid">
+        <article className="finance-summary-card">
+          <span>Aktív beszállítók</span>
+          <strong>{activeSuppliers}</strong>
+        </article>
+        <article className="finance-summary-card">
+          <span>Találatok</span>
+          <strong>{suppliers.length}</strong>
+        </article>
+        <article className="finance-summary-card">
+          <span>Szűrés</span>
+          <strong>
+            {statusOptions.find((option) => option.value === selectedStatus)?.label ??
+              "Összes"}
+          </strong>
+        </article>
+      </div>
 
       <section className="panel">
         <div className="panel-header">
-          <h2>Create supplier</h2>
-          <span className="panel-count">New</span>
+          <h2>Új beszállító</h2>
+          <span className="panel-count">Új</span>
         </div>
 
         <div className="form-grid inventory-edit-grid">
           <label className="field">
-            <span>Name</span>
+            <span>Név</span>
             <input
               value={createForm.name}
               onChange={(event) =>
@@ -185,7 +264,7 @@ export function SuppliersPage() {
           </label>
 
           <label className="field">
-            <span>Tax ID</span>
+            <span>Adószám</span>
             <input
               value={createForm.tax_id}
               onChange={(event) =>
@@ -196,7 +275,7 @@ export function SuppliersPage() {
           </label>
 
           <label className="field">
-            <span>Contact name</span>
+            <span>Kapcsolattartó</span>
             <input
               value={createForm.contact_name}
               onChange={(event) =>
@@ -221,7 +300,7 @@ export function SuppliersPage() {
           </label>
 
           <label className="field">
-            <span>Phone</span>
+            <span>Telefon</span>
             <input
               value={createForm.phone}
               onChange={(event) =>
@@ -232,7 +311,7 @@ export function SuppliersPage() {
           </label>
 
           <label className="field">
-            <span>Notes</span>
+            <span>Megjegyzés</span>
             <textarea
               value={createForm.notes}
               onChange={(event) =>
@@ -244,7 +323,7 @@ export function SuppliersPage() {
           </label>
 
           <label className="field checkbox-field">
-            <span>Active</span>
+            <span>Aktív</span>
             <input
               type="checkbox"
               checked={createForm.is_active}
@@ -265,19 +344,19 @@ export function SuppliersPage() {
             onClick={handleCreate}
             disabled={isSaving || !selectedBusinessUnitId || !createForm.name.trim()}
           >
-            Create supplier
+            Beszállító létrehozása
           </button>
         </div>
       </section>
 
       <section className="panel">
         <div className="panel-header">
-          <h2>Supplier list</h2>
+          <h2>Beszállítók</h2>
           <span className="panel-count">{suppliers.length}</span>
         </div>
 
         {!isLoading && suppliers.length === 0 ? (
-          <p className="empty-message">No suppliers found for the selected filters.</p>
+          <p className="empty-message">Nincs beszállító a kiválasztott szűrőkkel.</p>
         ) : null}
 
         {suppliers.length > 0 ? (
@@ -285,13 +364,13 @@ export function SuppliersPage() {
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Name</th>
-                  <th>Tax ID</th>
-                  <th>Contact</th>
+                  <th>Név</th>
+                  <th>Adószám</th>
+                  <th>Kapcsolattartó</th>
                   <th>Email</th>
-                  <th>Phone</th>
-                  <th>Active</th>
-                  <th>Updated at</th>
+                  <th>Telefon</th>
+                  <th>Státusz</th>
+                  <th>Frissítve</th>
                 </tr>
               </thead>
               <tbody>
@@ -302,7 +381,17 @@ export function SuppliersPage() {
                     <td>{supplier.contact_name || "—"}</td>
                     <td>{supplier.email || "—"}</td>
                     <td>{supplier.phone || "—"}</td>
-                    <td>{supplier.is_active ? "Yes" : "No"}</td>
+                    <td>
+                      <span
+                        className={
+                          supplier.is_active
+                            ? "status-pill status-pill-success"
+                            : "status-pill"
+                        }
+                      >
+                        {supplier.is_active ? "Aktív" : "Inaktív"}
+                      </span>
+                    </td>
                     <td>{formatDateTime(supplier.updated_at)}</td>
                   </tr>
                 ))}

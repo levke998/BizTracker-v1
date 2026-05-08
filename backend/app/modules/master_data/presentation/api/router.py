@@ -22,12 +22,14 @@ from app.modules.master_data.application.queries.list_products import (
 from app.modules.master_data.application.queries.list_units_of_measure import (
     ListUnitsOfMeasureQuery,
 )
+from app.modules.master_data.application.queries.list_vat_rates import ListVatRatesQuery
 from app.modules.master_data.presentation.dependencies import (
     get_business_unit_query,
     get_category_query,
     get_location_query,
     get_product_query,
     get_unit_of_measure_query,
+    get_vat_rate_query,
 )
 from app.modules.master_data.presentation.schemas.business_unit import (
     BusinessUnitResponse,
@@ -38,6 +40,7 @@ from app.modules.master_data.presentation.schemas.product import ProductResponse
 from app.modules.master_data.presentation.schemas.unit_of_measure import (
     UnitOfMeasureResponse,
 )
+from app.modules.master_data.presentation.schemas.vat_rate import VatRateResponse
 
 router = APIRouter(prefix="/master-data", tags=["master-data"])
 
@@ -97,3 +100,14 @@ def list_units_of_measure(
 
     items = query.execute()
     return [UnitOfMeasureResponse.model_validate(item) for item in items]
+
+
+@router.get("/vat-rates", response_model=list[VatRateResponse])
+def list_vat_rates(
+    query: Annotated[ListVatRatesQuery, Depends(get_vat_rate_query)],
+    active_only: bool = Query(default=True),
+) -> list[VatRateResponse]:
+    """Return read-only VAT rates used for finance and costing."""
+
+    items = query.execute(active_only=active_only)
+    return [VatRateResponse.model_validate(item) for item in items]

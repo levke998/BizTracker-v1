@@ -39,6 +39,8 @@ class ImportBatchResponse(ImportSchemaBase):
     total_rows: int
     parsed_rows: int
     error_rows: int
+    first_occurred_at: str | None
+    last_occurred_at: str | None
     created_at: datetime
     updated_at: datetime
     files: list[ImportFileResponse]

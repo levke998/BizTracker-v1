@@ -18,6 +18,8 @@ export type ImportBatch = {
   total_rows: number;
   parsed_rows: number;
   error_rows: number;
+  first_occurred_at: string | null;
+  last_occurred_at: string | null;
   created_at: string;
   updated_at: string;
   files: ImportFile[];
@@ -40,5 +42,54 @@ export type ImportErrorPreview = {
 export type UploadImportFilePayload = {
   businessUnitId: string;
   importType: string;
-  file: File;
+  files: File[];
+};
+
+export type ImportBatchWeatherRecommendation = {
+  batch_id: string;
+  business_unit_id: string;
+  business_unit_code: string;
+  business_unit_name: string;
+  import_type: string;
+  status: string;
+  parsed_rows: number;
+  can_backfill: boolean;
+  reason: string | null;
+  first_sale_at: string | null;
+  last_sale_at: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  timezone_name: string;
+  suggested_location_name: string;
+  latitude: string;
+  longitude: string;
+  provider_name: string;
+  requested_hours: number;
+  cached_hours: number;
+  missing_hours: number;
+};
+
+export type ImportBatchWeatherBackfillResult = {
+  provider: string;
+  start_date: string;
+  end_date: string;
+  requested_hours: number;
+  created_count: number;
+  updated_count: number;
+  skipped_count: number;
+};
+
+export type ImportBatchWeatherCoverageResult = {
+  batch_id: string;
+  status: "covered" | "backfilled" | "skipped";
+  reason: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  requested_hours: number;
+  cached_hours: number;
+  missing_hours: number;
+  backfill_attempted: boolean;
+  created_count: number;
+  updated_count: number;
+  skipped_count: number;
 };

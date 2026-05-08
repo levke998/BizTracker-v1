@@ -15,10 +15,15 @@ export type CatalogProduct = {
   sales_uom_id: string | null;
   sales_uom_code: string | null;
   sales_uom_symbol: string | null;
+  default_vat_rate_id: string | null;
+  vat_rate_name: string | null;
+  vat_rate_percent: string | null;
   sku: string | null;
   name: string;
   product_type: string;
   sale_price_gross: string | null;
+  sale_price_last_seen_at: string | null;
+  sale_price_source: string | null;
   estimated_unit_cost: string | null;
   estimated_margin_amount: string | null;
   estimated_margin_percent: string | null;
@@ -39,7 +44,13 @@ export type CatalogIngredient = {
   uom_id: string;
   uom_code: string | null;
   uom_symbol: string | null;
+  default_vat_rate_id: string | null;
+  vat_rate_name: string | null;
+  vat_rate_percent: string | null;
   default_unit_cost: string | null;
+  default_unit_cost_last_seen_at: string | null;
+  default_unit_cost_source_type: string | null;
+  default_unit_cost_source_id: string | null;
   estimated_stock_quantity: string | null;
   used_by_product_count: number;
   track_stock: boolean;
@@ -63,6 +74,7 @@ export type CatalogProductPayload = {
   business_unit_id?: string;
   category_id: string | null;
   sales_uom_id: string | null;
+  default_vat_rate_id: string | null;
   sku: string | null;
   name: string;
   product_type: string;
@@ -78,6 +90,7 @@ export type CatalogIngredientPayload = {
   name: string;
   item_type: string;
   uom_id: string;
+  default_vat_rate_id: string | null;
   track_stock: boolean;
   default_unit_cost: string | null;
   estimated_stock_quantity: string | null;

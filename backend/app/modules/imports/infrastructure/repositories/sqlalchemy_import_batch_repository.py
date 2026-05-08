@@ -5,12 +5,13 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Select, select
+from sqlalchemy import Select, func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.modules.imports.domain.entities.import_batch import (
     ImportBatch,
     ImportFile,
+    NewImportFile,
     ImportRow,
     ImportRowError,
     NewImportRow,
@@ -40,6 +41,26 @@ class SqlAlchemyImportBatchRepository:
         mime_type: str | None,
         size_bytes: int,
     ) -> ImportBatch:
+        return self.create_uploaded_batch_with_files(
+            business_unit_id=business_unit_id,
+            import_type=import_type,
+            files=[
+                NewImportFile(
+                    original_name=original_name,
+                    stored_path=stored_path,
+                    mime_type=mime_type,
+                    size_bytes=size_bytes,
+                )
+            ],
+        )
+
+    def create_uploaded_batch_with_files(
+        self,
+        *,
+        business_unit_id: uuid.UUID,
+        import_type: str,
+        files: list[NewImportFile],
+    ) -> ImportBatch:
         try:
             batch = ImportBatchModel(
                 business_unit_id=business_unit_id,
@@ -49,14 +70,18 @@ class SqlAlchemyImportBatchRepository:
             self._session.add(batch)
             self._session.flush()
 
-            import_file = ImportFileModel(
-                batch_id=batch.id,
-                original_name=original_name,
-                stored_path=stored_path,
-                mime_type=mime_type,
-                size_bytes=size_bytes,
+            self._session.add_all(
+                [
+                    ImportFileModel(
+                        batch_id=batch.id,
+                        original_name=file.original_name,
+                        stored_path=file.stored_path,
+                        mime_type=file.mime_type,
+                        size_bytes=file.size_bytes,
+                    )
+                    for file in files
+                ]
             )
-            self._session.add(import_file)
             self._session.flush()
 
             self._session.refresh(batch)
@@ -273,6 +298,9 @@ class SqlAlchemyImportBatchRepository:
 
         return self.get_batch(batch_id)  # type: ignore[return-value]
 
+    def rollback(self) -> None:
+        self._session.rollback()
+
     def list_batches(
         self,
         *,
@@ -289,10 +317,64 @@ class SqlAlchemyImportBatchRepository:
             )
 
         items = self._session.scalars(statement).all()
-        return [self._to_entity(item) for item in items]
+        period_by_batch_id = self._period_by_batch_ids([item.id for item in items])
+        return [
+            self._to_entity(item, period=period_by_batch_id.get(item.id))
+            for item in items
+        ]
+
+    def _period_by_batch_ids(
+        self,
+        batch_ids: list[uuid.UUID],
+    ) -> dict[uuid.UUID, tuple[str | None, str | None]]:
+        if not batch_ids:
+            return {}
+
+        occurred_at = func.coalesce(
+            ImportRowModel.normalized_payload["occurred_at"].as_string(),
+            ImportRowModel.normalized_payload["date"].as_string(),
+        )
+        statement = (
+            select(
+                ImportRowModel.batch_id,
+                func.min(occurred_at),
+                func.max(occurred_at),
+            )
+            .where(
+                ImportRowModel.batch_id.in_(batch_ids),
+                ImportRowModel.parse_status == "parsed",
+                ImportRowModel.normalized_payload.is_not(None),
+            )
+            .group_by(ImportRowModel.batch_id)
+        )
+        return {
+            batch_id: (first_occurred_at, last_occurred_at)
+            for batch_id, first_occurred_at, last_occurred_at in self._session.execute(
+                statement
+            )
+        }
 
     @staticmethod
-    def _to_entity(model: ImportBatchModel) -> ImportBatch:
+    def _to_entity(
+        model: ImportBatchModel,
+        *,
+        period: tuple[str | None, str | None] | None = None,
+    ) -> ImportBatch:
+        rows = tuple(
+            ImportRow(
+                id=row.id,
+                batch_id=row.batch_id,
+                file_id=row.file_id,
+                row_number=row.row_number,
+                raw_payload=row.raw_payload,
+                normalized_payload=row.normalized_payload,
+                parse_status=row.parse_status,
+                created_at=row.created_at,
+            )
+            for row in getattr(model, "rows", [])
+        )
+        first_occurred_at, last_occurred_at = period or _period_from_rows(rows)
+
         return ImportBatch(
             id=model.id,
             business_unit_id=model.business_unit_id,
@@ -303,6 +385,8 @@ class SqlAlchemyImportBatchRepository:
             total_rows=model.total_rows,
             parsed_rows=model.parsed_rows,
             error_rows=model.error_rows,
+            first_occurred_at=first_occurred_at,
+            last_occurred_at=last_occurred_at,
             created_at=model.created_at,
             updated_at=model.updated_at,
             files=tuple(
@@ -317,19 +401,7 @@ class SqlAlchemyImportBatchRepository:
                 )
                 for file in model.files
             ),
-            rows=tuple(
-                ImportRow(
-                    id=row.id,
-                    batch_id=row.batch_id,
-                    file_id=row.file_id,
-                    row_number=row.row_number,
-                    raw_payload=row.raw_payload,
-                    normalized_payload=row.normalized_payload,
-                    parse_status=row.parse_status,
-                    created_at=row.created_at,
-                )
-                for row in getattr(model, "rows", [])
-            ),
+            rows=rows,
             errors=tuple(
                 ImportRowError(
                     id=error.id,
@@ -345,3 +417,19 @@ class SqlAlchemyImportBatchRepository:
                 for error in getattr(model, "errors", [])
             ),
         )
+
+
+def _period_from_rows(rows: tuple[ImportRow, ...]) -> tuple[str | None, str | None]:
+    values: list[str] = []
+    for row in rows:
+        if row.parse_status != "parsed" or row.normalized_payload is None:
+            continue
+        occurred_at = row.normalized_payload.get("occurred_at") or row.normalized_payload.get(
+            "date"
+        )
+        if occurred_at is not None and str(occurred_at).strip():
+            values.append(str(occurred_at))
+
+    if not values:
+        return None, None
+    return min(values), max(values)

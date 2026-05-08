@@ -51,6 +51,11 @@ class Settings:
     sqlalchemy_echo: bool
     cors_origins: tuple[str, ...]
     imports_storage_dir: Path
+    weather_automation_enabled: bool
+    weather_automation_initial_delay_seconds: int
+    weather_automation_interval_minutes: int
+    weather_automation_days_back: int
+    weather_automation_forecast_days: int
 
 
 def _parse_bool(value: str | None, *, default: bool = False) -> bool:
@@ -113,5 +118,25 @@ def get_settings() -> Settings:
         imports_storage_dir=_resolve_path(
             os.getenv("IMPORTS_STORAGE_DIR"),
             default=BACKEND_ROOT / "storage" / "imports",
+        ),
+        weather_automation_enabled=_parse_bool(
+            os.getenv("WEATHER_AUTOMATION_ENABLED"),
+            default=True,
+        ),
+        weather_automation_initial_delay_seconds=_parse_int(
+            os.getenv("WEATHER_AUTOMATION_INITIAL_DELAY_SECONDS"),
+            default=30,
+        ),
+        weather_automation_interval_minutes=_parse_int(
+            os.getenv("WEATHER_AUTOMATION_INTERVAL_MINUTES"),
+            default=180,
+        ),
+        weather_automation_days_back=_parse_int(
+            os.getenv("WEATHER_AUTOMATION_DAYS_BACK"),
+            default=2,
+        ),
+        weather_automation_forecast_days=_parse_int(
+            os.getenv("WEATHER_AUTOMATION_FORECAST_DAYS"),
+            default=7,
         ),
     )

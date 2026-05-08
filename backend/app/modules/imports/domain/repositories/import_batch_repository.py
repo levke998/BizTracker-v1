@@ -7,6 +7,7 @@ from typing import Protocol
 
 from app.modules.imports.domain.entities.import_batch import (
     ImportBatch,
+    NewImportFile,
     ImportRow,
     ImportRowError,
     NewImportRow,
@@ -28,6 +29,15 @@ class ImportBatchRepository(Protocol):
         size_bytes: int,
     ) -> ImportBatch:
         """Create a batch plus its initial uploaded file metadata."""
+
+    def create_uploaded_batch_with_files(
+        self,
+        *,
+        business_unit_id: uuid.UUID,
+        import_type: str,
+        files: list[NewImportFile],
+    ) -> ImportBatch:
+        """Create a batch plus one or more uploaded file metadata rows."""
 
     def list_batches(
         self,
@@ -80,3 +90,6 @@ class ImportBatchRepository(Protocol):
         error_rows: int,
     ) -> ImportBatch:
         """Mark a batch as failed and persist technical parse errors."""
+
+    def rollback(self) -> None:
+        """Rollback the current persistence unit after a failed parse side effect."""

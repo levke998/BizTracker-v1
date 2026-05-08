@@ -3,6 +3,7 @@ import {
   apiGet,
   apiPatchJson,
   apiPostJson,
+  apiPutJson,
 } from "../../../services/api/client";
 import type {
   InventoryItemCreatePayload,
@@ -12,12 +13,24 @@ import type {
   InventoryMovementCreatePayload,
   InventoryMovement,
   InventoryMovementFilters,
+  PhysicalStockCountCreatePayload,
+  PhysicalStockCountResult,
   EstimatedConsumptionAudit,
   EstimatedConsumptionAuditFilters,
   InventoryStockLevel,
   InventoryStockLevelFilters,
   InventoryTheoreticalStock,
   InventoryTheoreticalStockFilters,
+  InventoryVarianceItemSummary,
+  InventoryVarianceItemSummaryFilters,
+  InventoryVariancePeriodComparison,
+  InventoryVariancePeriodComparisonFilters,
+  InventoryVarianceReasonSummary,
+  InventoryVarianceReasonSummaryFilters,
+  InventoryVarianceThreshold,
+  InventoryVarianceThresholdUpdatePayload,
+  InventoryVarianceTrendFilters,
+  InventoryVarianceTrendPoint,
 } from "../types/inventory";
 
 export function listInventoryItems(filters: InventoryItemFilters) {
@@ -52,6 +65,46 @@ export function listInventoryTheoreticalStock(
   return apiGet<InventoryTheoreticalStock[]>("inventory/theoretical-stock", filters);
 }
 
+export function listInventoryVarianceReasonSummary(
+  filters: InventoryVarianceReasonSummaryFilters
+) {
+  return apiGet<InventoryVarianceReasonSummary[]>("inventory/variance-reasons", filters);
+}
+
+export function listInventoryVarianceTrend(filters: InventoryVarianceTrendFilters) {
+  return apiGet<InventoryVarianceTrendPoint[]>("inventory/variance-trend", filters);
+}
+
+export function listInventoryVarianceItemSummary(
+  filters: InventoryVarianceItemSummaryFilters
+) {
+  return apiGet<InventoryVarianceItemSummary[]>("inventory/variance-items", filters);
+}
+
+export function getInventoryVariancePeriodComparison(
+  filters: InventoryVariancePeriodComparisonFilters
+) {
+  return apiGet<InventoryVariancePeriodComparison>(
+    "inventory/variance-period-comparison",
+    filters
+  );
+}
+
+export function getInventoryVarianceThreshold(businessUnitId: string) {
+  return apiGet<InventoryVarianceThreshold>("inventory/variance-thresholds", {
+    business_unit_id: businessUnitId,
+  });
+}
+
+export function updateInventoryVarianceThreshold(
+  payload: InventoryVarianceThresholdUpdatePayload
+) {
+  return apiPutJson<InventoryVarianceThresholdUpdatePayload, InventoryVarianceThreshold>(
+    "inventory/variance-thresholds",
+    payload
+  );
+}
+
 export function listEstimatedConsumptionAudit(
   filters: EstimatedConsumptionAuditFilters
 ) {
@@ -68,6 +121,13 @@ export function listInventoryMovements(filters: InventoryMovementFilters) {
 export function createInventoryMovement(payload: InventoryMovementCreatePayload) {
   return apiPostJson<InventoryMovementCreatePayload, InventoryMovement>(
     "inventory/movements",
+    payload
+  );
+}
+
+export function registerPhysicalStockCount(payload: PhysicalStockCountCreatePayload) {
+  return apiPostJson<PhysicalStockCountCreatePayload, PhysicalStockCountResult>(
+    "inventory/physical-stock-counts",
     payload
   );
 }

@@ -306,3 +306,60 @@ def test_list_inventory_theoretical_stock_exposes_actual_quantity_without_fake_e
     assert payload[0]["theoretical_quantity"] is None
     assert payload[0]["variance_quantity"] is None
     assert payload[0]["estimation_basis"] == "not_configured"
+
+
+def test_list_inventory_theoretical_stock_calculates_variance_and_current_value(
+    client: TestClient,
+    db_session,
+    create_inventory_item,
+    create_inventory_movement,
+    test_business_unit: BusinessUnitModel,
+    test_unit_of_measure: UnitOfMeasureModel,
+) -> None:
+    item = create_inventory_item(
+        business_unit_id=test_business_unit.id,
+        uom_id=test_unit_of_measure.id,
+        name="Theoretical Flour Value",
+        item_type="raw_material",
+    )
+    item.estimated_stock_quantity = Decimal("15.000")
+    item.default_unit_cost = Decimal("600.00")
+    db_session.commit()
+    create_inventory_movement(
+        business_unit_id=test_business_unit.id,
+        inventory_item_id=item.id,
+        movement_type="initial_stock",
+        quantity=Decimal("5.000"),
+        uom_id=test_unit_of_measure.id,
+        occurred_at=datetime(2026, 4, 23, 8, 0, tzinfo=UTC),
+    )
+    create_inventory_movement(
+        business_unit_id=test_business_unit.id,
+        inventory_item_id=item.id,
+        movement_type="purchase",
+        quantity=Decimal("20.000"),
+        uom_id=test_unit_of_measure.id,
+        unit_cost=Decimal("600.00"),
+        occurred_at=datetime(2026, 4, 24, 8, 0, tzinfo=UTC),
+    )
+
+    response = client.get(
+        f"{API_PREFIX}/theoretical-stock",
+        params={
+            "business_unit_id": str(test_business_unit.id),
+            "inventory_item_id": str(item.id),
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert len(payload) == 1
+    assert payload[0]["actual_quantity"] == "25.000"
+    assert payload[0]["theoretical_quantity"] == "15.000"
+    assert payload[0]["variance_quantity"] == "10.000"
+    assert payload[0]["default_unit_cost"] == "600.0000"
+    assert payload[0]["actual_stock_value"] == "15000.00"
+    assert payload[0]["theoretical_stock_value"] == "9000.00"
+    assert payload[0]["variance_stock_value"] == "6000.00"
+    assert payload[0]["variance_status"] == "surplus_or_unreviewed"
+    assert payload[0]["estimation_basis"] == "recipe_or_direct_pos"

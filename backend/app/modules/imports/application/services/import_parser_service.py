@@ -11,7 +11,11 @@ from typing import Any
 from app.modules.imports.application.services.import_profiles import (
     get_import_profile,
 )
+from app.modules.imports.application.services.gourmand_pos_sales_parser import (
+    GourmandPosSalesParser,
+)
 from app.modules.imports.domain.entities.import_batch import (
+    ImportFile,
     NewImportRow,
     NewImportRowError,
     ParsedImportFileResult,
@@ -20,6 +24,19 @@ from app.modules.imports.domain.entities.import_batch import (
 
 class CsvImportParser:
     """Parse one stored CSV file into staging rows and parse errors."""
+
+    paired_pos_import_types = {"gourmand_pos_sales", "flow_pos_sales"}
+
+    def parse_batch(
+        self,
+        *,
+        files: tuple[ImportFile, ...],
+        import_type: str,
+    ) -> ParsedImportFileResult | None:
+        if import_type not in self.paired_pos_import_types:
+            return None
+
+        return GourmandPosSalesParser(import_profile=import_type).parse_files(files=files)
 
     def parse(
         self,

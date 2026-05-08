@@ -1,147 +1,23 @@
 # BizTracker Architecture
-Current status:
-- [CURRENT_STATUS.md](C:\BizTracker\docs\CURRENT_STATUS.md)
 
-Ez a dokumentum a BizTracker induló projektarchitektúráját rögzíti. A cél egy olyan stabil, moduláris alap kialakítása, amely alkalmas valós üzleti működés támogatására, de nem overengineerelt.
+Ez a dokumentum a jelenlegi technikai irany rovid igazsagforrasa. A reszletes termekiranyt a [ROADMAP.md](ROADMAP.md), a domain donteseket a [DOMAIN_MODEL.md](DOMAIN_MODEL.md), az import adatfolyamot a [DATA_PIPELINE.md](DATA_PIPELINE.md) vezeti.
 
-Kapcsolódó dokumentum:
-- [PROJECT_DESCRIPTION.md](C:\BizTracker\PROJECT_DESCRIPTION.md)
-- [MVP_IMPLEMENTATION_PLAN.md](C:\BizTracker\docs\MVP_IMPLEMENTATION_PLAN.md)
-- [MIGRATION_PLAN.md](C:\BizTracker\docs\MIGRATION_PLAN.md)
-- [IDENTITY_CORE_MODEL_PLAN.md](C:\BizTracker\docs\IDENTITY_CORE_MODEL_PLAN.md)
+## Alapdontes
 
-## 1. Architektúra célja
+A BizTracker modularis monolit:
+- backend: FastAPI, SQLAlchemy 2, Alembic
+- frontend: React, TypeScript, Vite, TanStack Query
+- adatbazis: PostgreSQL celarchitektura
+- mukodes: CSV-first ingestion, adatbazis-alapu analytics/read model
 
-Az alkalmazás két eltérő, de részben közös üzleti domaint kezel:
-- `Gourmand Sütőház és Kézműves Cukrászat`
-- `Flow Music Club`
+Nem microservice iranyban haladunk. A modulhatarokat tisztan tartjuk, de a gyors fejlesztes es egyszerubb uzemeltetes miatt egy alkalmazason belul maradunk.
 
-Az induló technikai irány:
-- backend: `FastAPI`
-- frontend: `React + TypeScript`
-- adatbázis: `PostgreSQL`
-- architektúra: `moduláris monolit`
+## Backend retegzes
 
-Ez a döntés azért ajánlott, mert:
-- tiszta modulhatárokat ad,
-- gyorsabb indulást tesz lehetővé, mint egy microservice-rendszer,
-- később is felbontható marad,
-- jól támogatja a clean architecture szemléletet.
-
-## 2. Fő architekturális elvek
-
-- a rendszer `operatív` és `analitikai` funkcióit logikailag el kell különíteni
-- az üzleti modulok legyenek egymástól világosan szeparálva
-- az infrastruktúra ne szivárogjon közvetlenül a domainbe
-- a backend legyen use case orientált, ne csak CRUD-központú
-- a frontend legyen route-alapú feature modulokból felépítve
-- a legtöbb állapot a backendből érkezzen, ne a kliensben duplikáljuk
-
-## 3. Repository szintű szerkezet
+Modulon beluli celminta:
 
 ```text
-BizTracker/
-  PROJECT_DESCRIPTION.md
-  docs/
-    ARCHITECTURE.md
-    INITIAL_STRUCTURE.md
-    IDENTITY_CORE_MODEL_PLAN.md
-    MVP_IMPLEMENTATION_PLAN.md
-    MIGRATION_PLAN.md
-  backend/
-    app/
-    migrations/
-    tests/
-    pyproject.toml
-    alembic.ini
-    .env.example
-  frontend/
-    src/
-    public/
-    package.json
-    vite.config.ts
-    tsconfig.json
-    .env.example
-```
-
-## 4. Backend architektúra
-
-### 4.1. Backend gyökérstruktúra
-
-```text
-backend/
-  app/
-    api/
-    core/
-    db/
-    shared/
-    modules/
-  migrations/
-    versions/
-  tests/
-    unit/
-    integration/
-```
-
-### 4.2. Backend mappák felelőssége
-
-#### `app/`
-Az alkalmazás teljes futó kódja.
-
-#### `app/api/`
-Globális, moduloktól független API elemek.
-
-Felelősség:
-- root router összeállítás
-- health check endpointok
-- rendszer-szintű routing
-
-#### `app/core/`
-Keresztmetszeti technikai elemek.
-
-Felelősség:
-- konfiguráció
-- security
-- auth helper
-- dependency wiring
-- logging
-
-#### `app/db/`
-Adatbázis inicializációs és session kezelés.
-
-Felelősség:
-- SQLAlchemy base
-- engine és session factory
-- model registry
-
-#### `app/shared/`
-Modulok között megosztott, nem domain-specifikus elemek.
-
-Felelősség:
-- közös enumok
-- közös DTO-k vagy helper osztályok
-- cross-module utility-k
-
-#### `app/modules/`
-Minden üzleti modul külön alkönyvtárban él.
-
-Modulok:
-- `identity`
-- `master_data`
-- `inventory`
-- `finance`
-- `procurement`
-- `production`
-- `events`
-- `imports`
-- `analytics`
-
-### 4.3. Modulon belüli clean architecture szerkezet
-
-Minta:
-
-```text
-app/modules/inventory/
+backend/app/modules/<module>/
   presentation/
     api/
     schemas/
@@ -156,321 +32,175 @@ app/modules/inventory/
     value_objects/
     repositories/
     services/
-    exceptions.py
   infrastructure/
     orm/
     repositories/
     mappers/
 ```
 
-#### `presentation/`
-HTTP réteg.
+Felelossegek:
+- `presentation`: HTTP, request/response schema, auth dependency
+- `application`: use case, tranzakcio-koordinacio, domain/repository orchestration
+- `domain`: uzleti szabaly, entitas, value object, repository interface
+- `infrastructure`: ORM, repository implementacio, kulso provider
 
-Felelősség:
-- route-ok
-- request/response sémák
-- auth és permission dependency-k
-- query param és body validáció
+Szabaly:
+- domain nem ismeri az ORM-et
+- use case nem legyen nyers CRUD script
+- import, procurement, inventory es analytics kozt explicit boundary legyen
+- actual, estimated es derived fogalmak kulon tipusban/mezoiben jelenjenek meg
 
-#### `application/`
-Use case réteg.
+## Backend modulok
 
-Felelősség:
-- parancsok és lekérdezések kezelése
-- tranzakciós műveletek koordinálása
-- domain és repository együttműködés szervezése
-- DTO-k előállítása
+Aktualis modulok:
+- `identity`: login, current user, token
+- `master_data`: business unit, location, unit, category, product
+- `imports`: file upload, batch, parse, rows, errors, import profile
+- `pos_ingestion`: normalizalt receipt boundary, demo/API adapter szerep, POS product alias/read API
+- `finance`: financial transaction read es source mapping
+- `catalog`: product es ingredient catalog, recipe/costing read-write szeletek
+- `inventory`: item, movement, stock level, estimated consumption audit
+- `procurement`: supplier, purchase invoice, invoice posting
+- `production`: recipe costing/readiness read-side es kesobbi production/batch folyamatok
+- `events`: Flow event planner, event performance, weather coverage
+- `weather`: Szolnok observation es forecast cache
+- `analytics`: dashboard es drill-down read-modelek
+- `demo_pos`: fejlesztoi tesztkliens
 
-#### `domain/`
-Üzleti mag.
+## Analytics es statisztikai modellek
 
-Felelősség:
-- entitások
-- value objectek
-- üzleti szabályok
-- domain service-ek
-- repository interfészek
+Az analytics modul feladata nem csak aggregalt KPI, hanem dontestamogato read-model is.
 
-#### `infrastructure/`
-Technikai megvalósítás.
+Elvek:
+- leiro statisztika backend/read-model oldalon keszuljon, frontend csak megjelenit
+- predikcios es statisztikai mezok mindig tartalmazzanak adatminosegi vagy readiness jelzest
+- forecast/predikcio ne legyen osszekeverve actual adattal
+- korrelacio es Monte Carlo ne fusson requestenkent nagy nyers adaton; kesobb cache-elt read-model vagy batch szamitas kell
+- kis mintaszamu kovetkeztetes UI-ban csak figyelmezteto jelzes lehet, nem erosen fogalmazott ajanlas
 
-Felelősség:
-- ORM modellek
-- repository implementációk
-- külső integrációk
-- mapperek
+Kezdeti technikai irany:
+- egyszeru statisztikai segedfuggvenyek: median, P25/P75/P90/P95 percentile, szoras, histogram bucket, outlier flag
+- idosoros aggregacio nap/ora/het napja szerint, 7/14 napos rolling average es mozgo median mezokkel
+- market basket read-model support, confidence es lift metrikakkal
+- anomalia detektalas elso korben szabaly/statisztikai baseline, kesobb cserelheto ML modellre
+- predikcios savok egyszeru baseline modellel induljanak, kesobb cserelheto model service mogott
+- regression/Bayes/scenario modellek kulon application service-kent epuljenek, hogy ne terheljek tul a dashboard repositoryt
+- Monte Carlo kulon application service legyen, explicit bemenettel es reprodukalhato seed/opcio mezokkel
+- ML modellekhez kesobb model registry vagy legalabb verziozott model metadata kell: model name, version, trained_at, feature window, data quality score
 
-### 4.4. Backend modulok rövid szerepe
+## Frontend felepites
 
-#### `identity`
-- bejelentkezés
-- tokenkezelés
-- felhasználók, szerepkörök, jogosultságok
-
-#### `master_data`
-- business unit
-- location
-- unit of measure
-- category
-- product
-
-#### `inventory`
-- készletelemek
-- raktárak
-- készletmozgások
-- készletszámítás
-
-#### `finance`
-- bevétel és kiadás
-- pénzügyi tranzakciók
-- pénzügyi összesítések
-
-#### `procurement`
-- beszállítók
-- beszerzések
-- számlák
-
-#### `production`
-- receptek
-- receptverziók
-- gyártási batch-ek
-- alapanyag-felhasználás
-
-#### `events`
-- események
-- fellépők
-- jegy- és bárbevétel
-- eseményköltségek
-
-#### `imports`
-- CSV/Excel import
-- későbbi API importok
-- staging
-- import naplózás és hibakezelés
-
-#### `analytics`
-- dashboard read modellek
-- aggregációs lekérdezések
-- összehasonlító riportok
-
-## 5. Frontend architektúra
-
-### 5.1. Frontend gyökérstruktúra
+Aktualis szerkezet:
 
 ```text
-frontend/
-  src/
-    app/
-    routes/
-    modules/
-    shared/
-    services/
-    hooks/
-    lib/
-    types/
-    styles/
-    main.tsx
-  public/
+frontend/src/
+  app/
+  routes/
+  modules/
+  services/
+  shared/
+  styles/
 ```
 
-### 5.2. Frontend mappák felelőssége
-
-#### `src/app/`
-App assembly.
-
-Felelősség:
-- provider-ek
-- app shell
-- router bootstrap
-
-#### `src/routes/`
-Központi route-definíciók.
-
-Felelősség:
-- route tree
-- protected route logika
-- layout binding
-
-#### `src/modules/`
-Feature-alapú frontend modulok.
-
-Minden modul jellemzően tartalmaz:
-- `pages/`
-- `components/`
-- `api/`
-- `hooks/`
-- `types/`
-
-#### `src/shared/`
-Modulok között újrahasznosítható UI és utility elemek.
-
-#### `src/services/`
-Közös API kliens és állapotlekérő infrastruktúra.
-
-#### `src/hooks/`
-Globálisan használt hookok.
-
-#### `src/lib/`
-Általános technikai utility-k.
-
-#### `src/types/`
-Közös TypeScript típusok.
-
-#### `src/styles/`
-Globális stílusok és tokenek.
-
-### 5.3. Frontend feature modul minta
+Modul minta:
 
 ```text
-src/modules/inventory/
+src/modules/<module>/
   pages/
-    InventoryListPage.tsx
-    StockLevelsPage.tsx
-  components/
-    InventoryTable.tsx
   api/
-    inventoryApi.ts
   hooks/
-    useInventoryItems.ts
   types/
-    inventory.ts
+  components/
 ```
 
-### 5.4. State management javaslat
+Frontend szabalyok:
+- a frontend a megjelenitesert es interakcioert felel
+- nagyobb uzleti szamitas backend/read-model oldalon legyen
+- query cache TanStack Query-ben
+- technikai enumokhoz magyar label mapping kell
+- admin CRUD helyett KPI, chart, drill-down es review workflow legyen a fo UX
+- Inventory kulon admin menu helyett a Katalogus/Beszerzes/Dashboard kontextusaban jelenjen meg, ahol lehet
 
-Javasolt felosztás:
-- `TanStack Query`: szerveroldali állapot
-- `Zustand`: kis globális kliensoldali állapot
-- `React local state`: lokális UI állapot
+## Data boundary
 
-Mi kerüljön ide:
-- `TanStack Query`: listák, részletek, dashboardok, cache
-- `Zustand`: auth session, kiválasztott business unit, globális szűrők ha kell
-- helyi state: formok átmeneti állapota, modálok, tabok
+CSV-first irany:
 
-## 6. Adatbázis kapcsolat
+```text
+raw file -> import_file -> import_batch -> import_row -> domain mapping -> read model
+```
 
-Ajánlott megoldás:
-- `SQLAlchemy 2.x`
-- közös engine
-- request-scope session FastAPI dependency-vel
-- repository-alapú adatelérés
+Realtime POS API nem fo cel. A `pos_ingestion` endpoint maradhat teszt- es adapter boundary, de a termekfejlesztes a CSV import stabilitasara epul.
 
-Fő fájlok:
-- `backend/app/db/session.py`
-- `backend/app/db/base.py`
-- `backend/app/core/dependencies.py`
+POS mapping boundary:
+- parse utan a catalog sync hozza letre vagy frissiti a POS product alias rekordokat
+- alias tabla nem helyettesiti a product torzsadatot, hanem source lineage es review alap
+- jovahagyas nelkuli alias `auto_created` allapotban marad, igy kesobb dashboard/filter szinten megkulonboztetheto
 
-Elv:
-- a session a presentation/application rétegen keresztül jusson a use case-ekhez
-- a domain ne ismerje az ORM részleteit
-
-## 7. Migration kezelés
-
-Ajánlott eszköz:
-- `Alembic`
-
-Fő fájlok:
-- `backend/alembic.ini`
-- `backend/migrations/env.py`
-- `backend/migrations/versions/`
-- `backend/app/db/models_registry.py`
+## Teljesitmeny es optimalizalas
 
 Elv:
-- autogenerate használható, de minden migrationt kézzel ellenőrizni kell
-- az ORM modellek regisztrációja legyen centralizált
-- a sémák kezelése legyen explicit: `auth`, `core`, `ingest`, `analytics`
+- dashboard request ne vegezzen kulso provider hivast
+- weather es forecast cache hatterben frissuljon
+- import parse es mapping legyen idempotens
+- nagy listakhoz backend filter/pagination irany kell, ha az adatmennyiseg no
+- frontend ne toltson le felesleges reszleteket a fold feletti dashboardhoz
 
-## 8. Auth kezelés
+## Production recipe boundary
 
-Ajánlott induló irány:
-- JWT access token
-- refresh token
-- role és permission alapú authorization
+Az elso production clean architecture szelet kesz:
+- domain: recept costing/readiness entitasok es allapotok
+- application: `ListRecipesQuery`
+- application command: `SaveActiveProductRecipeCommand`
+- domain repository contract: `RecipeRepository`
+- infrastructure: `SqlAlchemyRecipeRepository`
+- presentation: `/api/v1/production/recipes`
 
-Backend fő fájlok:
-- `backend/app/core/security.py`
-- `backend/app/core/auth.py`
-- `backend/app/modules/identity/...`
+A catalog termeklista recept/onkoltseg read oldala ezt a production read modellt hasznalja. Igy a stock hiany, missing recipe es missing cost szabaly nem szorodik szet router helper fuggvenyekbe.
 
-Frontend fő fájlok:
-- `frontend/src/services/storage/tokenStorage.ts`
-- `frontend/src/routes/protected.tsx`
-- `frontend/src/modules/identity/...`
+Frontend elso szelet:
+- `src/modules/production/api/productionApi.ts`
+- `src/modules/production/hooks/useRecipes.ts`
+- `src/modules/production/pages/RecipesPage.tsx`
+- route: `/production/recipes`
 
-Elv:
-- az auth modul legyen különálló
-- az authorization ne keveredjen a route logikába szétcsúszva
-- a permission ellenőrzés legyen újrahasznosítható dependency/helper
+Ez munkanezet, nem dashboard: a cel a recept readiness es hianyallapotok kezelese.
 
-## 9. Konfiguráció és `.env`
+Write-side elso refaktor:
+- a catalog product create/update mar nem kozvetlenul kezeli az aktiv receptverziok inaktivalasat es az uj `recipe_ingredient` sorokat
+- a catalog presentation retege `RecipeDraft`-ot keszit es production application commandot hiv
+- a command validal, a repository ment; a HTTP hibara forditas a catalog presentation retegben marad
+- onallo endpoint is kesz: `PUT /api/v1/production/products/{product_id}/recipe`
+- a frontend Recept readiness oldal mar ezt az endpointot hasznalja szerkeszteskor; a catalog mar nem az egyetlen receptiras entrypoint
+- a frontend work queue gyorsjavitasai nem kerulik meg a modulhatarokat: recept mentese production API, alapanyag ar/keszlet potlas catalog ingredient API, majd query invalidalas utan uj read-model
 
-Backend:
-- `pydantic-settings`
+## Kodminoseg
 
-Frontend:
-- `Vite env`
+Kotelezo elvek:
+- OOP, ahol domain objektum vagy use case indokolja
+- SOLID, kulonosen single responsibility es dependency inversion
+- kis, tesztelheto use case osztalyok/fuggvenyek
+- repository interface a domain/application hataron
+- nincs hidden magic number uzleti szabalyban
+- konfiguralt vagy adatbazisban tarolt szabaly, ha uzletileg valtozhat
+- hianyos adat nem okozhat nem kezelt kivetelt
 
-Elv:
-- a valódi secret ne kerüljön verziókezelésbe
-- csak `.env.example` legyen commitolva
-- a config kulcsok központi helyen legyenek definiálva
+## Migration es DB
 
-Példa backend kulcsok:
-- `APP_ENV`
-- `APP_NAME`
-- `API_V1_PREFIX`
-- `SECRET_KEY`
-- `DATABASE_URL`
-- `CORS_ORIGINS`
+Alembic revisionok a `backend/migrations/versions` alatt vannak. A DB allapotot kodolasi munka elott ellenorizni kell, ha schema valtozas erintett.
 
-Példa frontend kulcsok:
-- `VITE_API_BASE_URL`
-- `VITE_APP_NAME`
+Szabaly:
+- migrationt kezzel ellenorizni
+- seed/demo adat ne szennyezze a valos Gourmand/Flow adatokat
+- source reference es dedupe kulcs megorzese kritikus
+- invoice/POS/import source lineage nem torolheto el business adatokbol
 
-## 10. Induló fájlok
+## Tesztelesi elv
 
-### Backend
-- `backend/app/main.py`
-- `backend/app/api/router.py`
-- `backend/app/api/health.py`
-- `backend/app/core/config.py`
-- `backend/app/core/security.py`
-- `backend/app/core/auth.py`
-- `backend/app/core/logging.py`
-- `backend/app/core/dependencies.py`
-- `backend/app/db/base.py`
-- `backend/app/db/session.py`
-- `backend/app/db/models_registry.py`
-- `backend/alembic.ini`
-- `backend/migrations/env.py`
-- `backend/pyproject.toml`
-- `backend/.env.example`
+Integration teszt kell minden olyan szeletre, amely:
+- importot parse-ol vagy domain mappinget vegez
+- penzugyi tranzakciot hoz letre
+- inventory movementet vagy estimated consumptiont erint
+- dashboard read-modelt valtoztat
+- event performance vagy procurement posting viselkedest modosit
 
-### Frontend
-- `frontend/src/main.tsx`
-- `frontend/src/app/App.tsx`
-- `frontend/src/app/providers.tsx`
-- `frontend/src/routes/index.tsx`
-- `frontend/src/routes/protected.tsx`
-- `frontend/src/services/api/client.ts`
-- `frontend/src/services/api/authClient.ts`
-- `frontend/src/services/queries/queryClient.ts`
-- `frontend/src/services/storage/tokenStorage.ts`
-- `frontend/src/shared/constants/routes.ts`
-- `frontend/src/shared/components/layout/AppLayout.tsx`
-- `frontend/package.json`
-- `frontend/vite.config.ts`
-- `frontend/tsconfig.json`
-- `frontend/.env.example`
-
-## 11. Mi nem cél ebben a fázisban
-
-Ebben a lépésben még nem cél:
-- teljes üzleti logika implementálása
-- adatbázis modellek végleges kidolgozása
-- endpointok teljes implementációja
-- frontend képernyők kidolgozása
-- integrációk megírása
-
-Ez a fázis kizárólag a stabil technikai alapot rögzíti.
+Legutobb dokumentalt backend integration allapot: `94 passed`.
