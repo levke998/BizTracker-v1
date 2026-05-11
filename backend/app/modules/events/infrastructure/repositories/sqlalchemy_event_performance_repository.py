@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from collections import Counter, defaultdict
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -24,8 +24,6 @@ from app.modules.events.infrastructure.orm.event_ticket_actual_model import (
 )
 from app.modules.imports.infrastructure.orm.import_batch_model import ImportBatchModel
 from app.modules.imports.infrastructure.orm.import_row_model import ImportRowModel
-from app.modules.master_data.infrastructure.orm.category_model import CategoryModel
-from app.modules.master_data.infrastructure.orm.product_model import ProductModel
 from app.modules.weather.application.commands.sync_shared_weather import (
     SHARED_WEATHER_LOCATION_NAME,
     SHARED_WEATHER_PROVIDER,
@@ -38,9 +36,9 @@ from app.modules.weather.infrastructure.orm.weather_model import (
 APP_TIME_ZONE = ZoneInfo("Europe/Budapest")
 DEFAULT_EVENT_DURATION = timedelta(hours=8)
 MONEY_QUANT = Decimal("0.01")
+PERCENT_QUANT = Decimal("0.01")
 UNKNOWN_CATEGORY = "Kategória nélkül"
 UNKNOWN_PRODUCT = "Ismeretlen termék"
-TICKET_TOKENS = ("jegy", "ticket", "belépő", "belepo", "vip")
 
 
 class SqlAlchemyEventPerformanceRepository:
@@ -92,8 +90,6 @@ class SqlAlchemyEventPerformanceRepository:
             starts_at=starts_at,
             ends_at=ends_at,
         )
-        product_types = self._build_product_type_lookup(event.business_unit_id)
-
         source_row_count = 0
         receipt_keys: set[str] = set()
         ticket_revenue = Decimal("0")
@@ -124,25 +120,29 @@ class SqlAlchemyEventPerformanceRepository:
             product_totals[(product_name, category_name)]["quantity"] += quantity
             product_totals[(product_name, category_name)]["row_count"] += 1
 
-            if self._is_ticket_payload(payload, product_types):
-                ticket_revenue += gross_amount
-                ticket_quantity += quantity
-            else:
-                bar_revenue += gross_amount
-                bar_quantity += quantity
+            bar_revenue += gross_amount
+            bar_quantity += quantity
 
         ticket_actual = self._get_ticket_actual(event.id)
+        platform_fee_gross = Decimal("0")
+        ticket_revenue_source = "not_recorded"
         if ticket_actual is not None:
             ticket_revenue = Decimal(ticket_actual.gross_revenue)
             ticket_quantity = Decimal(ticket_actual.sold_quantity)
+            platform_fee_gross = Decimal(ticket_actual.platform_fee_gross)
+            ticket_revenue_source = "ticket_actual"
 
         performer_share_percent = Decimal(event.performer_share_percent)
         performer_share_amount = self._money(ticket_revenue * performer_share_percent / Decimal("100"))
         retained_ticket_revenue = self._money(ticket_revenue - performer_share_amount)
         own_revenue = self._money(retained_ticket_revenue + bar_revenue)
-        event_profit_lite = self._money(
-            own_revenue - Decimal(event.performer_fixed_fee) - Decimal(event.event_cost_amount)
+        operating_cost_gross = self._money(
+            Decimal(event.performer_fixed_fee)
+            + Decimal(event.event_cost_amount)
+            + platform_fee_gross
         )
+        event_profit_lite = self._money(own_revenue - operating_cost_gross)
+        total_revenue = self._money(ticket_revenue + bar_revenue)
 
         return EventPerformance(
             event_id=event.id,
@@ -153,14 +153,23 @@ class SqlAlchemyEventPerformanceRepository:
             receipt_count=len(receipt_keys),
             ticket_revenue_gross=self._money(ticket_revenue),
             bar_revenue_gross=self._money(bar_revenue),
-            total_revenue_gross=self._money(ticket_revenue + bar_revenue),
+            total_revenue_gross=total_revenue,
             ticket_quantity=ticket_quantity,
             bar_quantity=bar_quantity,
             performer_share_percent=performer_share_percent,
             performer_share_amount=performer_share_amount,
             retained_ticket_revenue=retained_ticket_revenue,
+            platform_fee_gross=self._money(platform_fee_gross),
             own_revenue=own_revenue,
+            operating_cost_gross=operating_cost_gross,
             event_profit_lite=event_profit_lite,
+            event_profit_margin_percent=self._ratio_percent(event_profit_lite, own_revenue),
+            operating_cost_ratio_percent=self._ratio_percent(operating_cost_gross, own_revenue),
+            ticket_revenue_share_percent=self._ratio_percent(ticket_revenue, total_revenue),
+            bar_revenue_share_percent=self._ratio_percent(bar_revenue, total_revenue),
+            profit_status=self._profit_status(event_profit_lite, own_revenue),
+            ticket_revenue_source=ticket_revenue_source,
+            settlement_status=self._settlement_status(ticket_revenue_source),
             categories=tuple(self._category_rows(category_totals)),
             top_products=tuple(self._product_rows(product_totals, limit=10)),
             weather=self._build_weather_summary(starts_at=starts_at, ends_at=ends_at),
@@ -194,19 +203,30 @@ class SqlAlchemyEventPerformanceRepository:
             select(EventTicketActualModel).where(EventTicketActualModel.event_id == event_id)
         )
 
-    def _build_product_type_lookup(self, business_unit_id: uuid.UUID) -> dict[str, str]:
-        statement = (
-            select(ProductModel.name, ProductModel.sku, ProductModel.product_type, CategoryModel.name)
-            .outerjoin(CategoryModel, CategoryModel.id == ProductModel.category_id)
-            .where(ProductModel.business_unit_id == business_unit_id)
-            .where(ProductModel.is_active.is_(True))
+    @staticmethod
+    def _settlement_status(ticket_revenue_source: str) -> str:
+        if ticket_revenue_source == "ticket_actual":
+            return "actual_ticket_settlement"
+        return "ticket_actual_missing"
+
+    @staticmethod
+    def _profit_status(profit: Decimal, own_revenue: Decimal) -> str:
+        if own_revenue <= 0:
+            return "no_revenue"
+        if profit > 0:
+            return "profitable"
+        if profit < 0:
+            return "loss"
+        return "break_even"
+
+    @staticmethod
+    def _ratio_percent(numerator: Decimal, denominator: Decimal) -> Decimal | None:
+        if denominator <= 0:
+            return None
+        return (numerator * Decimal("100") / denominator).quantize(
+            PERCENT_QUANT,
+            rounding=ROUND_HALF_UP,
         )
-        lookup: dict[str, str] = {}
-        for product_name, sku, product_type, category_name in self._session.execute(statement).all():
-            for key in (product_name, sku, category_name):
-                if isinstance(key, str) and key.strip():
-                    lookup[key.strip().casefold()] = str(product_type)
-        return lookup
 
     def _build_weather_summary(self, *, starts_at: datetime, ends_at: datetime) -> EventWeatherSummary:
         observations = self._list_shared_weather_observations(starts_at=starts_at, ends_at=ends_at)
@@ -293,19 +313,6 @@ class SqlAlchemyEventPerformanceRepository:
             for (product_name, category_name), values in aggregate.items()
         ]
         return sorted(rows, key=lambda row: row.gross_amount, reverse=True)[:limit]
-
-    @classmethod
-    def _is_ticket_payload(cls, payload: dict[str, Any], product_types: dict[str, str]) -> bool:
-        for key_name in ("product_name", "sku", "category_name"):
-            value = payload.get(key_name)
-            if isinstance(value, str) and product_types.get(value.strip().casefold()) == "ticket":
-                return True
-
-        text = " ".join(
-            str(payload.get(key_name) or "")
-            for key_name in ("product_name", "category_name")
-        ).casefold()
-        return any(token in text for token in TICKET_TOKENS)
 
     @staticmethod
     def _observation_precipitation(observation: WeatherObservationHourlyModel) -> Decimal:

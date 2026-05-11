@@ -53,9 +53,30 @@ class DashboardBreakdownRow:
 
     label: str
     revenue: Decimal
+    net_revenue: Decimal | None
+    vat_amount: Decimal | None
     quantity: Decimal
     transaction_count: int
     source_layer: str
+    amount_basis: str = "gross"
+    tax_breakdown_source: str = "not_available"
+
+
+@dataclass(frozen=True, slots=True)
+class DashboardVatReadiness:
+    """Revenue VAT coverage derived from POS rows and product master data."""
+
+    status: str
+    coverage_percent: Decimal
+    gross_revenue: Decimal
+    covered_gross_revenue: Decimal
+    missing_gross_revenue: Decimal
+    total_row_count: int
+    covered_row_count: int
+    missing_row_count: int
+    source_layer: str = "import_derived"
+    amount_basis: str = "gross"
+    tax_breakdown_source: str = "not_available"
 
 
 @dataclass(frozen=True, slots=True)
@@ -305,9 +326,19 @@ class DashboardProductDetailRow:
     product_name: str
     category_name: str
     revenue: Decimal
+    net_revenue: Decimal | None
+    vat_amount: Decimal | None
+    estimated_unit_cost_net: Decimal | None
+    estimated_cogs_net: Decimal | None
+    estimated_net_margin_amount: Decimal | None
+    estimated_margin_percent: Decimal | None
     quantity: Decimal
     transaction_count: int
     source_layer: str
+    amount_basis: str = "gross"
+    tax_breakdown_source: str = "not_available"
+    cost_source: str = "not_available"
+    margin_status: str = "not_available"
 
 
 @dataclass(frozen=True, slots=True)
@@ -322,8 +353,13 @@ class DashboardPosSourceRow:
     product_name: str
     quantity: Decimal
     gross_amount: Decimal
+    net_amount: Decimal | None
+    vat_amount: Decimal | None
+    vat_rate_percent: Decimal | None
     payment_method: str | None
     source_layer: str
+    amount_basis: str = "gross"
+    tax_breakdown_source: str = "not_available"
 
 
 @dataclass(frozen=True, slots=True)
@@ -436,6 +472,7 @@ class DashboardSnapshot:
     kpis: tuple[DashboardKpi, ...]
     revenue_trend: tuple[DashboardTrendPoint, ...]
     category_breakdown: tuple[DashboardBreakdownRow, ...]
+    vat_readiness: DashboardVatReadiness
     payment_method_breakdown: tuple[DashboardBreakdownRow, ...]
     basket_value_distribution: tuple[DashboardBreakdownRow, ...]
     traffic_heatmap: tuple[DashboardHeatmapCell, ...]

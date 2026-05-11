@@ -4,7 +4,7 @@ import type { CSSProperties, MouseEvent as ReactMouseEvent } from "react";
 import { Button } from "../../../shared/components/ui/Button";
 import { Card } from "../../../shared/components/ui/Card";
 import { useTopbarControls } from "../../../shared/components/layout/TopbarControlsContext";
-import type { EventRecord } from "../../events/types/events";
+import type { EventPerformance, EventRecord } from "../../events/types/events";
 import { useDashboard } from "../hooks/useDashboard";
 import type { DashboardTopProductRow } from "../hooks/useDashboard";
 import type {
@@ -32,6 +32,7 @@ import type {
   DashboardStockRiskRow,
   DashboardTemperatureBandInsightRow,
   DashboardTrendPoint,
+  DashboardVatReadiness,
   DashboardWeatherCategoryInsightRow,
   DashboardWeatherConditionInsightRow,
 } from "../types/analytics";
@@ -79,10 +80,33 @@ function formatMoney(value: string | number) {
   }).format(typeof value === "number" ? value : toNumber(value));
 }
 
+function exportDashboardData(dashboard: DashboardData | null) {
+  if (!dashboard) {
+    return;
+  }
+  const fileName = `biztracker-${dashboard.scope}-${dashboard.period.start_date}-${dashboard.period.end_date}.json`;
+  const blob = new Blob([JSON.stringify(dashboard, null, 2)], {
+    type: "application/json;charset=utf-8",
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
 function formatNumber(value: string | number) {
   return new Intl.NumberFormat("hu-HU", {
     maximumFractionDigits: 1,
   }).format(typeof value === "number" ? value : toNumber(value));
+}
+
+function formatOptionalPercent(value: string | number | null | undefined) {
+  if (value === null || value === undefined) {
+    return "-";
+  }
+  return `${formatNumber(value)}%`;
 }
 
 function formatTrendDate(
@@ -170,9 +194,43 @@ function formatTaxBreakdownSource(value: string | null | undefined) {
   const labels: Record<string, string> = {
     supplier_invoice_actual: "Számla alapján bontott",
     partial_supplier_invoice_actual: "Részben számla alapján bontott",
+    product_vat_derived: "Termék ÁFA-kulcsból számolt",
+    partial_product_vat_derived: "Részben termék ÁFA-kulcsból számolt",
     not_available: "Nincs ÁFA-bontás",
   };
   return value ? labels[value] ?? value : "Nincs ÁFA-bontás";
+}
+
+function formatVatReadinessStatus(value: string) {
+  const labels: Record<string, string> = {
+    complete: "Teljes",
+    partial: "Hiányos",
+    missing: "Nincs lefedve",
+    no_data: "Nincs adat",
+  };
+  return labels[value] ?? value;
+}
+
+function formatCostSource(value: string | null | undefined) {
+  const labels: Record<string, string> = {
+    recipe_or_unit_cost: "Recept/default nettó költség",
+    partial_recipe_or_unit_cost: "Részben ismert nettó költség",
+    not_available: "Nincs költségalap",
+  };
+  return value ? labels[value] ?? value : "Nincs költségalap";
+}
+
+function formatMarginStatus(value: string | null | undefined) {
+  const labels: Record<string, string> = {
+    complete: "Teljes margin",
+    partial: "Részleges margin",
+    missing_vat_rate: "Hiányzó ÁFA-kulcs",
+    missing_cost: "Hiányzó költség",
+    missing_vat_and_cost: "Hiányzó ÁFA és költség",
+    no_data: "Nincs adat",
+    not_available: "Nem számolható",
+  };
+  return value ? labels[value] ?? value : "Nem számolható";
 }
 
 function formatTransactionType(value: string) {
@@ -304,20 +362,6 @@ function formatEventDate(value: string | null) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(value));
-}
-
-function isTicketLikeLabel(value: string | null | undefined) {
-  const normalized = (value ?? "").toLowerCase();
-  return [
-    "ticket",
-    "jegy",
-    "vip",
-    "belépő",
-    "belepo",
-    "bérlet",
-    "berlet",
-    "pass",
-  ].some((keyword) => normalized.includes(keyword));
 }
 
 function getTopCategory(rows: DashboardBreakdownRow[]) {
@@ -910,20 +954,15 @@ function buildBusinessInsights(dashboard: {
   traffic_heatmap: DashboardHeatmapCell[];
   top_products: DashboardBreakdownRow[];
   category_trends: DashboardCategoryTrendRow[];
+  weather_category_insights: DashboardWeatherCategoryInsightRow[];
   product_risks: DashboardProductRiskRow[];
   stock_risks: DashboardStockRiskRow[];
 }): BusinessInsight[] {
   const topCategory = getTopCategory(dashboard.category_breakdown);
   const strongestSlot = getStrongestHeatmapCell(dashboard.traffic_heatmap);
-  const ticketRows = dashboard.top_products.filter(
-    (row) => isTicketLikeLabel(row.label),
-  );
-  const ticketRevenue = ticketRows.reduce((sum, row) => sum + toNumber(row.revenue), 0);
-  const topProductsRevenue = dashboard.top_products.reduce(
-    (sum, row) => sum + toNumber(row.revenue),
-    0,
-  );
-  const ticketShare = topProductsRevenue > 0 ? (ticketRevenue / topProductsRevenue) * 100 : 0;
+  const topWeatherCategory = [...dashboard.weather_category_insights].sort(
+    (left, right) => toNumber(right.revenue) - toNumber(left.revenue),
+  )[0];
   const growingCategories = dashboard.category_trends.filter(
     (row) => toNumber(row.revenue_change) > 0,
   ).length;
@@ -941,13 +980,11 @@ function buildBusinessInsights(dashboard: {
         tone: "primary",
       },
       {
-        label: "Jegyhatás",
-        value: ticketRows.length > 0 ? `${formatNumber(ticketShare)}%` : "Nincs jelzés",
+        label: "Ticket réteg",
+        value: "Külön rendszer",
         description:
-          ticketRows.length > 0
-            ? "A top termék rangsorban jegy vagy VIP elem is megjelenik, ezt külön értékesítési rétegként kell majd kezelni."
-            : "A jelenlegi top listában nem látszik jegy jellegű termék.",
-        tone: ticketRows.length > 0 ? "warning" : "neutral",
+          "A Flow POS CSV nem tartalmaz jegyet; a ticket bevétel eventhez rögzített actualként kerül be.",
+        tone: "neutral",
       },
       {
         label: "Csúcsidő",
@@ -979,10 +1016,13 @@ function buildBusinessInsights(dashboard: {
       },
       {
         label: "Időjárás kapcsolat",
-        value: "Előkészítve",
-        description:
-          "Fagyi, hideg ital és impulzusvásárlás esetén az időjárás később prediktív dimenzióként kerülhet be.",
-        tone: "neutral",
+        value: topWeatherCategory
+          ? `${topWeatherCategory.category_name} · ${formatWeatherCondition(topWeatherCategory.weather_condition)}`
+          : "Nincs adat",
+        description: topWeatherCategory
+          ? `${formatMoney(topWeatherCategory.revenue)} forgalom időjárással összekapcsolt kasszasorokból.`
+          : "A weather cache összekötés után itt jelenik meg a legerősebb kategória-időjárás kapcsolat.",
+        tone: topWeatherCategory ? "success" : "neutral",
       },
       {
         label: "Termelési ritmus",
@@ -1012,11 +1052,11 @@ function buildBusinessInsights(dashboard: {
       tone: "primary",
     },
     {
-      label: "Jegy vs termék",
-      value: ticketRows.length > 0 ? `${ticketRows.length} jelölt` : "Nincs jelzés",
+      label: "Ticket réteg",
+      value: "Flow event actual",
       description:
-        "Összesített rangsorban a jegyek bevételi hatása fontos, de nem ugyanaz, mint egy fogyasztási termék teljesítménye.",
-      tone: ticketRows.length > 0 ? "warning" : "neutral",
+        "A Flow jegybevétel külön ticket rendszerből érkezik, nem POS termékforgalomból.",
+      tone: "neutral",
     },
     {
       label: "Növekvő kategóriák",
@@ -1070,6 +1110,52 @@ function BusinessFocusCard({ dashboard }: { dashboard: DashboardData }) {
             <small>{insight.description}</small>
           </article>
         ))}
+      </div>
+    </Card>
+  );
+}
+
+function VatReadinessCard({ readiness }: { readiness: DashboardVatReadiness }) {
+  const coverage = Math.min(100, Math.max(0, toNumber(readiness.coverage_percent)));
+  const statusTone =
+    readiness.status === "complete"
+      ? "success"
+      : readiness.status === "partial"
+        ? "warning"
+        : readiness.status === "missing"
+          ? "danger"
+          : "neutral";
+
+  return (
+    <Card
+      hoverable
+      className={`vat-readiness-card ${statusTone}`}
+      eyebrow="ÁFA-lefedettség"
+      title="POS bevétel nettó/bruttó készültség"
+      subtitle={formatTaxBreakdownSource(readiness.tax_breakdown_source)}
+      count={formatVatReadinessStatus(readiness.status)}
+    >
+      <div className="vat-readiness-summary">
+        <span>
+          <strong>{formatNumber(coverage)}%</strong>
+          <small>Lefedett bruttó forgalom</small>
+        </span>
+        <span>
+          <strong>{formatMoney(readiness.covered_gross_revenue)}</strong>
+          <small>Számolható alap</small>
+        </span>
+        <span>
+          <strong>{formatMoney(readiness.missing_gross_revenue)}</strong>
+          <small>Hiányzó ÁFA-kulcs</small>
+        </span>
+      </div>
+      <div className="vat-readiness-track" aria-hidden="true">
+        <span style={{ width: `${coverage}%` }} />
+      </div>
+      <div className="vat-readiness-meta">
+        <span>{readiness.covered_row_count} lefedett sor</span>
+        <span>{readiness.missing_row_count} hiányos sor</span>
+        <span>{readiness.total_row_count} összes POS sor</span>
       </div>
     </Card>
   );
@@ -1198,23 +1284,22 @@ function BusinessSpecificAnalyticsCard({ dashboard }: { dashboard: DashboardData
   }
 
   if (dashboard.scope === "flow") {
-    const ticketRows = dashboard.top_products.filter((row) => isTicketLikeLabel(row.label));
-    const ticketRevenue = ticketRows.reduce((sum, row) => sum + toNumber(row.revenue), 0);
-    const topRevenue = dashboard.top_products.reduce((sum, row) => sum + toNumber(row.revenue), 0);
-    const ticketShare = topRevenue > 0 ? (ticketRevenue / topRevenue) * 100 : 0;
+    const categoryRows = buildGourmandCategoryMetrics(dashboard.category_breakdown);
+    const totalRevenue = categoryRows.reduce((sum, row) => sum + row.revenue, 0);
+    const maxCategoryRevenue = Math.max(...categoryRows.map((row) => row.revenue), 1);
+    const averageBasket = dashboard.kpis.find((kpi) => kpi.code === "average_basket_value");
     const metrics: BusinessSpecificMetric[] = [
       {
-        label: "Jegybevétel jelzés",
-        value: ticketRows.length > 0 ? `${formatNumber(ticketShare)}%` : "Nincs jelzés",
+        label: "Ticket bevétel",
+        value: "Külön actual",
         description:
-          "A jegybevétel üzleti logikája eltér a bárfogyasztástól, ezért külön bevételi rétegként kezeljük.",
-        tone: ticketRows.length > 0 ? "warning" : "neutral",
+          "Nincs helyszíni/POS jegyértékesítés. A jegyadat eventhez rögzített ticket actualként kerül be.",
+        tone: "neutral",
       },
       {
-        label: "Bárfogyasztás",
-        value: topCategory?.label ?? "-",
-        description:
-          "A nem jegy jellegű kategóriák fogják mutatni, milyen koncert milyen pultforgalmat hoz.",
+        label: "Bár/fogyasztás",
+        value: formatMoney(totalRevenue),
+        description: "A Flow POS CSV teljes forgalmi rétege fogyasztási/bár truth source.",
         tone: "primary",
       },
       {
@@ -1226,6 +1311,13 @@ function BusinessSpecificAnalyticsCard({ dashboard }: { dashboard: DashboardData
           "Flow esetén ez a beléptetés, pult, pohárkészlet és személyzet egyik legfontosabb jelzése.",
         tone: "success",
       },
+      {
+        label: "Átlagos kosárérték",
+        value: averageBasket ? formatMoney(averageBasket.value) : "-",
+        description:
+          "Pénzügyi pultmutató: a fogyasztási viselkedés gyors összegzése, nem event rangsor.",
+        tone: "success",
+      },
     ];
 
     return (
@@ -1234,11 +1326,11 @@ function BusinessSpecificAnalyticsCard({ dashboard }: { dashboard: DashboardData
         hoverable
         className="business-specific-card"
         eyebrow="Flow elemzés"
-        title="Jegy és bár bevételi mix"
-        subtitle="A dashboard a Flow forgalmi oldalát mutatja, a POS-ból rögzített tényleges adatokból"
+        title="Pénzügyi forgalmi mix"
+        subtitle="A Flow üzleti dashboard POS-alapú pénzügyi képe; eventenkénti rangsor az Event nézetben marad"
         count={`${dashboard.category_breakdown.length} kategória`}
       >
-        <div className="business-specific-grid business-specific-grid-three">
+        <div className="business-specific-grid">
           {metrics.map((metric) => (
             <article className={`business-focus-item ${metric.tone}`} key={metric.label}>
               <span>{metric.label}</span>
@@ -1246,6 +1338,34 @@ function BusinessSpecificAnalyticsCard({ dashboard }: { dashboard: DashboardData
               <small>{metric.description}</small>
             </article>
           ))}
+        </div>
+        <div className="flow-financial-mix-list">
+          {categoryRows.map((row, index) => {
+            const width = `${Math.max(5, (row.revenue / maxCategoryRevenue) * 100)}%`;
+            const share = totalRevenue > 0 ? (row.revenue / totalRevenue) * 100 : 0;
+            return (
+              <article className="flow-financial-mix-row" key={row.label}>
+                <div>
+                  <strong>{row.label}</strong>
+                  <span>Bár/fogyasztási réteg</span>
+                </div>
+                <span className="business-family-track">
+                  <span
+                    style={{
+                      width,
+                      background: `linear-gradient(135deg, ${mixPalette[index % mixPalette.length]}, ${
+                        mixPalette[(index + 3) % mixPalette.length]
+                      })`,
+                    }}
+                  />
+                </span>
+                <small>{formatMoney(row.revenue)} · {formatNumber(share)}% · {row.count} sor</small>
+              </article>
+            );
+          })}
+          {categoryRows.length === 0 ? (
+            <p className="empty-message">Nincs még Flow kategóriaforgalom az aktuális időszakban.</p>
+          ) : null}
         </div>
       </Card>
     );
@@ -1267,14 +1387,10 @@ function BusinessSpecificAnalyticsCard({ dashboard }: { dashboard: DashboardData
           <strong>{topCategory?.label ?? "-"}</strong>
           <small>Az összesített képben ez a legnagyobb forgalmú kategória.</small>
         </article>
-        <article className="business-focus-item warning">
-          <span>Jegyhatás</span>
-          <strong>
-            {dashboard.top_products.some((row) => isTicketLikeLabel(row.label))
-              ? "Külön bontandó"
-              : "Nincs jelzés"}
-          </strong>
-          <small>A jegyek top termékként torzíthatják a fogyasztási toplistát.</small>
+        <article className="business-focus-item neutral">
+          <span>Ticket réteg</span>
+          <strong>Flow event actual</strong>
+          <small>A jegybevétel nem POS termék, hanem külön Flow event réteg.</small>
         </article>
         <article className="business-focus-item success">
           <span>Csúcspont</span>
@@ -1290,58 +1406,187 @@ function BusinessSpecificAnalyticsCard({ dashboard }: { dashboard: DashboardData
   );
 }
 
-function FlowEventPerformanceCard({
+function FlowConsumptionControlCard({ dashboard }: { dashboard: DashboardData }) {
+  const categoryRows = buildGourmandCategoryMetrics(dashboard.category_breakdown);
+  const totalRevenue = categoryRows.reduce((sum, row) => sum + row.revenue, 0);
+  const leader = categoryRows[0] ?? null;
+  const topThreeRevenue = categoryRows.slice(0, 3).reduce((sum, row) => sum + row.revenue, 0);
+  const leaderShare = leader && totalRevenue > 0 ? (leader.revenue / totalRevenue) * 100 : 0;
+  const topThreeShare = totalRevenue > 0 ? (topThreeRevenue / totalRevenue) * 100 : 0;
+  const heatmapRevenue = dashboard.traffic_heatmap.reduce(
+    (sum, cell) => sum + toNumber(cell.revenue),
+    0,
+  );
+  const strongestSlot = getStrongestHeatmapCell(dashboard.traffic_heatmap);
+  const strongestSlotShare =
+    strongestSlot && heatmapRevenue > 0 ? (toNumber(strongestSlot.revenue) / heatmapRevenue) * 100 : 0;
+  const averageBasket = dashboard.kpis.find((kpi) => kpi.code === "average_basket_value");
+  const averageBasketQuantity = dashboard.kpis.find((kpi) => kpi.code === "average_basket_quantity");
+  const leadingBasketBand = [...dashboard.basket_value_distribution].sort(
+    (left, right) => toNumber(right.revenue) - toNumber(left.revenue),
+  )[0];
+  const growingCategories = dashboard.category_trends.filter(
+    (row) => toNumber(row.revenue_change) > 0,
+  ).length;
+  const decliningCategories = dashboard.category_trends.filter(
+    (row) => toNumber(row.revenue_change) < 0,
+  ).length;
+  const vatCoverage = toNumber(dashboard.vat_readiness.coverage_percent);
+  const concentrationTone = leaderShare >= 55 ? "warning" : leaderShare >= 35 ? "neutral" : "success";
+  const peakTone = strongestSlotShare >= 25 ? "warning" : strongestSlotShare > 0 ? "success" : "neutral";
+  const vatTone = vatCoverage >= 98 ? "success" : vatCoverage > 0 ? "warning" : "neutral";
+
+  const signals: BusinessSpecificMetric[] = [
+    {
+      label: "Vezető kategória",
+      value: leader?.label ?? "-",
+      description: leader
+        ? `${formatMoney(leader.revenue)} bár/fogyasztási bevétel, ${formatOptionalPercent(leaderShare)} részesedés.`
+        : "Nincs még kategóriaforgalom az aktuális időszakban.",
+      tone: concentrationTone,
+    },
+    {
+      label: "Top 3 koncentráció",
+      value: formatOptionalPercent(topThreeShare),
+      description:
+        topThreeShare >= 75
+          ? "A bevétel erősen néhány kategóriára támaszkodik, ezért készletben és pultban ez a fókusz."
+          : "A fogyasztási bevétel több kategória között oszlik meg.",
+      tone: topThreeShare >= 75 ? "warning" : "success",
+    },
+    {
+      label: "Csúcsterhelés",
+      value: strongestSlot
+        ? `${getWeekdayLabel(strongestSlot.weekday)} ${formatHeatmapHour(strongestSlot.hour)}`
+        : "-",
+      description: strongestSlot
+        ? `${formatMoney(strongestSlot.revenue)} forgalom ebben az órában, ${formatOptionalPercent(strongestSlotShare)} idősáv-súly.`
+        : "Nincs még órás forgalmi hőtérkép adat.",
+      tone: peakTone,
+    },
+    {
+      label: "ÁFA readiness",
+      value: formatOptionalPercent(vatCoverage),
+      description:
+        dashboard.vat_readiness.missing_row_count > 0
+          ? `${dashboard.vat_readiness.missing_row_count} POS sorhoz hiányzik termék ÁFA kulcs.`
+          : "A Flow POS bevétel ÁFA bontása a terméktörzs alapján lefedett.",
+      tone: vatTone,
+    },
+  ];
+
+  return (
+    <Card
+      tone="secondary"
+      hoverable
+      className="flow-consumption-control-card"
+      eyebrow="Flow POS kontroll"
+      title="Bárbevétel és fogyasztási viselkedés"
+      subtitle="POS-only pénzügyi kép: jegyadat nélkül, event rangsor nélkül"
+      count={totalRevenue > 0 ? formatMoney(totalRevenue) : "nincs forgalom"}
+    >
+      <div className="flow-consumption-grid">
+        {signals.map((signal) => (
+          <article className={`business-focus-item ${signal.tone}`} key={signal.label}>
+            <span>{signal.label}</span>
+            <strong>{signal.value}</strong>
+            <small>{signal.description}</small>
+          </article>
+        ))}
+      </div>
+
+      <div className="flow-consumption-decision-list">
+        <article className="flow-consumption-decision-row">
+          <span>Kosárprofil</span>
+          <strong>{averageBasket ? formatMoney(averageBasket.value) : "-"}</strong>
+          <small>
+            Átlagkosár, {averageBasketQuantity ? `${formatNumber(averageBasketQuantity.value)} tétel/nyugta` : "mennyiségi adat nélkül"}.
+            Domináns sáv: {leadingBasketBand ? formatBasketValueBand(leadingBasketBand.label) : "-"}.
+          </small>
+        </article>
+        <article className="flow-consumption-decision-row">
+          <span>Kategóriamozgás</span>
+          <strong>{growingCategories} nő / {decliningCategories} csökken</strong>
+          <small>
+            Előző azonos időszakhoz mért POS kategóriatrend. Ez a Flow üzleti dashboardban keresleti ritmus,
+            nem event teljesítmény.
+          </small>
+        </article>
+        <article className="flow-consumption-decision-row">
+          <span>Adatértelmezés</span>
+          <strong>Jegy nélkül</strong>
+          <small>
+            A fenti mutatók kizárólag kassza fogyasztási sorokból készülnek; a jegybevétel event ticket actualként kerül mellé.
+          </small>
+        </article>
+      </div>
+    </Card>
+  );
+}
+
+function FlowFinancialEventImpactCard({
   events,
+  performances,
   isLoading,
 }: {
   events: EventRecord[];
+  performances: EventPerformance[];
   isLoading: boolean;
 }) {
-  const completedEvents = events.filter((event) => event.status !== "cancelled");
-  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
-  const summary = completedEvents.reduce(
-    (acc, event) => ({
-      ticketRevenue: acc.ticketRevenue + toNumber(event.ticket_revenue_gross),
-      barRevenue: acc.barRevenue + toNumber(event.bar_revenue_gross),
-      performerShare: acc.performerShare + toNumber(event.performer_share_amount),
-      ownRevenue: acc.ownRevenue + toNumber(event.own_revenue),
-      profit: acc.profit + toNumber(event.event_profit_lite),
+  const eventById = new Map(events.map((event) => [event.id, event]));
+  const eventRows = performances.filter(
+    (performance) => eventById.get(performance.event_id)?.status !== "cancelled",
+  );
+  const summary = eventRows.reduce(
+    (acc, performance) => ({
+      ticketRevenue: acc.ticketRevenue + toNumber(performance.ticket_revenue_gross),
+      barRevenue: acc.barRevenue + toNumber(performance.bar_revenue_gross),
+      performerShare: acc.performerShare + toNumber(performance.performer_share_amount),
+      ownRevenue: acc.ownRevenue + toNumber(performance.own_revenue),
+      operatingCost: acc.operatingCost + toNumber(performance.operating_cost_gross),
+      platformFee: acc.platformFee + toNumber(performance.platform_fee_gross),
+      profit: acc.profit + toNumber(performance.event_profit_lite),
+      actualTicketCount:
+        acc.actualTicketCount + (performance.ticket_revenue_source === "ticket_actual" ? 1 : 0),
+      missingTicketActualCount:
+        acc.missingTicketActualCount + (performance.ticket_revenue_source !== "ticket_actual" ? 1 : 0),
+      profitableCount:
+        acc.profitableCount + (performance.profit_status === "profitable" ? 1 : 0),
+      lossCount: acc.lossCount + (performance.profit_status === "loss" ? 1 : 0),
     }),
     {
       ticketRevenue: 0,
       barRevenue: 0,
       performerShare: 0,
       ownRevenue: 0,
+      operatingCost: 0,
+      platformFee: 0,
       profit: 0,
+      actualTicketCount: 0,
+      missingTicketActualCount: 0,
+      profitableCount: 0,
+      lossCount: 0,
     },
   );
-  const strongestEvent = [...completedEvents].sort(
-    (left, right) => toNumber(right.event_profit_lite) - toNumber(left.event_profit_lite),
-  )[0];
-  const rankedEvents = [...completedEvents].sort(
-    (left, right) => toNumber(right.event_profit_lite) - toNumber(left.event_profit_lite),
-  );
-  const selectedEvent =
-    rankedEvents.find((event) => event.id === selectedEventId) ?? strongestEvent ?? null;
   const averageProfit =
-    completedEvents.length > 0 ? summary.profit / completedEvents.length : 0;
-  const selectedTicketRevenue = selectedEvent ? toNumber(selectedEvent.ticket_revenue_gross) : 0;
-  const selectedBarRevenue = selectedEvent ? toNumber(selectedEvent.bar_revenue_gross) : 0;
-  const selectedTotalRevenue = selectedTicketRevenue + selectedBarRevenue;
-  const selectedTicketShare =
-    selectedTotalRevenue > 0 ? (selectedTicketRevenue / selectedTotalRevenue) * 100 : 0;
-  const selectedBarShare =
-    selectedTotalRevenue > 0 ? (selectedBarRevenue / selectedTotalRevenue) * 100 : 0;
+    eventRows.length > 0 ? summary.profit / eventRows.length : 0;
+  const totalRevenue = summary.ticketRevenue + summary.barRevenue;
+  const ticketShare = totalRevenue > 0 ? (summary.ticketRevenue / totalRevenue) * 100 : 0;
+  const barShare = totalRevenue > 0 ? (summary.barRevenue / totalRevenue) * 100 : 0;
+  const profitMargin = summary.ownRevenue > 0 ? (summary.profit / summary.ownRevenue) * 100 : 0;
+  const costRatio = summary.ownRevenue > 0 ? (summary.operatingCost / summary.ownRevenue) * 100 : 0;
+  const ticketActualShare =
+    eventRows.length > 0 ? (summary.actualTicketCount / eventRows.length) * 100 : 0;
 
   return (
     <Card
       tone="rainbow"
       hoverable
       className="flow-event-performance-card"
-      eyebrow="Flow event teljesítmény"
-      title="Események összehasonlítása"
-      subtitle="Jegybevétel, bárbevétel, előadói rész és saját eredmény"
-      count={`${completedEvents.length} esemény`}
+      eyebrow="Flow pénzügyi event réteg"
+      title="Event hatás a Flow eredményre"
+      subtitle="Összesített ticket/bar bevételi mix, költségarány és ticket actual lefedettség"
+      count={`${eventRows.length} event`}
     >
       {isLoading ? <p className="info-message">Események betöltése...</p> : null}
 
@@ -1360,110 +1605,66 @@ function FlowEventPerformanceCard({
         </span>
         <span>
           <strong>{formatMoney(summary.profit)}</strong>
-          Gyors event profit
+          Event profit
+        </span>
+        <span>
+          <strong>{formatMoney(summary.operatingCost)}</strong>
+          Event költség
         </span>
       </div>
 
       <div className="flow-event-highlight">
         <article className="business-focus-item primary">
-          <span>Flow saját bevétel</span>
+          <span>Saját event bevétel</span>
           <strong>{formatMoney(summary.ownRevenue)}</strong>
-          <small>Megtartott jegybevétel plusz bárbevétel a kiválasztott időszak eventjeiből.</small>
+          <small>Megtartott jegybevétel plusz eventhez kapcsolt bárbevétel.</small>
         </article>
         <article className={averageProfit >= 0 ? "business-focus-item success" : "business-focus-item warning"}>
           <span>Átlagos event profit</span>
           <strong>{formatMoney(averageProfit)}</strong>
-          <small>Gyors benchmark, hogy egy koncert átlagosan mennyit hoz a jelenlegi adatokkal.</small>
+          <small>Összesített pénzügyi benchmark, nem eventenkénti rangsor.</small>
+        </article>
+        <article className={summary.lossCount > 0 ? "business-focus-item warning" : "business-focus-item success"}>
+          <span>Nyereséges / veszteséges</span>
+          <strong>{summary.profitableCount} / {summary.lossCount}</strong>
+          <small>Az event dashboarddal azonos read-model profit státusz alapján.</small>
+        </article>
+        <article className={costRatio >= 50 ? "business-focus-item warning" : "business-focus-item neutral"}>
+          <span>Költségarány</span>
+          <strong>{formatOptionalPercent(costRatio)}</strong>
+          <small>Event költség / saját event bevétel. Platform díj: {formatMoney(summary.platformFee)}.</small>
         </article>
       </div>
 
-      {strongestEvent ? (
-        <div className="flow-event-top">
+      {eventRows.length > 0 ? (
+        <div className="flow-event-financial-mix">
           <div>
-            <span>Legerősebb event</span>
-            <strong>{strongestEvent.title}</strong>
-            <small>
-              {formatEventDate(strongestEvent.starts_at)} ·{" "}
-              {strongestEvent.performer_name ?? "fellépő nélkül"}
-            </small>
+            <span>Jegy / bár pénzügyi mix</span>
+            <strong>
+              Jegy {formatOptionalPercent(ticketShare)} · Bár {formatOptionalPercent(barShare)}
+            </strong>
+            <span className="flow-event-split">
+              <span style={{ width: `${ticketShare}%` }} />
+              <span style={{ width: `${barShare}%` }} />
+            </span>
           </div>
-          <strong>{formatMoney(strongestEvent.event_profit_lite)}</strong>
+          <div>
+            <span>Event profit margin</span>
+            <strong>{formatOptionalPercent(profitMargin)}</strong>
+            <small>Event profit / saját event bevétel.</small>
+          </div>
+          <div>
+            <span>Ticket actual lefedettség</span>
+            <strong>{formatOptionalPercent(ticketActualShare)}</strong>
+            <small>{summary.actualTicketCount} actual · {summary.missingTicketActualCount} ticket actual hiányzik.</small>
+          </div>
         </div>
       ) : (
         <p className="empty-message">
-          Nincs event az időszakban. Flow esetén ez nem hiba: téli vagy szüneteltetett hétvégén
-          természetes lehet.
+          Nincs eventhez kapcsolt pénzügyi réteg az időszakban. A Flow alapforgalmi KPI-k ettől még a POS
+          actual adatokból számolódnak.
         </p>
       )}
-
-      {rankedEvents.length > 0 ? (
-        <div className="flow-event-drilldown">
-          <div className="flow-event-ranking">
-            <div className="flow-event-subheading">
-              <span>Event rangsor</span>
-              <strong>Profit szerint</strong>
-            </div>
-            {rankedEvents.slice(0, 8).map((event, index) => {
-              const isSelected = selectedEvent?.id === event.id;
-              const profit = toNumber(event.event_profit_lite);
-              const maxProfit = Math.max(
-                ...rankedEvents.map((item) => Math.max(0, toNumber(item.event_profit_lite))),
-                1,
-              );
-              const width = `${Math.max(4, (Math.max(0, profit) / maxProfit) * 100)}%`;
-
-              return (
-                <button
-                  className={isSelected ? "flow-event-rank-row active" : "flow-event-rank-row"}
-                  key={event.id}
-                  type="button"
-                  onClick={() => setSelectedEventId(event.id)}
-                >
-                  <span className="flow-event-rank-number">{index + 1}</span>
-                  <div>
-                    <strong>{event.title}</strong>
-                    <small>
-                      {formatEventDate(event.starts_at)} ·{" "}
-                      {event.performer_name ?? "fellépő nélkül"}
-                    </small>
-                    <span className="flow-event-rank-bar">
-                      <span style={{ width }} />
-                    </span>
-                  </div>
-                  <strong>{formatMoney(event.event_profit_lite)}</strong>
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="flow-event-detail-panel">
-            {selectedEvent ? (
-              <>
-                <div className="flow-event-subheading">
-                  <span>Kiválasztott event</span>
-                  <strong>{selectedEvent.title}</strong>
-                </div>
-                <div className="flow-event-detail-metrics">
-                  <span>Jegyarány <strong>{formatNumber(selectedTicketShare)}%</strong></span>
-                  <span>Bárarány <strong>{formatNumber(selectedBarShare)}%</strong></span>
-                  <span>Előadói rész <strong>{formatMoney(selectedEvent.performer_share_amount)}</strong></span>
-                  <span>Saját bevétel <strong>{formatMoney(selectedEvent.own_revenue)}</strong></span>
-                </div>
-                <div className="flow-event-split">
-                  <span style={{ width: `${selectedTicketShare}%` }} />
-                  <span style={{ width: `${selectedBarShare}%` }} />
-                </div>
-                <div className="flow-event-detail-note">
-                  <strong>{formatMoney(selectedEvent.event_profit_lite)}</strong>
-                  <span>
-                    Gyors event profit: megtartott jegybevétel + bárbevétel - fix fellépti díj - event költség.
-                  </span>
-                </div>
-              </>
-            ) : null}
-          </div>
-        </div>
-      ) : null}
 
     </Card>
   );
@@ -1589,10 +1790,19 @@ function TopProductsCard({
   const maxRevenue = Math.max(...sortedRows.map((row) => toNumber(row.revenue)), 1);
   const totalRevenue = rows.reduce((sum, row) => sum + toNumber(row.revenue), 0);
   const totalQuantity = rows.reduce((sum, row) => sum + toNumber(row.quantity), 0);
-  const ticketRows = sortedRows.filter(
-    (row) => isTicketLikeLabel(row.label) || isTicketLikeLabel(row.category_name),
+  const hasMarginRows = rows.some(
+    (row) =>
+      row.estimated_cogs_net != null ||
+      row.estimated_net_margin_amount != null,
   );
-
+  const totalCogs = rows.reduce(
+    (sum, row) => sum + toNumber(row.estimated_cogs_net ?? "0"),
+    0,
+  );
+  const totalNetMargin = rows.reduce(
+    (sum, row) => sum + toNumber(row.estimated_net_margin_amount ?? "0"),
+    0,
+  );
   return (
     <Card
       tone="rainbow"
@@ -1629,19 +1839,21 @@ function TopProductsCard({
           <strong>{formatNumber(totalQuantity)} db</strong>
           Eladott mennyiség
         </span>
+        {hasMarginRows ? (
+          <>
+            <span>
+              <strong>{formatMoney(totalCogs)}</strong>
+              Nettó COGS
+            </span>
+            <span>
+              <strong>{formatMoney(totalNetMargin)}</strong>
+              Nettó margin
+            </span>
+          </>
+        ) : null}
       </div>
 
       {isLoading ? <p className="info-message">Terméklista betöltése...</p> : null}
-
-      {ticketRows.length > 0 && (scope === "overall" || scope === "flow") ? (
-        <div className="top-products-ticket-note">
-          <strong>Jegy jellegű tétel a rangsorban</strong>
-          <span>
-            A jegy vagy VIP belépő bevételi adatként fontos, de fogyasztási termékként
-            torzíthatja a top termék képet. Külön ticket/event bontás szükséges lesz.
-          </span>
-        </div>
-      ) : null}
 
       <div className="top-products-list">
         {sortedRows.map((row, index) => {
@@ -1685,9 +1897,7 @@ function TopProductsCard({
                     {toNumber(row.revenue_change_percent ?? "0") >= 0 ? "+" : ""}
                     {formatNumber(row.revenue_change_percent ?? "0")}%
                   </span>
-                  {isTicketLikeLabel(row.label) || isTicketLikeLabel(row.category_name) ? (
-                    <span className="top-product-ticket-badge">Jegy</span>
-                  ) : null}
+                  <span>{formatMarginStatus(row.margin_status)}</span>
                 </span>
               </span>
             </button>
@@ -1701,6 +1911,30 @@ function TopProductsCard({
                   <strong>{formatMoney(row.revenue)}</strong>
                   Bruttó termékbevétel
                 </span>
+                {row.estimated_cogs_net != null ? (
+                  <span>
+                    <strong>{formatMoney(row.estimated_cogs_net ?? 0)}</strong>
+                    Nettó COGS
+                  </span>
+                ) : null}
+                {row.estimated_net_margin_amount != null ? (
+                  <span>
+                    <strong>
+                      {formatMoney(row.estimated_net_margin_amount ?? 0)} /{" "}
+                      {formatNumber(row.estimated_margin_percent ?? 0)}%
+                    </strong>
+                    Nettó margin
+                  </span>
+                ) : null}
+                {row.net_revenue !== null || row.vat_amount !== null ? (
+                  <span>
+                    <strong>
+                      Nettó {formatMoney(row.net_revenue ?? 0)} / ÁFA{" "}
+                      {formatMoney(row.vat_amount ?? 0)}
+                    </strong>
+                    Termék ÁFA-ból számolt
+                  </span>
+                ) : null}
                 <span>
                   <strong>{row.category_name ?? "-"}</strong>
                   Kategória
@@ -1708,6 +1942,10 @@ function TopProductsCard({
                 <span>
                   <strong>{row.transaction_count}</strong>
                   Érintett nyugtasor
+                </span>
+                <span>
+                  <strong>{formatCostSource(row.cost_source)}</strong>
+                  {formatMarginStatus(row.margin_status)}
                 </span>
               </div>
             ) : null}
@@ -4404,6 +4642,49 @@ function CategoryMixCard({
             </div>
             <span className="status-pill">{productSourceRows.length} sor</span>
           </div>
+          {selectedProduct.net_revenue !== null ||
+          selectedProduct.vat_amount !== null ||
+          selectedProduct.estimated_cogs_net !== null ||
+          selectedProduct.estimated_net_margin_amount !== null ? (
+            <div className="expense-summary-strip">
+              <span>
+                <strong>{formatMoney(selectedProduct.revenue)}</strong>
+                <small>Bruttó actual</small>
+                Bevétel
+              </span>
+              <span>
+                <strong>{formatMoney(selectedProduct.net_revenue ?? 0)}</strong>
+                <small>Derived</small>
+                Nettó
+              </span>
+              <span>
+                <strong>{formatMoney(selectedProduct.vat_amount ?? 0)}</strong>
+                <small>Derived</small>
+                ÁFA
+              </span>
+              {selectedProduct.estimated_cogs_net !== null ? (
+                <span>
+                  <strong>{formatMoney(selectedProduct.estimated_cogs_net)}</strong>
+                  <small>{formatCostSource(selectedProduct.cost_source)}</small>
+                  Nettó COGS
+                </span>
+              ) : null}
+              {selectedProduct.estimated_net_margin_amount !== null ? (
+                <span>
+                  <strong>{formatMoney(selectedProduct.estimated_net_margin_amount)}</strong>
+                  <small>
+                    {formatNumber(selectedProduct.estimated_margin_percent ?? 0)}%
+                  </small>
+                  Nettó margin
+                </span>
+              ) : null}
+              <span>
+                <strong>{formatMarginStatus(selectedProduct.margin_status)}</strong>
+                <small>Readiness</small>
+                Margin státusz
+              </span>
+            </div>
+          ) : null}
           <div className="table-wrap dashboard-embedded-table">
             <table className="data-table details-table">
               <thead>
@@ -4412,6 +4693,7 @@ function CategoryMixCard({
                   <th>Nyugta</th>
                   <th>Mennyiség</th>
                   <th>Bruttó összeg</th>
+                  <th>Nettó / ÁFA</th>
                   <th>Fizetés</th>
                 </tr>
               </thead>
@@ -4422,6 +4704,13 @@ function CategoryMixCard({
                     <td>{row.receipt_no ?? "-"}</td>
                     <td>{formatNumber(row.quantity)}</td>
                     <td>{formatMoney(row.gross_amount)}</td>
+                    <td>
+                      {row.net_amount !== null || row.vat_amount !== null
+                        ? `${formatMoney(row.net_amount ?? 0)} / ${formatMoney(
+                            row.vat_amount ?? 0,
+                          )}`
+                        : "-"}
+                    </td>
                     <td>{row.payment_method ? formatPaymentMethod(row.payment_method) : "-"}</td>
                   </tr>
                 ))}
@@ -4443,6 +4732,8 @@ function DashboardHeaderControls({
   setStartDate,
   endDate,
   setEndDate,
+  onExport,
+  canExport,
 }: {
   scope: DashboardScope;
   setScope: (value: DashboardScope) => void;
@@ -4452,6 +4743,8 @@ function DashboardHeaderControls({
   setStartDate: (value: string) => void;
   endDate: string;
   setEndDate: (value: string) => void;
+  onExport: () => void;
+  canExport: boolean;
 }) {
   return (
     <>
@@ -4511,7 +4804,9 @@ function DashboardHeaderControls({
           </>
         ) : null}
 
-        <Button variant="secondary">Export</Button>
+        <Button variant="secondary" onClick={onExport} disabled={!canExport}>
+          Export
+        </Button>
       </div>
     </>
   );
@@ -4529,6 +4824,8 @@ export function DashboardPage() {
     dashboard,
     basketPairs,
     basketReceipts,
+    flowEvents,
+    flowEventPerformances,
     topProducts,
     productDetails,
     productSourceRows,
@@ -4556,6 +4853,7 @@ export function DashboardPage() {
     isDrilldownLoading,
     isTopProductsLoading,
     isBasketReceiptsLoading,
+    isFlowEventsLoading,
     errorMessage,
   } = useDashboard();
   useEffect(() => {
@@ -4569,11 +4867,14 @@ export function DashboardPage() {
         setStartDate={setStartDate}
         endDate={endDate}
         setEndDate={setEndDate}
+        onExport={() => exportDashboardData(dashboard)}
+        canExport={Boolean(dashboard)}
       />,
     );
 
     return () => setControls(null);
   }, [
+    dashboard,
     endDate,
     period,
     scope,
@@ -4678,6 +4979,18 @@ export function DashboardPage() {
 
               <BusinessFocusCard dashboard={dashboard} />
               <BusinessSpecificAnalyticsCard dashboard={dashboard} />
+              {dashboard.scope === "flow" ? (
+                <>
+                  <FlowConsumptionControlCard dashboard={dashboard} />
+                  <FlowFinancialEventImpactCard
+                    events={flowEvents}
+                    performances={flowEventPerformances}
+                    isLoading={isFlowEventsLoading}
+                  />
+                  <FlowForecastEventCard rows={dashboard.flow_forecast_event_insights} />
+                </>
+              ) : null}
+              <VatReadinessCard readiness={dashboard.vat_readiness} />
 
               <CategoryMixCard
                 categories={dashboard.category_breakdown}

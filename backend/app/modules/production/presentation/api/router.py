@@ -14,18 +14,44 @@ from app.modules.production.application.commands.create_recipe import (
     RecipeValidationError,
     SaveActiveProductRecipeCommand,
 )
+from app.modules.production.application.queries.get_recipe_readiness_overview import (
+    GetRecipeReadinessOverviewQuery,
+)
 from app.modules.production.application.queries.list_recipes import ListRecipesQuery
 from app.modules.production.domain.entities.recipe import RecipeDraft, RecipeIngredientDraft
 from app.modules.production.presentation.dependencies import (
+    get_recipe_readiness_overview_query,
     get_list_recipes_query,
     get_save_recipe_command,
 )
 from app.modules.production.presentation.schemas.recipe import (
     RecipeCostSummaryResponse,
+    RecipeReadinessOverviewResponse,
     RecipeSaveRequest,
 )
 
 router = APIRouter(prefix="/production", tags=["production"])
+
+
+@router.get(
+    "/recipes/readiness-overview",
+    response_model=RecipeReadinessOverviewResponse,
+)
+def get_recipe_readiness_overview(
+    business_unit_id: uuid.UUID,
+    query: Annotated[
+        GetRecipeReadinessOverviewQuery,
+        Depends(get_recipe_readiness_overview_query),
+    ],
+    active_only: bool = Query(default=True),
+) -> RecipeReadinessOverviewResponse:
+    """Return aggregate recipe work-queue counters for one business unit."""
+
+    overview = query.execute(
+        business_unit_id=business_unit_id,
+        active_only=active_only,
+    )
+    return RecipeReadinessOverviewResponse.model_validate(overview)
 
 
 @router.get("/recipes", response_model=list[RecipeCostSummaryResponse])

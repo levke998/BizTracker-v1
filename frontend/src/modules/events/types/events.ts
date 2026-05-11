@@ -121,8 +121,17 @@ export type EventPerformance = {
   performer_share_percent: string;
   performer_share_amount: string;
   retained_ticket_revenue: string;
+  platform_fee_gross: string;
   own_revenue: string;
+  operating_cost_gross: string;
   event_profit_lite: string;
+  event_profit_margin_percent: string | null;
+  operating_cost_ratio_percent: string | null;
+  ticket_revenue_share_percent: string | null;
+  bar_revenue_share_percent: string | null;
+  profit_status: "profitable" | "break_even" | "loss" | "no_revenue" | string;
+  ticket_revenue_source: string;
+  settlement_status: string;
   categories: EventPerformanceCategory[];
   top_products: EventPerformanceProduct[];
   weather: EventWeatherSummary;

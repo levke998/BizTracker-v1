@@ -8,6 +8,7 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.modules.finance.application.services.vat_calculator import VatCalculator
 from app.modules.inventory.infrastructure.orm.inventory_item_model import (
     InventoryItemModel,
 )
@@ -16,6 +17,7 @@ from app.modules.master_data.infrastructure.orm.product_model import ProductMode
 from app.modules.master_data.infrastructure.orm.unit_of_measure_model import (
     UnitOfMeasureModel,
 )
+from app.modules.master_data.infrastructure.orm.vat_rate_model import VatRateModel
 from app.modules.production.domain.entities.recipe import (
     IngredientStockStatus,
     RecipeCostStatus,
@@ -237,12 +239,15 @@ class SqlAlchemyRecipeRepository:
                 RecipeIngredientModel,
                 InventoryItemModel.name,
                 InventoryItemModel.default_unit_cost,
+                InventoryItemModel.default_vat_rate_id,
+                VatRateModel.rate_percent,
                 InventoryItemModel.estimated_stock_quantity,
                 InventoryItemModel.track_stock,
                 ingredient_uom_alias.c.code,
                 item_uom_alias.c.code,
             )
             .join(InventoryItemModel, RecipeIngredientModel.inventory_item_id == InventoryItemModel.id)
+            .outerjoin(VatRateModel, InventoryItemModel.default_vat_rate_id == VatRateModel.id)
             .outerjoin(
                 ingredient_uom_alias,
                 RecipeIngredientModel.uom_id == ingredient_uom_alias.c.id,
@@ -257,6 +262,8 @@ class SqlAlchemyRecipeRepository:
             ingredient,
             item_name,
             default_unit_cost,
+            default_vat_rate_id,
+            vat_rate_percent,
             estimated_stock_quantity,
             track_stock,
             ingredient_uom_code,
@@ -270,6 +277,10 @@ class SqlAlchemyRecipeRepository:
             unit_cost = _decimal_or_none(default_unit_cost)
             estimated_cost = (
                 converted_quantity * unit_cost if unit_cost is not None else None
+            )
+            tax_amount, gross_cost = _tax_from_net(
+                estimated_cost=estimated_cost,
+                vat_rate_percent=_decimal_or_none(vat_rate_percent),
             )
             stock_quantity = _decimal_or_none(estimated_stock_quantity)
             by_version.setdefault(ingredient.recipe_version_id, []).append(
@@ -290,6 +301,10 @@ class SqlAlchemyRecipeRepository:
                         stock_quantity=stock_quantity,
                         track_stock=bool(track_stock),
                     ),
+                    default_vat_rate_id=default_vat_rate_id,
+                    vat_rate_percent=_decimal_or_none(vat_rate_percent),
+                    estimated_vat_amount=tax_amount,
+                    estimated_gross_cost=gross_cost,
                 )
             )
 
@@ -336,6 +351,10 @@ class SqlAlchemyRecipeRepository:
             Decimal("0"),
         )
         missing_cost = any(ingredient.estimated_cost is None for ingredient in ingredients)
+        missing_vat_rate = any(
+            ingredient.estimated_cost is not None and ingredient.vat_rate_percent is None
+            for ingredient in ingredients
+        )
         stock_warning = any(
             ingredient.stock_status
             in (IngredientStockStatus.MISSING, IngredientStockStatus.INSUFFICIENT)
@@ -346,10 +365,33 @@ class SqlAlchemyRecipeRepository:
             RecipeCostStatus.MISSING_COST if missing_cost else RecipeCostStatus.COMPLETE
         )
         total_cost = None if missing_cost else known_total_cost
+        known_total_vat_amount = sum(
+            (
+                ingredient.estimated_vat_amount
+                for ingredient in ingredients
+                if ingredient.estimated_vat_amount is not None
+            ),
+            Decimal("0"),
+        )
+        known_total_gross_cost = sum(
+            (
+                ingredient.estimated_gross_cost
+                for ingredient in ingredients
+                if ingredient.estimated_gross_cost is not None
+            ),
+            Decimal("0"),
+        )
+        total_vat_amount = None if missing_cost or missing_vat_rate else known_total_vat_amount
+        total_gross_cost = None if missing_cost or missing_vat_rate else known_total_gross_cost
         yield_quantity = Decimal(version.yield_quantity)
         unit_cost = (
             total_cost / yield_quantity
             if total_cost is not None and yield_quantity > 0
+            else None
+        )
+        unit_gross_cost = (
+            total_gross_cost / yield_quantity
+            if total_gross_cost is not None and yield_quantity > 0
             else None
         )
         readiness_status = _readiness_status(
@@ -358,6 +400,7 @@ class SqlAlchemyRecipeRepository:
         )
         warnings = _warnings(
             missing_cost=missing_cost,
+            missing_vat_rate=missing_vat_rate,
             stock_warning=stock_warning,
         )
 
@@ -380,6 +423,15 @@ class SqlAlchemyRecipeRepository:
             readiness_status=readiness_status,
             warnings=warnings,
             ingredients=ingredients,
+            known_total_vat_amount=known_total_vat_amount,
+            total_vat_amount=total_vat_amount,
+            known_total_gross_cost=known_total_gross_cost,
+            total_gross_cost=total_gross_cost,
+            unit_gross_cost=unit_gross_cost,
+            tax_status=_tax_status(
+                missing_cost=missing_cost,
+                missing_vat_rate=missing_vat_rate,
+            ),
         )
 
 
@@ -416,13 +468,43 @@ def _readiness_status(
     return RecipeReadinessStatus.READY
 
 
-def _warnings(*, missing_cost: bool, stock_warning: bool) -> tuple[str, ...]:
+def _warnings(
+    *,
+    missing_cost: bool,
+    missing_vat_rate: bool,
+    stock_warning: bool,
+) -> tuple[str, ...]:
     warnings: list[str] = []
     if missing_cost:
         warnings.append("missing_cost")
+    if missing_vat_rate:
+        warnings.append("missing_vat_rate")
     if stock_warning:
         warnings.append("missing_stock")
     return tuple(warnings)
+
+
+def _tax_status(*, missing_cost: bool, missing_vat_rate: bool) -> str:
+    if missing_cost:
+        return "incomplete_cost"
+    if missing_vat_rate:
+        return "missing_vat_rate"
+    return "product_vat_derived"
+
+
+def _tax_from_net(
+    *,
+    estimated_cost: Decimal | None,
+    vat_rate_percent: Decimal | None,
+) -> tuple[Decimal | None, Decimal | None]:
+    if estimated_cost is None or vat_rate_percent is None:
+        return None, None
+
+    result = VatCalculator().calculate_from_net(
+        net_amount=estimated_cost,
+        rate_percent=vat_rate_percent,
+    )
+    return result.vat_amount, result.gross_amount
 
 
 def _convert_quantity(

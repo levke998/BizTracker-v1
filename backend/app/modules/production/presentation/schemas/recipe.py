@@ -29,6 +29,10 @@ class RecipeIngredientCostResponse(ProductionBaseSchema):
     estimated_stock_quantity: Decimal | None
     track_stock: bool
     stock_status: str
+    default_vat_rate_id: uuid.UUID | None = None
+    vat_rate_percent: Decimal | None = None
+    estimated_vat_amount: Decimal | None = None
+    estimated_gross_cost: Decimal | None = None
 
 
 class RecipeIngredientSaveRequest(BaseModel):
@@ -69,3 +73,24 @@ class RecipeCostSummaryResponse(ProductionBaseSchema):
     readiness_status: str
     warnings: tuple[str, ...]
     ingredients: tuple[RecipeIngredientCostResponse, ...]
+    known_total_vat_amount: Decimal | None = None
+    total_vat_amount: Decimal | None = None
+    known_total_gross_cost: Decimal | None = None
+    total_gross_cost: Decimal | None = None
+    unit_gross_cost: Decimal | None = None
+    tax_status: str = "not_available"
+
+
+class RecipeReadinessOverviewResponse(ProductionBaseSchema):
+    """Aggregate recipe readiness counters for one business unit."""
+
+    business_unit_id: uuid.UUID
+    total_products: int
+    ready_count: int
+    incomplete_count: int
+    critical_count: int
+    readiness_counts: dict[str, int]
+    cost_counts: dict[str, int]
+    tax_counts: dict[str, int]
+    warning_counts: dict[str, int]
+    next_actions: tuple[str, ...]

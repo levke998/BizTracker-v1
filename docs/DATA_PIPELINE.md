@@ -61,7 +61,10 @@ Netto/brutto/AFA pipeline:
 
 Aktualis elso szelet:
 - `core.supplier_invoice_draft` tarolja a PDF feltoltes review draft allapotat
-- `POST /api/v1/procurement/purchase-invoice-drafts/pdf` PDF fajlt tarol es `review_required` draftot hoz letre
+- `POST /api/v1/procurement/purchase-invoice-drafts/pdf` PDF fajlt tarol, text-layer/regex alapu elotoltest futtat, es `review_required` draftot hoz letre
+- az elso kinyero neve `text_layer_regex_v1`; adapter contract mogott fut, eredmenye `raw_extraction` audit payloadban es `review_payload` elotoltesben jelenik meg
+- a kinyero osszesitett es soronkenti `confidence_score` / `confidence_reasons` mezoket ad; ez review-tamogato jelzes, nem automatikus jovahagyas
+- kinyeresi statuszok: `parsed_review_required`, `no_candidates`, `no_text`; egyik sem jelent automatikus jovahagyast
 - `GET /api/v1/procurement/purchase-invoice-drafts` listazza a review draftokat
 - `PUT /api/v1/procurement/purchase-invoice-drafts/{draft_id}/review` menti az ellenorzott fej- es soradatokat
 - a review mentese soronkent a `VatCalculator` service-szel egyezteti a netto/AFA/brutto ertekeket
@@ -74,9 +77,10 @@ Aktualis elso szelet:
 - `GET /api/v1/procurement/supplier-item-aliases` listazza a beszallitoi alias munkalistat
 - `PATCH /api/v1/procurement/supplier-item-aliases/{alias_id}/mapping` manualisan inventory itemhez kapcsol egy alias sort
 - a Procurement / Szamlak oldalon van PDF review panel
+- a Procurement / Szamlak oldalon a draft lista jelzi, hogy volt-e PDF text-layer elotoltes vagy manualis review kell
 - a Procurement / Szamlak oldalon ismeretlen tetelbol letrehozhato uj belso keszletelem/aru torzselem
 - a Procurement / Szamlak oldalon van beszallitoi alias munkalista manualis jovahagyassal
-- OCR/adatkinyeres meg nem tortenik, a felhasznalo manualisan rogzithet/javithat review sorokat
+- valodi OCR/adatkinyeres kovetkezo adapter; az elso szelet csak text-layer/regex jellegu, ezert minden elotoltes felhasznaloi review-koteles
 
 ## POS CSV Parser
 
@@ -135,12 +139,17 @@ Aktualis elso szelet:
 - `PUT /api/v1/events/{event_id}/ticket-actual` letrehozza vagy frissiti a jegy actualt
 - az Events feluleten a kinyitott eventnel van `Jegyadatok` panel
 - az event performance jegybevetel es jegydarabszam mezoi a ticket actualbol dolgoznak, ha van ilyen adat
+- ticket actual platform dij az event performance profitban levonasra kerul `platform_fee_gross` mezokent
+- performance elszamolasi mezok: `ticket_revenue_source`, `settlement_status`, `operating_cost_gross`, `event_profit_lite`
+- dontestamogato performance mezok: `profit_status`, `event_profit_margin_percent`, `operating_cost_ratio_percent`, `ticket_revenue_share_percent`, `bar_revenue_share_percent`
 
 Fontos:
 - event letrehozaskor a jegyadat nem kotelezo
 - POS CSV tovabbra is bar/fogyasztas actual
+- POS CSV-ben nem keresunk jegyet; nincs helyszini/POS jegyertekesites, ezert nincs POS-alapu jegybecsles
 - ticket actual lehet kezi rogzites, kesobb ticket CSV/API adapter
 - AFA kulcs opcionalisan kapcsolhato a ticket actualhoz
+- Event elemzo frontend: ticket actual coverage, hianyzo ticket actual munkalista es eventenkenti ticket source/status jelzes ugyanebbol a read-modelbol dolgozik
 
 ## POS Recept Hiany Munkalista
 
@@ -161,6 +170,7 @@ A recept es onkoltseg olvasasi oldala a production modulba kerult, hogy a catalo
 
 Aktualis alap:
 - `GET /api/v1/production/recipes` termekenkent ad aktiv recept, aktiv receptverzio, osszetevo, costing es readiness allapotot
+- `GET /api/v1/production/recipes/readiness-overview` osszesitett munkalista countereket ad: readiness/cost/tax/warning bontas es kovetkezo akciok
 - a valasz tartalmazza: `cost_status`, `readiness_status`, `warnings`, `known_total_cost`, `total_cost`, `unit_cost`
 - nincs recept eseten `no_recipe` / `missing_recipe` allapot jon vissza, nem hiba
 - ures recept eseten `empty_recipe` allapot jon vissza, nem import vagy eladas blokker
@@ -174,6 +184,9 @@ Aktualis alap:
 - a frontend Recept readiness munkalista gyors gombokkal szur missing recipe, missing cost, missing stock es empty recipe allapotra
 - missing cost gyorsjavitas a kapcsolt inventory item `default_unit_cost` mezojet frissiti a catalog ingredient API-n keresztul
 - missing/unknown/insufficient stock gyorsjavitas a kapcsolt inventory item `estimated_stock_quantity` mezojet frissiti; ez tovabbra is teoretikus/controlling adat, nem fizikai leltar
+- missing VAT gyorsjavitas a kapcsolt inventory item `default_vat_rate_id` mezojet frissiti hivatalos AFA torzsadatbol valasztva
+- missing recipe es empty recipe esetben a frontend tud letezo receptet sablonkent betolteni a szerkesztobe; ez nem automatikus mentes, hanem ellenorizheto receptinditas
+- recept szerkeszteskor a frontend jelzi az aktiv verziot es a kovetkezo mentessel letrejovo uj verziot; a backend mentese tovabbra is uj aktiv verzio + regi aktiv verzio inaktivalas
 
 ## POS Aradaptacio
 
@@ -271,7 +284,13 @@ Accounting-ready irany:
 - POS oldalon, ha az export nem ad AFA bontast, nem talalunk ki tenyadatot; kesobb termek/AFA szabalybol derived netto/AFA szamitas keszulhet
 - elso dashboard reporting szelet kesz: KPI-k jelolik az osszeg alapjat (`gross`, `net`, `mixed`) es eredetet (`actual`, `derived`)
 - supplier invoice eredetu kiadasnal a dashboard a szamlasorokbol netto es AFA actual bontast ad, mas kiadasi forrasnal `not_available` bontast jelez
-- POS bevetel jelenleg `gross actual`; POS netto/AFA csak kesobbi, product/vat master data alapu `derived` pipeline lehet
+- beszerzesi szamla API/lista szinten is megjelenik a `tax_breakdown_source`: `supplier_invoice_actual`, `partial_supplier_invoice_actual`, vagy `not_available`
+- POS bevetel penzugyi alapja `gross actual`; a kategoriabontas, termekbontas es source row drill-down mar tud product/vat master data alapu `derived` netto/AFA mezoket adni
+- POS derived AFA forrasjeloles: teljes talalatnal `product_vat_derived`, reszleges talalatnal `partial_product_vat_derived`, hianyzo termek AFA kulcsnal `not_available`
+- POS AFA readiness kesz: a dashboard `vat_readiness` mezoben mutatja, hogy az idoszaki brutto POS forgalom mekkora reszehez van termek AFA kulcs, hany sor hianyos, es `complete` / `partial` / `missing` / `no_data` statuszt ad
+- Termek margin reporting kesz elso szeletben: `/api/v1/analytics/dashboard/products` a POS brutto actual mellett derived netto/AFA, netto COGS, netto margin, margin szazalek, cost source es margin status mezoket ad; hianyzo AFA vagy koltseg nem nullakent, hanem hianyos statuszkent jelenik meg
+- Recept/production read model elso AFA szelete kesz: inventory item AFA kulcsbol soronkenti derived AFA/brutto osszetevo koltseg, recept total es unit brutto koltseg, `tax_status`
+- AFA kulcs hiany receptnel nem blokkolja a netto costot vagy eladast, de `missing_vat_rate` figyelmeztetest ad
 
 ## API Felulet Rovid
 

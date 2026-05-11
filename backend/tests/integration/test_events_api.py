@@ -374,13 +374,22 @@ def test_event_performance_aggregates_pos_rows_and_weather_context(
         payload = response.json()
         assert payload["source_row_count"] == 3
         assert payload["receipt_count"] == 2
-        assert payload["ticket_revenue_gross"] == "30000.00"
-        assert payload["bar_revenue_gross"] == "60000.00"
+        assert payload["ticket_revenue_gross"] == "0.00"
+        assert payload["bar_revenue_gross"] == "90000.00"
         assert payload["total_revenue_gross"] == "90000.00"
-        assert payload["performer_share_amount"] == "24000.00"
-        assert payload["retained_ticket_revenue"] == "6000.00"
-        assert payload["own_revenue"] == "66000.00"
-        assert payload["event_profit_lite"] == "51000.00"
+        assert payload["performer_share_amount"] == "0.00"
+        assert payload["retained_ticket_revenue"] == "0.00"
+        assert payload["own_revenue"] == "90000.00"
+        assert payload["platform_fee_gross"] == "0.00"
+        assert payload["operating_cost_gross"] == "15000.00"
+        assert payload["event_profit_lite"] == "75000.00"
+        assert payload["event_profit_margin_percent"] == "83.33"
+        assert payload["operating_cost_ratio_percent"] == "16.67"
+        assert payload["ticket_revenue_share_percent"] == "0.00"
+        assert payload["bar_revenue_share_percent"] == "100.00"
+        assert payload["profit_status"] == "profitable"
+        assert payload["ticket_revenue_source"] == "not_recorded"
+        assert payload["settlement_status"] == "ticket_actual_missing"
         assert payload["weather"]["observation_count"] == 2
         assert payload["weather"]["dominant_condition"] == "napos"
         assert payload["categories"][0]["category_name"] == "Ital"
@@ -394,9 +403,11 @@ def test_event_performance_aggregates_pos_rows_and_weather_context(
         listed_payload = [
             item for item in list_response.json() if item["event_id"] == event_id
         ][0]
-        assert listed_payload["ticket_revenue_gross"] == "30000.00"
-        assert listed_payload["bar_revenue_gross"] == "60000.00"
-        assert listed_payload["event_profit_lite"] == "51000.00"
+        assert listed_payload["ticket_revenue_gross"] == "0.00"
+        assert listed_payload["bar_revenue_gross"] == "90000.00"
+        assert listed_payload["event_profit_lite"] == "75000.00"
+        assert listed_payload["event_profit_margin_percent"] == "83.33"
+        assert listed_payload["profit_status"] == "profitable"
     finally:
         db_session.execute(
             delete(WeatherObservationHourlyModel).where(
@@ -472,7 +483,16 @@ def test_event_ticket_actual_overrides_ticket_layer_in_performance(
         assert payload["ticket_quantity"] == "120.000"
         assert payload["bar_revenue_gross"] == "24000.00"
         assert payload["performer_share_amount"] == "480000.00"
-        assert payload["event_profit_lite"] == "129000.00"
+        assert payload["platform_fee_gross"] == "30000.00"
+        assert payload["operating_cost_gross"] == "45000.00"
+        assert payload["event_profit_lite"] == "99000.00"
+        assert payload["event_profit_margin_percent"] == "68.75"
+        assert payload["operating_cost_ratio_percent"] == "31.25"
+        assert payload["ticket_revenue_share_percent"] == "96.15"
+        assert payload["bar_revenue_share_percent"] == "3.85"
+        assert payload["profit_status"] == "profitable"
+        assert payload["ticket_revenue_source"] == "ticket_actual"
+        assert payload["settlement_status"] == "actual_ticket_settlement"
     finally:
         db_session.execute(
             delete(EventTicketActualModel).where(

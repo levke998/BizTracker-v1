@@ -45,9 +45,27 @@ export type DashboardTrendPoint = {
 export type DashboardBreakdownRow = {
   label: string;
   revenue: string;
+  net_revenue: string | null;
+  vat_amount: string | null;
   quantity: string;
   transaction_count: number;
   source_layer: string;
+  amount_basis: string;
+  tax_breakdown_source: string;
+};
+
+export type DashboardVatReadiness = {
+  status: "complete" | "partial" | "missing" | "no_data" | string;
+  coverage_percent: string;
+  gross_revenue: string;
+  covered_gross_revenue: string;
+  missing_gross_revenue: string;
+  total_row_count: number;
+  covered_row_count: number;
+  missing_row_count: number;
+  source_layer: string;
+  amount_basis: string;
+  tax_breakdown_source: string;
 };
 
 export type DashboardHeatmapCell = {
@@ -252,9 +270,19 @@ export type DashboardProductDetailRow = {
   product_name: string;
   category_name: string;
   revenue: string;
+  net_revenue: string | null;
+  vat_amount: string | null;
+  estimated_unit_cost_net: string | null;
+  estimated_cogs_net: string | null;
+  estimated_net_margin_amount: string | null;
+  estimated_margin_percent: string | null;
   quantity: string;
   transaction_count: number;
   source_layer: string;
+  amount_basis: string;
+  tax_breakdown_source: string;
+  cost_source: string;
+  margin_status: string;
 };
 
 export type DashboardPosSourceRow = {
@@ -266,8 +294,13 @@ export type DashboardPosSourceRow = {
   product_name: string;
   quantity: string;
   gross_amount: string;
+  net_amount: string | null;
+  vat_amount: string | null;
+  vat_rate_percent: string | null;
   payment_method: string | null;
   source_layer: string;
+  amount_basis: string;
+  tax_breakdown_source: string;
 };
 
 export type DashboardExpenseDetailRow = {
@@ -359,6 +392,7 @@ export type DashboardData = {
   kpis: DashboardKpi[];
   revenue_trend: DashboardTrendPoint[];
   category_breakdown: DashboardBreakdownRow[];
+  vat_readiness: DashboardVatReadiness;
   payment_method_breakdown: DashboardBreakdownRow[];
   basket_value_distribution: DashboardBreakdownRow[];
   traffic_heatmap: DashboardHeatmapCell[];

@@ -407,6 +407,25 @@ class SqlAlchemyPurchaseInvoiceRepository:
         posting_metadata: tuple[bool, int] | None = None,
     ) -> PurchaseInvoice:
         posted_to_finance, posted_inventory_movement_count = posting_metadata or (False, 0)
+        line_entities = tuple(
+            PurchaseInvoiceLine(
+                id=line.id,
+                inventory_item_id=line.inventory_item_id,
+                description=line.description,
+                quantity=line.quantity,
+                uom_id=line.uom_id,
+                unit_net_amount=line.unit_net_amount,
+                line_net_amount=line.line_net_amount,
+                vat_rate_id=line.vat_rate_id,
+                vat_amount=line.vat_amount,
+                line_gross_amount=line.line_gross_amount,
+            )
+            for line in sorted(model.lines, key=lambda item: str(item.id))
+        )
+        net_total = sum((line.line_net_amount for line in line_entities), Decimal("0"))
+        vat_total, tax_breakdown_source = (
+            SqlAlchemyPurchaseInvoiceRepository._summarize_tax_breakdown(line_entities)
+        )
         return PurchaseInvoice(
             id=model.id,
             business_unit_id=model.business_unit_id,
@@ -416,25 +435,28 @@ class SqlAlchemyPurchaseInvoiceRepository:
             invoice_date=model.invoice_date,
             currency=model.currency,
             gross_total=model.gross_total,
+            net_total=net_total,
+            vat_total=vat_total,
+            tax_breakdown_source=tax_breakdown_source,
             notes=model.notes,
             is_posted=posted_to_finance or posted_inventory_movement_count > 0,
             posted_to_finance=posted_to_finance,
             posted_inventory_movement_count=posted_inventory_movement_count,
             created_at=model.created_at,
             updated_at=model.updated_at,
-            lines=tuple(
-                PurchaseInvoiceLine(
-                    id=line.id,
-                    inventory_item_id=line.inventory_item_id,
-                    description=line.description,
-                    quantity=line.quantity,
-                    uom_id=line.uom_id,
-                    unit_net_amount=line.unit_net_amount,
-                    line_net_amount=line.line_net_amount,
-                    vat_rate_id=line.vat_rate_id,
-                    vat_amount=line.vat_amount,
-                    line_gross_amount=line.line_gross_amount,
-                )
-                for line in sorted(model.lines, key=lambda item: str(item.id))
-            ),
+            lines=line_entities,
         )
+
+    @staticmethod
+    def _summarize_tax_breakdown(
+        lines: tuple[PurchaseInvoiceLine, ...],
+    ) -> tuple[Decimal | None, str]:
+        vat_values = [line.vat_amount for line in lines if line.vat_amount is not None]
+        if not vat_values:
+            return None, "not_available"
+
+        vat_total = sum((Decimal(value) for value in vat_values), Decimal("0"))
+        if len(vat_values) == len(lines):
+            return vat_total, "supplier_invoice_actual"
+
+        return vat_total, "partial_supplier_invoice_actual"

@@ -85,7 +85,7 @@ Fo kerdesek:
 Fontos objektumok:
 - `event`: idosav, statusz, performer, varhato letszam
 - `event_ticket_actual`: kulon ticket rendszerbol erkezo jegy darabszam, brutto/netto/AFA es platform dij actual
-- `ticket revenue`: elsodlegesen `event_ticket_actual`, kesobb ticket CSV/API importbol; POS ticket-szeru sor csak fallback lehet
+- `ticket revenue`: `event_ticket_actual`, kesobb ticket CSV/API importbol; a Flow POS CSV nem tartalmaz jegyet es nincs POS-alapu jegybecsles
 - `bar revenue`: POS/CSV sales actual
 - `performer share`: konfiguralt szazalek vagy kesobb szabaly
 - `fixed fee`: fix fellepti dij
@@ -99,18 +99,32 @@ Event late-binding:
 
 Flow UI scope:
 - a Business Dashboard `flow` scope-ja az uzleti/beveteli oldalt mutatja, Gourmandhoz hasonlo vezetoi nezettel
-- a Flow dashboard KPI, trend, kategoria, termek, jegy/bar mix es csucsidovezetett forgalmi kerdesekre valaszol
+- a Flow dashboard KPI, trend, kategoria, termek, bar/fogyasztasi mix es csucsidovezetett forgalmi kerdesekre valaszol
+- a Flow penzugyi mix POS-alapu: bar/fogyasztasi forgalom; a ticket actual az event penzugyi retegben marad
+- a Flow POS kontrollkartyaja bar/fogyasztasi mutatokat mutat: vezeto kategoria, top 3 koncentracio, csucsterheles, kosarprofil, kategoriatrend es AFA readiness
+- a Flow dashboard event blokkja ugyanarra az event performance read-modelre epul, mint az Event/Esemeny elemzo, de penzugyi osszesito szerepu: event hatas a Flow eredmenyre, ticket actual lefedettseg, event koltsegarany es jegy/bar mix
 - az Event/Esemeny elemzo fule az eventek osszehasonlitasa: legerosebb, legfelkapottabb, performer, jegy/bar mix, POS sor/nyugta es weather kontextus
+- az Event/Esemeny elemzo reszletes eventenkenti rangsor/drilldown, a Flow dashboard nem masolja ezt a feladatot
+- az Event/Esemeny elemzo ticket actual lefedettseget es hianyzo ticket actual munkalistat is mutat, mert a jegybevetel nem POS-bol becsult adat
 - event rangsor vagy event munkalista nem kerul a dashboardra kulon blokkent
-- kesz elso szelet: letrehozott eventhez manualisan rogzithető ticket actual, amely az Event elemzo performance szamitasaban felulirja a POS ticket fallbacket
+- kesz elso szelet: letrehozott eventhez manualisan rogzithet ticket actual, amely az Event elemzo performance ticket reteget adja; hianyaban a ticket bevetel nincs rogzitve
 
 Egyszerusitett Flow profit:
 
 ```text
-retained_ticket_revenue + POS bar_revenue - performer_fixed_fee - event_cost
+retained_ticket_revenue + POS bar_revenue - performer_fixed_fee - event_cost - ticket_platform_fee
 ```
 
 Az alap 80% performer share lehet uzleti kiindulas, de nem kodba egetett szabaly.
+
+Event performance elszamolasi jeloles:
+- `ticket_revenue_source`: `ticket_actual` vagy `not_recorded`
+- `settlement_status`: `actual_ticket_settlement` vagy `ticket_actual_missing`
+- `operating_cost_gross`: fix fellepti dij + egyeb event koltseg + ticket platform fee
+- `profit_status`: `profitable`, `break_even`, `loss` vagy `no_revenue`
+- `event_profit_margin_percent`: event profit / sajat bevetel
+- `operating_cost_ratio_percent`: event mukodesi koltseg / sajat bevetel
+- `ticket_revenue_share_percent`, `bar_revenue_share_percent`: teljes brutto event beveteli mix
 
 ## Inventory
 
@@ -185,7 +199,8 @@ Aktualis alap:
 - ha minden review sor kalkulacioja `ok`, a draft `review_ready`; ha hiany vagy elteres van, marad `review_required`
 - `review_ready` draftbol letrehozhato a vegleges `supplier_invoice`; ilyenkor a draft `invoice_created`
 - a vegleges szamla letrehozasa meg nem posting: finance es inventory actual csak kulon konyvelesi muvelet utan keletkezik
-- `raw_extraction` a kesobbi OCR/adatkinyeres hatara, jelenleg manualis review sorrogzites tortenik
+- `raw_extraction` mar tarolja az elso `text_layer_regex_v1` kinyero audit payloadjat es confidence jeloleset; ez csak elotoltes, nem actual adat
+- az elotoltott PDF sorok `review_needed` allapotban maradnak, hogy a felhasznalo ellenorizze a beszallitoi nevet, belso megjelenitesi nevet, mennyiseget, AFA kulcsot es netto/brutto ertekeket
 
 Szamlaadatok:
 - supplier
@@ -268,18 +283,26 @@ AFA hozzarendeles:
 Recipe/costing AFA irany:
 - recept onkoltseg controllinghoz elsodlegesen netto beszerzesi koltsegbol szamoljon, mert AFA-koros vallalkozasnal a levonhato input AFA nem termekköltség
 - brutto beszerzesi ertek is latszodjon, mert cash-flow es kifizetesi oldalon fontos
+- a recept osszetevoi kulon-kulon hordozzak az inventory item AFA kulcsat; egy recepten belul lehet 5%, 18% es 27% is
+- a recept read model soronkent szamol derived AFA-t es bruttot a netto default beszerzesi arbol, majd osszegzi total/unit szinten
+- ha egy osszetevonek van netto koltsege, de nincs AFA kulcsa, a netto onkoltseg tovabbra is hasznalhato, de `missing_vat_rate` figyelmeztetes es tax statusz jelenik meg
+- Flow eseteben is ugyanaz az inventory/product AFA modell ervenyes, csak ott jellemzoen tovabbertekesitett termekek es egyszeru mixek vannak, nem osszetett gyartasi receptek
 - ha az uzlet AFA profilja kesobb mas (peldaul alanyi adomentes), a cost basis szabaly konfiguraciobol valtoztathato legyen
 
 Dashboard accounting irany:
 - bevetel es kiadas brutto erteken jelenleg is ertelmezheto
 - kovetkezo accounting-ready iranyban minden szamla es beszerzes tarolja a netto, AFA es brutto erteket
 - ahol a POS export nem ad fizetesi modot vagy AFA bontast, azt nem talaljuk ki
-- kesobb termek/AFA szabalybol vagy torzsadatbol derived netto/AFA szamitas keszulhet
+- termek/AFA torzsadatbol derived netto/AFA szamitas keszulhet, de ez nem kassza-actual adat
 - dashboard mutatoknal vilagosan jelezni kell, hogy brutto actual, netto derived vagy AFA derived adatrol van szo
 - elso reporting szelet kesz: dashboard KPI-k `amount_basis` es `amount_origin` mezot kapnak, a POS bevetel `gross` + `actual`, a becsult COGS `net` + `derived`, a vegyes margin pedig `mixed` + `derived`
+- POS kategoriabontas, termekbontas es termek source-row drill-down elso derived AFA szelete kesz: `revenue/gross_amount` tovabbra is brutto actual, `net_revenue/net_amount` es `vat_amount` pedig `product_vat_derived`
+- POS AFA readiness jelzes kesz: a `DashboardVatReadiness` az idoszak brutto POS forgalmat, AFA-kulccsal lefedett es hianyos reszet, sor darabszamokat, coverage szazalekot es statuszt tartalmaz
+- Termek margin read model elso szelet kesz: a termek sorok tartalmazzak a derived netto bevetelt, derived AFA-t, netto COGS-t, netto margin osszeget/szazalekot, `cost_source` es `margin_status` jelolest
 - kiadasi dashboardon a financial transaction osszeg tovabbra is brutto actual penzmozgaskent szerepel
 - ha a kiadas forrasa supplier invoice, a read-model a szamlasorokbol netto es AFA actual bontast is ad; mas forrasnal a tax breakdown `not_available`, nem becsult
 - supplier invoice drill-downban a szamla brutto, netto es AFA osszesitese jelenik meg, a sorok tovabbra is a review/posting soradatokra epulnek
+- procurement supplier invoice list/get read modelben is van `tax_breakdown_source`, hogy a felulet ne keverje ossze a teljes, reszleges es hianyzo AFA bontast
 
 ## Dashboard domain
 
@@ -287,6 +310,7 @@ Dashboard scope-ok:
 - `overall`: osszesitett uzleti kep
 - `gourmand`: Gourmand termek/recept/keszlet/weather fokusz
 - `flow`: Flow uzleti/beveteli fokusz, jegy/bar mixszel es forgalmi ritmussal
+- Gourmand weather fokusz: az uzleti fokusz panel weather-category insightbol mutatja a legerosebb kategoriat es idojarasi kapcsolatot, nem statikus placeholdert
 
 Drill-down cel:
 

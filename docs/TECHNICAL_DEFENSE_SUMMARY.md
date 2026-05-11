@@ -372,6 +372,17 @@ quantity = sum(quantity)
 transaction_count = sorok szama
 ```
 
+POS netto/AFA read model:
+
+```text
+gross_amount = POS actual
+net_amount, vat_amount = product.default_vat_rate_id alapjan derived
+vat_readiness = AFA-kulccsal lefedett brutto forgalom / osszes POS brutto forgalom
+estimated_cogs_net = product_unit_cost * sold_quantity
+estimated_net_margin = net_amount - estimated_cogs_net
+margin_status = complete | partial | missing_vat_rate | missing_cost | missing_vat_and_cost
+```
+
 Kosarmutatok:
 
 ```text
@@ -406,7 +417,7 @@ Ez nem ML modell, hanem ertelmezheto baseline alapu elso forecast/readiness szel
 
 ### 4.11 Flow event profit
 
-A Flow event domainben a jegy- es barbeveteleket kulon kezeli a rendszer. A jegyadat lehet manualisan rogzitett `event_ticket_actual`, amely felulirja a POS ticket fallbacket az event performance read modelben.
+A Flow event domainben a jegy- es barbeveteleket kulon kezeli a rendszer. A jegyadat manualisan rogzitett vagy kesobbi ticket adapterbol erkezo `event_ticket_actual`; a Flow POS CSV nem tartalmaz jegyet, ezert nincs POS-alapu jegybecsles az event performance read modelben.
 
 Egyszerusitett Flow profit:
 

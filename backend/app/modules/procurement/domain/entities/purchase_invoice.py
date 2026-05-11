@@ -51,6 +51,9 @@ class PurchaseInvoice:
     invoice_date: date
     currency: str
     gross_total: Decimal
+    net_total: Decimal
+    vat_total: Decimal | None
+    tax_breakdown_source: str
     notes: str | None
     is_posted: bool
     posted_to_finance: bool

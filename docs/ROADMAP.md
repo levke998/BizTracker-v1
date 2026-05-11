@@ -188,17 +188,16 @@ Scope pontositas:
 
 Ez a lista csak a nyitott, soron kovetkezo fejleszteseket tartalmazza. A mar lezart elemek az alatta levo merfoldko osszefoglaloba kerultek, hogy a sorvezeto tiszta maradjon.
 
-1. Netto/brutto/AFA reporting folytatasa: POS beveteli oldalon termek/AFA torzsadatbol szamolt, egyertelmuen `derived` netto/AFA mezok; stock/inventory item AFA kulcs kovetkezetes hasznalata a recept -> termek -> eladas kalkulacioban.
-2. Recept/production workflow kovetkezo szelet: recept hiany/missing cost fejlettebb tomeges muveletek, duplikalt vagy sablonos receptinditas, majd receptverzio/publikacio szabalyok.
-3. Kontrollalt finance/inventory posting melyitese: vegleges beszerzesi szamla posting teljes finance + inventory hatassal, netto/brutto/AFA riportolhatosaggal.
-4. PDF beszerzesi szamla OCR/adatkinyeres spike: PDF-bol fej- es soradat kinyeres, review dialog elotoltese, majd emberi validacio.
-5. POS mapping/recept hiany munkalistak UX finomitasa: tomeges alias review, katalogusbol visszajelzes, mapping readiness allapotok.
-6. Flow event elszamolasi melyites: ticket/bar late-binding stabilizalas, performer fee/share, event cost es event profit read-model.
-7. Gourmand specifikus dashboard melyites: termek/recept/keszlet/weather osszefuggesek, elokeszitesi es keszlethiany dontestamogatas.
-8. Inventory controlling ok- es item-szintu dontesi javaslatok melyitese a mar mentett kuszobok es periodus-osszehasonlitas alapjan.
-9. Statisztikai alapok v1: adatminosegi kapuk, median/percentilisek, rolling trendek es elso anomalia modul valos dashboard kontextusban.
-10. Predikcios alapok: pesszimista/realista/optimista savok, forecast readiness, majd regression/Bayes/scenario planning elokeszitese.
-11. Technikai stabilitas: regresszios tesztcsomagok bovites, demo/test adat takaritas erosites, dokumentacio frissitese minden lezart szelet utan.
+1. PDF beszerzesi szamla kinyeres kovetkezo szelet: valodi PDF text/OCR adapter valasztas es beszallitoi szamla mintak validalasa, ha a konkret szamlak megerkeznek.
+2. Recept/production workflow kovetkezo szelet: recept hiany/missing cost/missing vat tomeges muveletek es import/segedlet, ha a konkret receptlista megerkezik.
+3. POS mapping/recept hiany munkalistak UX finomitasa: tomeges alias review, katalogusbol visszajelzes, mapping readiness allapotok.
+4. Flow event elszamolasi melyites kovetkezo szelet: event koltsegsorok vagy ticket import adapter, performer settlement szabalyok es event profit osszehasonlitas.
+5. Gourmand specifikus dashboard melyites: termek/recept/keszlet/weather osszefuggesek, elokeszitesi es keszlethiany dontestamogatas.
+6. Inventory controlling ok- es item-szintu dontesi javaslatok melyitese a mar mentett kuszobok es periodus-osszehasonlitas alapjan.
+7. Netto/brutto/AFA reporting kovetkezo melyitese: termek margin utan kategoriak/uzletagak osszesitett netto margin es AFA visszaigenylesi nezet.
+8. Statisztikai alapok v1: adatminosegi kapuk, median/percentilisek, rolling trendek es elso anomalia modul valos dashboard kontextusban.
+9. Predikcios alapok: pesszimista/realista/optimista savok, forecast readiness, majd regression/Bayes/scenario planning elokeszitese.
+10. Technikai stabilitas: regresszios tesztcsomagok bovites, demo/test adat takaritas erosites, dokumentacio frissitese minden lezart szelet utan.
 
 ## Legutobb lezart merfoldkovek
 
@@ -214,6 +213,10 @@ A reszletes kesz allapot az `Allapot roviden` blokkban van. A fejlesztesi sorren
 - Flow Business Dashboard scope es Event elemzo szetvalasztas, ticket actual elso integracio.
 - Teoretikus keszlet, fizikai szamolas/korrekcio, variance okok, trend/top veszteseg, HUF becsles es elso anomalia statusz.
 - Dashboard netto/brutto/AFA reporting foundation elso szelet: KPI amount basis/origin jeloles, kiadasi dashboard brutto actual + supplier invoice netto/AFA actual bontas, expense drill-down szamla netto/AFA/brutto osszesitessel.
+- POS revenue derived AFA dashboard szelet: kategoria-, termek- es source-row bontasban a brutto actual mellett termek AFA torzsadatbol szamolt derived netto es AFA mezok jelennek meg, source jelolessel.
+- POS AFA readiness/coverage szelet: a dashboard kulon jelzi az idoszaki POS brutto forgalom AFA-kulcs lefedettseget, a hianyos sorokat es a partial/complete/missing/no_data allapotot.
+- Termek profit/margin reporting szelet: a termek endpoint es top termek UI brutto POS actual, derived netto/AFA, nettó COGS, nettó margin, margin % es `margin_status` mezoket ad.
+- Recept/production AFA costing szelet: inventory item AFA kulcsbol soronkenti 5/18/27% derived AFA/brutto koltseg, recept total/unit brutto koltseg es `missing_vat_rate` jelzes.
 - Inventory variance periodus-osszehasonlitas elso szelet: aktualis 30 nap vs elozo 30 nap HUF veszteseg, mennyiseg, esemenyszam, hianyzo ar jelzes, statusz es kezelesi javaslat a Becsult/Teoretikus keszlet oldalon.
 - Inventory variance threshold konfiguracio: `inventory_variance_threshold` tabla, get/update API, uzletenkent mentheto magas veszteseg es romlas szazalek kuszob, frontend szerkesztes a Becsult/Teoretikus keszlet oldalon.
 - Recept/production clean architecture elso szelet: a production modul mar nem placeholder; a `/api/v1/production/recipes` termekenkent ad recept, costing es readiness allapotot, a catalog read oldal pedig ezt a kozos modellt hasznalja.
@@ -221,6 +224,26 @@ A reszletes kesz allapot az `Allapot roviden` blokkban van. A fejlesztesi sorren
 - Recept save command refaktor: a catalog routerbol kikerult az aktiv receptverzio inaktivalasi/letrehozasi logika; production application command validal es repository ment.
 - Onallo recipe write endpoint es frontend edit flow: a Recept readiness oldalrol mentheto az aktiv recept kovetkezo verzioja, a catalog product update nelkul.
 - Recept readiness work queue elso szelet: a hiany kategoriak gyorsan kivalaszthatok, az osszetevo missing cost es becsult keszlet hiany a reszletpanelen azonnal javithato.
+- Recept readiness missing VAT gyorsjavito szelet: kulon AFA hiany szuro, hivatalos AFA kulcs valaszto es inventory item `default_vat_rate_id` frissites a recept reszletbol.
+- Recept sablonos inditas elso szelet: missing/empty recipe termeknel letezo recept betoltheto sablonkent a szerkesztobe, de mentest csak felhasznaloi ellenorzes utan indit.
+- Recept verzio UX fegyelmezes: a szerkeszto jelzi az aktiv verziot es a kovetkezo mentessel letrejovo uj verziot, igy latszik, hogy a mentes publikalas jellegu uj aktiv verzio.
+- Beszerzesi szamla read model AFA forrasjeloles: a procurement API es lista mar kulon adja, hogy a netto/AFA bontas teljes szamla-actual, reszleges vagy hianyzo.
+- PDF szamla text-layer elotoltes elso szelet: uploadkor lefut a `text_layer_regex_v1` kinyero, `raw_extraction` audit adatot, confidence jelolest es review_payload elotoltest ad, de minden sor `review_needed` marad felhasznaloi ellenorzesig.
+- DB tesztadat takaritas: `test-integration` business unit, hozza tartozo teszt kategoriak, inaktiv demo termekek es `Other Unit Supplier ...` teszt suppliers torolve; Gourmand/Flow real import alap megtartva.
+- PDF extraction adapter boundary: a kinyero mar adapter contract mogott fut, igy kesobb OCR vagy beszallito-specifikus adapter illesztheto a review workflow megtorese nelkul.
+- Recipe readiness overview API: `GET /api/v1/production/recipes/readiness-overview` uzletenkent ad missing recipe/cost/stock/VAT countereket es kovetkezo munkalista akciokat; a frontend summary ezt hasznalja.
+- Flow event profit platform fee szelet: ticket actual platform fee bekerult az event performance elszamolasba, kulon `platform_fee_gross`, `operating_cost_gross`, `ticket_revenue_source` es `settlement_status` mezokkel.
+- Flow event dontestamogato profit mutatok: az event performance mar ad `profit_status`, profit margin, koltsegarany, valamint jegy/bar beveteli mix szazalekokat; frontend event reszletben latszanak.
+- Flow event osszehasonlito nezeti melyites: az event rangsor es summary mar profit status, margin, koltsegarany es jegy/bar mix alapjan is olvashato; a frontend nem szamol kulon uzleti igazsagot, az API read-model mezoket jeleniti meg.
+- Flow event insight panel: az event analitika dontesi jelzeseket emel ki, peldaul legjobb uzleti eredmeny, magas koltsegarany, nepszeru de gyenge margin es barvezerelt event.
+- Flow uzleti dashboard bekotes: a Business Dashboard Flow scope-ja mar betolti az event performance read-modelt, es az event dashboarddal azonos profit/margin/koltseg/mix alapokon mutatja a Flow uzleti event blokkot es forecast event elokeszitest.
+- Gourmand dashboard placeholder takaritas: az uzleti fokusz `Idojaras kapcsolat` jelzese mar nem elokeszitett szoveg, hanem a weather-category insight read-model legerosebb tenyleges kapcsolatat mutatja.
+- Frontend teljesitmeny elso szelet: route-level lazy loading bekerult, a nagy Dashboard/Event/Import/Procurement oldalak kulon chunkba kerulnek; a fo JS bundle a buildben kb. 224 kB-ra csokkent, a dashboard kulon kb. 78 kB chunk.
+- Flow dashboard szerepszethuzas: a Flow uzleti dashboard event blokkja mar penzugyi event-hatas osszesito, nem eventenkenti rangsor/drilldown; a reszletes event osszehasonlitas az Event dashboard felelossege marad.
+- Flow penzugyi mix szelet: a Flow specifikus dashboard blokk Gourmand mintara mar kategoriarangsorral mutatja a POS-alapu bar/fogyasztasi aranyt, atlagkosarat es csucsidot; jegyet nem keres POS-ban, a ticket actual kulon event penzugyi reteg.
+- Flow POS-ticket korrekcio: az event performance es a Flow dashboard nem kovetkeztet jegyet POS termek/kategoria nevbol; minden POS sor bar/fogyasztasi bevetel, a jegy kizarolag ticket actual/import retegbol johet.
+- Flow POS fogyasztasi kontrollkartya: a Flow uzleti dashboard mar kulon mutatja a POS-only bar/fogyasztasi koncentraciot, top 3 kategoriaranyt, csucsterhelest, kosarprofilt, kategoriamozgast es AFA readiness jelzest event rangsor nelkul.
+- Event ticket actual lefedettseg szelet: az Event elemzo mar kulon jelzi a ticket actual coverage aranyt, a hianyzo ticket actual eventeket munkalistaban nyitja, es a szovegek ticket actual + POS bar alapon kezelik az event performance-t.
 
 ## Feature kesz definicio
 

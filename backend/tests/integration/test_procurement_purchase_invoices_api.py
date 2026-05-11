@@ -30,6 +30,7 @@ def _upload_pdf_draft(
     business_unit_id,
     supplier_id=None,
     filename: str = "supplier-invoice.pdf",
+    content: bytes = b"%PDF-1.4\n%test invoice\n",
 ) -> dict:
     data = {"business_unit_id": str(business_unit_id)}
     if supplier_id is not None:
@@ -41,7 +42,7 @@ def _upload_pdf_draft(
         files={
             "file": (
                 filename,
-                b"%PDF-1.4\n%test invoice\n",
+                content,
                 "application/pdf",
             )
         },
@@ -86,6 +87,8 @@ def test_create_purchase_invoice_succeeds(
                     "uom_id": str(test_unit_of_measure.id),
                     "unit_net_amount": "400.00",
                     "line_net_amount": "10000.00",
+                    "vat_amount": "2500.00",
+                    "line_gross_amount": "12500.00",
                 }
             ],
         },
@@ -98,6 +101,9 @@ def test_create_purchase_invoice_succeeds(
     assert payload["supplier_name"] == "Molnar Alapanyag Kft"
     assert payload["invoice_number"] == "INV-2026-001"
     assert payload["gross_total"] == "12500.00"
+    assert payload["net_total"] == "10000.00"
+    assert payload["vat_total"] == "2500.00"
+    assert payload["tax_breakdown_source"] == "supplier_invoice_actual"
     assert payload["is_posted"] is False
     assert payload["posted_to_finance"] is False
     assert payload["posted_inventory_movement_count"] == 0
@@ -344,8 +350,12 @@ def test_upload_purchase_invoice_pdf_creates_review_draft(
     assert payload["mime_type"] == "application/pdf"
     assert payload["size_bytes"] > 0
     assert payload["status"] == "review_required"
-    assert payload["extraction_status"] == "not_started"
-    assert payload["review_payload"] == {"header": {}, "lines": []}
+    assert payload["extraction_status"] == "no_candidates"
+    assert payload["raw_extraction"]["issues"] == ["no_invoice_candidates_found"]
+    assert payload["review_payload"] == {
+        "header": {"supplier_id": str(supplier.id), "currency": "HUF"},
+        "lines": [],
+    }
 
     list_response = client.get(
         f"{API_PREFIX}/purchase-invoice-drafts",
@@ -356,6 +366,61 @@ def test_upload_purchase_invoice_pdf_creates_review_draft(
     drafts = list_response.json()
     assert len(drafts) == 1
     assert drafts[0]["id"] == payload["id"]
+
+
+def test_upload_purchase_invoice_pdf_prefills_review_from_text_layer(
+    client: TestClient,
+    test_business_unit: BusinessUnitModel,
+    test_unit_of_measure: UnitOfMeasureModel,
+    create_supplier,
+) -> None:
+    supplier = create_supplier(
+        business_unit_id=test_business_unit.id,
+        name="PDF Text Supplier",
+    )
+    content = "\n".join(
+        [
+            "%PDF-1.4",
+            "Szamlaszam: PDF-TEXT-001",
+            "Kelte: 2026-05-04",
+            "Fizetendo: 1270.00 HUF",
+            (
+                "Tetel: XY finomliszt BL55 1 kg; quantity=1.000; "
+                f"uom={test_unit_of_measure.code}; net=1000.00; "
+                "vat=270.00; gross=1270.00; vat_rate=27"
+            ),
+        ]
+    ).encode("utf-8")
+
+    payload = _upload_pdf_draft(
+        client,
+        business_unit_id=test_business_unit.id,
+        supplier_id=supplier.id,
+        content=content,
+    )
+
+    assert payload["status"] == "review_required"
+    assert payload["extraction_status"] == "parsed_review_required"
+    assert payload["raw_extraction"]["parser"] == "text_layer_regex_v1"
+    assert payload["raw_extraction"]["confidence_score"] == "1.00"
+    assert "has_invoice_number" in payload["raw_extraction"]["confidence_reasons"]
+    review_payload = payload["review_payload"]
+    assert review_payload["header"]["supplier_id"] == str(supplier.id)
+    assert review_payload["header"]["invoice_number"] == "pdf-text-001"
+    assert review_payload["header"]["invoice_date"] == "2026-05-04"
+    assert review_payload["header"]["gross_total"] == "1270.00"
+    line = review_payload["lines"][0]
+    assert line["description"] == "XY finomliszt BL55 1 kg"
+    assert line["supplier_product_name"] == "XY finomliszt BL55 1 kg"
+    assert line["quantity"] == "1.000"
+    assert line["uom_id"] == str(test_unit_of_measure.id)
+    assert line["line_net_amount"] == "1000.00"
+    assert line["vat_amount"] == "270.00"
+    assert line["line_gross_amount"] == "1270.00"
+    assert line["calculation_status"] == "review_needed"
+    assert "unreviewed_pdf_extraction" in line["calculation_issues"]
+    assert line["extraction_confidence_score"] == "1.00"
+    assert "has_gross" in line["extraction_confidence_reasons"]
 
 
 def test_upload_purchase_invoice_pdf_rejects_non_pdf(

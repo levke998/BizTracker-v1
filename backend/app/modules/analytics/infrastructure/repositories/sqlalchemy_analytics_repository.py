@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from collections import defaultdict
+from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from itertools import combinations
@@ -40,12 +41,14 @@ from app.modules.analytics.domain.entities.dashboard_snapshot import (
     DashboardStockRiskRow,
     DashboardTemperatureBandInsightRow,
     DashboardTrendPoint,
+    DashboardVatReadiness,
     DashboardWeatherCategoryInsightRow,
     DashboardWeatherConditionInsightRow,
 )
 from app.modules.finance.infrastructure.orm.transaction_model import (
     FinancialTransactionModel,
 )
+from app.modules.finance.application.services.vat_calculator import VatCalculator
 from app.modules.events.infrastructure.orm.event_model import EventModel
 from app.modules.imports.infrastructure.orm.import_batch_model import ImportBatchModel
 from app.modules.imports.infrastructure.orm.import_row_model import ImportRowModel
@@ -60,6 +63,7 @@ from app.modules.master_data.infrastructure.orm.business_unit_model import (
 )
 from app.modules.master_data.infrastructure.orm.category_model import CategoryModel
 from app.modules.master_data.infrastructure.orm.product_model import ProductModel
+from app.modules.master_data.infrastructure.orm.vat_rate_model import VatRateModel
 from app.modules.master_data.infrastructure.orm.unit_of_measure_model import (
     UnitOfMeasureModel,
 )
@@ -96,6 +100,16 @@ APP_TIME_ZONE = ZoneInfo("Europe/Budapest")
 FORECAST_IMPACT_DAYS = 7
 
 
+@dataclass(frozen=True, slots=True)
+class PosTaxBreakdown:
+    """Derived VAT breakdown for a POS row based on product master data."""
+
+    net_amount: Decimal | None
+    vat_amount: Decimal | None
+    vat_rate_percent: Decimal | None
+    source: str
+
+
 class SqlAlchemyAnalyticsRepository:
     """Build dashboard read models from operational actuals and import rows."""
 
@@ -125,6 +139,9 @@ class SqlAlchemyAnalyticsRepository:
             business_unit_id=resolved_business_unit_id,
         )
         product_costs = self._build_product_unit_costs(
+            business_unit_id=resolved_business_unit_id,
+        )
+        product_vat_rates = self._build_product_vat_rates(
             business_unit_id=resolved_business_unit_id,
         )
 
@@ -263,7 +280,14 @@ class SqlAlchemyAnalyticsRepository:
                     key_name="category_name",
                     fallback=UNKNOWN_CATEGORY,
                     limit=12,
+                    product_vat_rates=product_vat_rates,
                 )
+            ),
+            vat_readiness=self._build_vat_readiness(
+                rows=import_rows,
+                start_at=start_at,
+                end_at=end_at,
+                product_vat_rates=product_vat_rates,
             ),
             payment_method_breakdown=tuple(
                 self._build_pos_breakdown(
@@ -273,6 +297,7 @@ class SqlAlchemyAnalyticsRepository:
                     key_name="payment_method",
                     fallback="unknown",
                     limit=8,
+                    product_vat_rates=product_vat_rates,
                 )
             ),
             basket_value_distribution=tuple(
@@ -373,6 +398,7 @@ class SqlAlchemyAnalyticsRepository:
                     key_name="product_name",
                     fallback=UNKNOWN_PRODUCT,
                     limit=10,
+                    product_vat_rates=product_vat_rates,
                 )
             ),
             expense_breakdown=tuple(
@@ -406,6 +432,9 @@ class SqlAlchemyAnalyticsRepository:
             key_name="category_name",
             fallback=UNKNOWN_CATEGORY,
             limit=200,
+            product_vat_rates=self._build_product_vat_rates(
+                business_unit_id=resolved_business_unit_id,
+            ),
         )
 
     def list_product_breakdown(
@@ -427,6 +456,12 @@ class SqlAlchemyAnalyticsRepository:
             end_at=end_at,
             category_name=category_name,
             limit=200,
+            product_costs=self._build_product_unit_costs(
+                business_unit_id=resolved_business_unit_id,
+            ),
+            product_vat_rates=self._build_product_vat_rates(
+                business_unit_id=resolved_business_unit_id,
+            ),
         )
 
     def list_product_source_rows(
@@ -452,6 +487,9 @@ class SqlAlchemyAnalyticsRepository:
             product_name=product_name,
             category_name=category_name,
             limit=limit,
+            product_vat_rates=self._build_product_vat_rates(
+                business_unit_id=resolved_business_unit_id,
+            ),
         )
 
     def list_expense_details(
@@ -795,6 +833,180 @@ class SqlAlchemyAnalyticsRepository:
 
         return costs
 
+    def _build_product_vat_rates(
+        self,
+        *,
+        business_unit_id: uuid.UUID | None,
+    ) -> dict[str, Decimal]:
+        statement = (
+            select(ProductModel, VatRateModel.rate_percent)
+            .join(VatRateModel, ProductModel.default_vat_rate_id == VatRateModel.id)
+            .where(ProductModel.is_active.is_(True))
+            .where(VatRateModel.is_active.is_(True))
+        )
+        if business_unit_id is not None:
+            statement = statement.where(ProductModel.business_unit_id == business_unit_id)
+
+        rates: dict[str, Decimal] = {}
+        name_rates: dict[str, set[Decimal]] = defaultdict(set)
+        for product, rate_percent in self._session.execute(statement).all():
+            rate = Decimal(rate_percent)
+            rates[str(product.id)] = rate
+            if product.sku:
+                rates[product.sku] = rate
+                rates[product.sku.casefold()] = rate
+            if product.name:
+                name_rates[product.name].add(rate)
+                name_rates[product.name.casefold()].add(rate)
+
+        for name, candidate_rates in name_rates.items():
+            if len(candidate_rates) == 1:
+                rates[name] = next(iter(candidate_rates))
+
+        return rates
+
+    def _calculate_payload_tax(
+        self,
+        payload: dict[str, Any],
+        product_vat_rates: dict[str, Decimal],
+    ) -> PosTaxBreakdown:
+        rate_percent = self._lookup_payload_vat_rate(payload, product_vat_rates)
+        if rate_percent is None:
+            return PosTaxBreakdown(
+                net_amount=None,
+                vat_amount=None,
+                vat_rate_percent=None,
+                source="not_available",
+            )
+
+        gross_amount = self._parse_decimal(payload.get("gross_amount"))
+        result = VatCalculator().calculate_from_gross(
+            gross_amount=gross_amount,
+            rate_percent=rate_percent,
+        )
+        return PosTaxBreakdown(
+            net_amount=result.net_amount,
+            vat_amount=result.vat_amount,
+            vat_rate_percent=rate_percent,
+            source="product_vat_derived",
+        )
+
+    def _lookup_payload_vat_rate(
+        self,
+        payload: dict[str, Any],
+        product_vat_rates: dict[str, Decimal],
+    ) -> Decimal | None:
+        for key in self._payload_product_lookup_keys(payload):
+            rate = product_vat_rates.get(key)
+            if rate is not None:
+                return rate
+        return None
+
+    @staticmethod
+    def _payload_product_lookup_keys(payload: dict[str, Any]) -> tuple[str, ...]:
+        keys: list[str] = []
+        for key_name in ("product_id", "sku", "product_name"):
+            value = payload.get(key_name)
+            if isinstance(value, str) and value.strip():
+                text = value.strip()
+                keys.append(text)
+                keys.append(text.casefold())
+        return tuple(dict.fromkeys(keys))
+
+    @staticmethod
+    def _tax_breakdown_source(*, tax_count: int, total_count: int) -> str:
+        if tax_count <= 0:
+            return "not_available"
+        if tax_count == total_count:
+            return "product_vat_derived"
+        return "partial_product_vat_derived"
+
+    @staticmethod
+    def _cost_source(*, cost_count: int, total_count: int) -> str:
+        if cost_count <= 0:
+            return "not_available"
+        if cost_count == total_count:
+            return "recipe_or_unit_cost"
+        return "partial_recipe_or_unit_cost"
+
+    @staticmethod
+    def _margin_status(*, tax_count: int, cost_count: int, total_count: int) -> str:
+        if total_count <= 0:
+            return "no_data"
+        has_complete_tax = tax_count == total_count
+        has_complete_cost = cost_count == total_count
+        if has_complete_tax and has_complete_cost:
+            return "complete"
+        if tax_count <= 0 and cost_count <= 0:
+            return "missing_vat_and_cost"
+        if tax_count <= 0:
+            return "missing_vat_rate"
+        if cost_count <= 0:
+            return "missing_cost"
+        return "partial"
+
+    def _build_vat_readiness(
+        self,
+        *,
+        rows: list[ImportRowModel],
+        start_at: datetime,
+        end_at: datetime,
+        product_vat_rates: dict[str, Decimal],
+    ) -> DashboardVatReadiness:
+        gross_revenue = Decimal("0")
+        covered_gross_revenue = Decimal("0")
+        total_row_count = 0
+        covered_row_count = 0
+
+        for row in rows:
+            payload = row.normalized_payload or {}
+            occurred_at = self._payload_occurred_at(payload)
+            if occurred_at is None or occurred_at < start_at or occurred_at > end_at:
+                continue
+
+            gross_amount = self._parse_decimal(payload.get("gross_amount"))
+            gross_revenue += gross_amount
+            total_row_count += 1
+            if self._lookup_payload_vat_rate(payload, product_vat_rates) is not None:
+                covered_gross_revenue += gross_amount
+                covered_row_count += 1
+
+        missing_row_count = total_row_count - covered_row_count
+        missing_gross_revenue = gross_revenue - covered_gross_revenue
+        coverage_percent = (
+            (covered_gross_revenue / gross_revenue * Decimal("100")).quantize(
+                Decimal("0.01")
+            )
+            if gross_revenue > Decimal("0")
+            else Decimal("0.00")
+        )
+
+        if total_row_count == 0:
+            status = "no_data"
+        elif covered_row_count == total_row_count:
+            status = "complete"
+        elif covered_row_count == 0:
+            status = "missing"
+        else:
+            status = "partial"
+
+        return DashboardVatReadiness(
+            status=status,
+            coverage_percent=coverage_percent,
+            gross_revenue=gross_revenue,
+            covered_gross_revenue=covered_gross_revenue,
+            missing_gross_revenue=missing_gross_revenue,
+            total_row_count=total_row_count,
+            covered_row_count=covered_row_count,
+            missing_row_count=missing_row_count,
+            source_layer="import_derived",
+            amount_basis="gross",
+            tax_breakdown_source=self._tax_breakdown_source(
+                tax_count=covered_row_count,
+                total_count=total_row_count,
+            ),
+        )
+
     def _build_latest_inventory_item_costs(self) -> dict[uuid.UUID, Decimal]:
         costs = {
             item.id: Decimal(item.default_unit_cost)
@@ -950,10 +1162,19 @@ class SqlAlchemyAnalyticsRepository:
         key_name: str,
         fallback: str,
         limit: int,
+        product_vat_rates: dict[str, Decimal] | None = None,
     ) -> list[DashboardBreakdownRow]:
         aggregate: dict[str, dict[str, Decimal | int]] = defaultdict(
-            lambda: {"revenue": Decimal("0"), "quantity": Decimal("0"), "count": 0}
+            lambda: {
+                "revenue": Decimal("0"),
+                "net_revenue": Decimal("0"),
+                "vat_amount": Decimal("0"),
+                "quantity": Decimal("0"),
+                "count": 0,
+                "tax_count": 0,
+            }
         )
+        vat_rates = product_vat_rates or {}
 
         for row in rows:
             payload = row.normalized_payload or {}
@@ -962,9 +1183,15 @@ class SqlAlchemyAnalyticsRepository:
                 continue
 
             label = self._extract_text(payload.get(key_name), fallback=fallback)
-            aggregate[label]["revenue"] += self._parse_decimal(payload.get("gross_amount"))
+            gross_amount = self._parse_decimal(payload.get("gross_amount"))
+            tax = self._calculate_payload_tax(payload, vat_rates)
+            aggregate[label]["revenue"] += gross_amount
             aggregate[label]["quantity"] += self._parse_decimal(payload.get("quantity"))
             aggregate[label]["count"] += 1
+            if tax.net_amount is not None and tax.vat_amount is not None:
+                aggregate[label]["net_revenue"] += tax.net_amount
+                aggregate[label]["vat_amount"] += tax.vat_amount
+                aggregate[label]["tax_count"] += 1
 
         sorted_rows = sorted(
             aggregate.items(),
@@ -975,9 +1202,24 @@ class SqlAlchemyAnalyticsRepository:
             DashboardBreakdownRow(
                 label=label,
                 revenue=Decimal(values["revenue"]),
+                net_revenue=(
+                    Decimal(values["net_revenue"])
+                    if int(values["tax_count"]) > 0
+                    else None
+                ),
+                vat_amount=(
+                    Decimal(values["vat_amount"])
+                    if int(values["tax_count"]) > 0
+                    else None
+                ),
                 quantity=Decimal(values["quantity"]),
                 transaction_count=int(values["count"]),
                 source_layer="import_derived",
+                amount_basis="gross",
+                tax_breakdown_source=self._tax_breakdown_source(
+                    tax_count=int(values["tax_count"]),
+                    total_count=int(values["count"]),
+                ),
             )
             for label, values in sorted_rows[:limit]
         ]
@@ -990,9 +1232,20 @@ class SqlAlchemyAnalyticsRepository:
         end_at: datetime,
         category_name: str | None,
         limit: int,
+        product_costs: dict[str, Decimal],
+        product_vat_rates: dict[str, Decimal],
     ) -> list[DashboardProductDetailRow]:
         aggregate: dict[tuple[str, str], dict[str, Decimal | int]] = defaultdict(
-            lambda: {"revenue": Decimal("0"), "quantity": Decimal("0"), "count": 0}
+            lambda: {
+                "revenue": Decimal("0"),
+                "net_revenue": Decimal("0"),
+                "vat_amount": Decimal("0"),
+                "estimated_cogs_net": Decimal("0"),
+                "quantity": Decimal("0"),
+                "count": 0,
+                "tax_count": 0,
+                "cost_count": 0,
+            }
         )
 
         for row in rows:
@@ -1013,26 +1266,87 @@ class SqlAlchemyAnalyticsRepository:
                 fallback=UNKNOWN_PRODUCT,
             )
             key = (product, category)
-            aggregate[key]["revenue"] += self._parse_decimal(payload.get("gross_amount"))
-            aggregate[key]["quantity"] += self._parse_decimal(payload.get("quantity"))
+            gross_amount = self._parse_decimal(payload.get("gross_amount"))
+            tax = self._calculate_payload_tax(payload, product_vat_rates)
+            quantity = self._parse_decimal(payload.get("quantity"))
+            unit_cost = self._lookup_payload_unit_cost_optional(payload, product_costs)
+            aggregate[key]["revenue"] += gross_amount
+            aggregate[key]["quantity"] += quantity
             aggregate[key]["count"] += 1
+            if tax.net_amount is not None and tax.vat_amount is not None:
+                aggregate[key]["net_revenue"] += tax.net_amount
+                aggregate[key]["vat_amount"] += tax.vat_amount
+                aggregate[key]["tax_count"] += 1
+            if unit_cost is not None:
+                aggregate[key]["estimated_cogs_net"] += unit_cost * quantity
+                aggregate[key]["cost_count"] += 1
 
         sorted_rows = sorted(
             aggregate.items(),
             key=lambda item: Decimal(item[1]["revenue"]),
             reverse=True,
         )
-        return [
-            DashboardProductDetailRow(
-                product_name=product,
-                category_name=category,
-                revenue=Decimal(values["revenue"]),
-                quantity=Decimal(values["quantity"]),
-                transaction_count=int(values["count"]),
-                source_layer="import_derived",
+        product_rows: list[DashboardProductDetailRow] = []
+        for (product, category), values in sorted_rows[:limit]:
+            tax_count = int(values["tax_count"])
+            cost_count = int(values["cost_count"])
+            total_count = int(values["count"])
+            quantity = Decimal(values["quantity"])
+            net_revenue = Decimal(values["net_revenue"]) if tax_count > 0 else None
+            vat_amount = Decimal(values["vat_amount"]) if tax_count > 0 else None
+            estimated_cogs = (
+                Decimal(values["estimated_cogs_net"]) if cost_count > 0 else None
             )
-            for (product, category), values in sorted_rows[:limit]
-        ]
+            estimated_unit_cost = (
+                estimated_cogs / quantity
+                if estimated_cogs is not None and quantity > Decimal("0")
+                else None
+            )
+            estimated_net_margin = (
+                net_revenue - estimated_cogs
+                if net_revenue is not None and estimated_cogs is not None
+                else None
+            )
+            estimated_margin_percent = (
+                estimated_net_margin / net_revenue * Decimal("100")
+                if estimated_net_margin is not None
+                and net_revenue is not None
+                and net_revenue > Decimal("0")
+                else None
+            )
+
+            product_rows.append(
+                DashboardProductDetailRow(
+                    product_name=product,
+                    category_name=category,
+                    revenue=Decimal(values["revenue"]),
+                    net_revenue=net_revenue,
+                    vat_amount=vat_amount,
+                    estimated_unit_cost_net=estimated_unit_cost,
+                    estimated_cogs_net=estimated_cogs,
+                    estimated_net_margin_amount=estimated_net_margin,
+                    estimated_margin_percent=estimated_margin_percent,
+                    quantity=quantity,
+                    transaction_count=total_count,
+                    source_layer="import_derived",
+                    amount_basis="gross",
+                    tax_breakdown_source=self._tax_breakdown_source(
+                        tax_count=tax_count,
+                        total_count=total_count,
+                    ),
+                    cost_source=self._cost_source(
+                        cost_count=cost_count,
+                        total_count=total_count,
+                    ),
+                    margin_status=self._margin_status(
+                        tax_count=tax_count,
+                        cost_count=cost_count,
+                        total_count=total_count,
+                    ),
+                )
+            )
+
+        return product_rows
 
     def _build_product_source_rows(
         self,
@@ -1043,6 +1357,7 @@ class SqlAlchemyAnalyticsRepository:
         product_name: str,
         category_name: str | None,
         limit: int,
+        product_vat_rates: dict[str, Decimal],
     ) -> list[DashboardPosSourceRow]:
         source_rows: list[DashboardPosSourceRow] = []
         for row in rows:
@@ -1065,6 +1380,7 @@ class SqlAlchemyAnalyticsRepository:
             if category_name is not None and category != category_name:
                 continue
 
+            tax = self._calculate_payload_tax(payload, product_vat_rates)
             source_rows.append(
                 DashboardPosSourceRow(
                     row_id=row.id,
@@ -1075,10 +1391,15 @@ class SqlAlchemyAnalyticsRepository:
                     product_name=product,
                     quantity=self._parse_decimal(payload.get("quantity")),
                     gross_amount=self._parse_decimal(payload.get("gross_amount")),
+                    net_amount=tax.net_amount,
+                    vat_amount=tax.vat_amount,
+                    vat_rate_percent=tax.vat_rate_percent,
                     payment_method=self._extract_optional_text(
                         payload.get("payment_method")
                     ),
                     source_layer="import_derived",
+                    amount_basis="gross",
+                    tax_breakdown_source=tax.source,
                 )
             )
 
@@ -1172,9 +1493,13 @@ class SqlAlchemyAnalyticsRepository:
             DashboardBreakdownRow(
                 label=label,
                 revenue=Decimal(aggregate[label]["revenue"]),
+                net_revenue=None,
+                vat_amount=None,
                 quantity=Decimal(aggregate[label]["count"]),
                 transaction_count=int(aggregate[label]["count"]),
                 source_layer="import_derived",
+                amount_basis="gross",
+                tax_breakdown_source="not_available",
             )
             for label, _lower, _upper in bands
         ]
@@ -3950,11 +4275,18 @@ class SqlAlchemyAnalyticsRepository:
         payload: dict[str, Any],
         product_costs: dict[str, Decimal],
     ) -> Decimal:
+        return cls._lookup_payload_unit_cost_optional(payload, product_costs) or Decimal("0")
+
+    @staticmethod
+    def _lookup_payload_unit_cost_optional(
+        payload: dict[str, Any],
+        product_costs: dict[str, Decimal],
+    ) -> Decimal | None:
         for key_name in ("product_id", "sku", "product_name"):
             value = payload.get(key_name)
             if isinstance(value, str) and value in product_costs:
                 return product_costs[value]
-        return Decimal("0")
+        return None
 
     @staticmethod
     def _convert_quantity(

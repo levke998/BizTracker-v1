@@ -42,6 +42,11 @@ export type PurchaseInvoiceLine = {
   line_gross_amount: string | null;
 };
 
+export type PurchaseInvoiceTaxBreakdownSource =
+  | "supplier_invoice_actual"
+  | "partial_supplier_invoice_actual"
+  | "not_available";
+
 export type PurchaseInvoice = {
   id: string;
   business_unit_id: string;
@@ -51,6 +56,9 @@ export type PurchaseInvoice = {
   invoice_date: string;
   currency: string;
   gross_total: string;
+  net_total: string;
+  vat_total: string | null;
+  tax_breakdown_source: PurchaseInvoiceTaxBreakdownSource;
   notes: string | null;
   is_posted: boolean;
   posted_to_finance: boolean;
@@ -123,6 +131,8 @@ export type PurchaseInvoicePdfReviewLine = {
   line_gross_amount: string | null;
   calculation_status: "ok" | "review_needed";
   calculation_issues: string[];
+  extraction_confidence_score?: string | null;
+  extraction_confidence_reasons?: string[];
   notes: string | null;
 };
 

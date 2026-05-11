@@ -58,9 +58,31 @@ class DashboardBreakdownRowResponse(BaseModel):
 
     label: str
     revenue: Decimal
+    net_revenue: Decimal | None
+    vat_amount: Decimal | None
     quantity: Decimal
     transaction_count: int
     source_layer: str
+    amount_basis: str = "gross"
+    tax_breakdown_source: str = "not_available"
+
+
+class DashboardVatReadinessResponse(BaseModel):
+    """POS revenue VAT coverage response."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    status: str
+    coverage_percent: Decimal
+    gross_revenue: Decimal
+    covered_gross_revenue: Decimal
+    missing_gross_revenue: Decimal
+    total_row_count: int
+    covered_row_count: int
+    missing_row_count: int
+    source_layer: str = "import_derived"
+    amount_basis: str = "gross"
+    tax_breakdown_source: str = "not_available"
 
 
 class DashboardHeatmapCellResponse(BaseModel):
@@ -325,9 +347,19 @@ class DashboardProductDetailRowResponse(BaseModel):
     product_name: str
     category_name: str
     revenue: Decimal
+    net_revenue: Decimal | None
+    vat_amount: Decimal | None
+    estimated_unit_cost_net: Decimal | None
+    estimated_cogs_net: Decimal | None
+    estimated_net_margin_amount: Decimal | None
+    estimated_margin_percent: Decimal | None
     quantity: Decimal
     transaction_count: int
     source_layer: str
+    amount_basis: str = "gross"
+    tax_breakdown_source: str = "not_available"
+    cost_source: str = "not_available"
+    margin_status: str = "not_available"
 
 
 class DashboardPosSourceRowResponse(BaseModel):
@@ -343,8 +375,13 @@ class DashboardPosSourceRowResponse(BaseModel):
     product_name: str
     quantity: Decimal
     gross_amount: Decimal
+    net_amount: Decimal | None
+    vat_amount: Decimal | None
+    vat_rate_percent: Decimal | None
     payment_method: str | None
     source_layer: str
+    amount_basis: str = "gross"
+    tax_breakdown_source: str = "not_available"
 
 
 class DashboardExpenseDetailRowResponse(BaseModel):
@@ -464,6 +501,7 @@ class DashboardResponse(BaseModel):
     kpis: list[DashboardKpiResponse]
     revenue_trend: list[DashboardTrendPointResponse]
     category_breakdown: list[DashboardBreakdownRowResponse]
+    vat_readiness: DashboardVatReadinessResponse
     payment_method_breakdown: list[DashboardBreakdownRowResponse]
     basket_value_distribution: list[DashboardBreakdownRowResponse]
     traffic_heatmap: list[DashboardHeatmapCellResponse]

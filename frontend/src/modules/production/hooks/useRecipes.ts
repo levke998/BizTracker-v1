@@ -3,14 +3,15 @@ import { useState } from "react";
 
 import { listBusinessUnits } from "../../masterData/api/masterDataApi";
 import type { BusinessUnit } from "../../masterData/types/masterData";
-import { listProductionRecipes } from "../api/productionApi";
-import type { RecipeCostSummary } from "../types/production";
+import { getRecipeReadinessOverview, listProductionRecipes } from "../api/productionApi";
+import type { RecipeCostSummary, RecipeReadinessOverview } from "../types/production";
 
 type RecipesState = {
   businessUnits: BusinessUnit[];
   primaryBusinessUnits: BusinessUnit[];
   technicalBusinessUnits: BusinessUnit[];
   recipes: RecipeCostSummary[];
+  overview: RecipeReadinessOverview | null;
   selectedBusinessUnitId: string;
   setSelectedBusinessUnitId: (value: string) => void;
   activeOnly: boolean;
@@ -70,19 +71,32 @@ export function useRecipes(): RecipesState {
     enabled: Boolean(effectiveBusinessUnitId),
   });
 
+  const overviewQuery = useQuery({
+    queryKey: ["production-recipes-readiness-overview", effectiveBusinessUnitId, activeOnly],
+    queryFn: () =>
+      getRecipeReadinessOverview({
+        business_unit_id: effectiveBusinessUnitId,
+        active_only: activeOnly,
+      }),
+    enabled: Boolean(effectiveBusinessUnitId),
+  });
+
   return {
     businessUnits,
     primaryBusinessUnits,
     technicalBusinessUnits,
     recipes: recipesQuery.data ?? [],
+    overview: overviewQuery.data ?? null,
     selectedBusinessUnitId: effectiveBusinessUnitId,
     setSelectedBusinessUnitId,
     activeOnly,
     setActiveOnly,
-    isLoading: businessUnitsQuery.isLoading || recipesQuery.isLoading,
+    isLoading:
+      businessUnitsQuery.isLoading || recipesQuery.isLoading || overviewQuery.isLoading,
     errorMessage:
       (businessUnitsQuery.error instanceof Error && businessUnitsQuery.error.message) ||
       (recipesQuery.error instanceof Error && recipesQuery.error.message) ||
+      (overviewQuery.error instanceof Error && overviewQuery.error.message) ||
       "",
   };
 }

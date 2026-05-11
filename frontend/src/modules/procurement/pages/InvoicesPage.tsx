@@ -240,8 +240,55 @@ function getInvoiceMappingStatusClass(invoice: PurchaseInvoice) {
     : "status-pill status-pill-warning";
 }
 
+function getInvoiceTaxBreakdownStatusLabel(invoice: PurchaseInvoice) {
+  const labels: Record<PurchaseInvoice["tax_breakdown_source"], string> = {
+    supplier_invoice_actual: "Teljes ÁFA bontás",
+    partial_supplier_invoice_actual: "Részleges ÁFA bontás",
+    not_available: "Nincs ÁFA bontás",
+  };
+  return labels[invoice.tax_breakdown_source] ?? invoice.tax_breakdown_source;
+}
+
+function getInvoiceTaxBreakdownStatusClass(invoice: PurchaseInvoice) {
+  if (invoice.tax_breakdown_source === "supplier_invoice_actual") {
+    return "status-pill status-pill-success";
+  }
+  if (invoice.tax_breakdown_source === "partial_supplier_invoice_actual") {
+    return "status-pill status-pill-warning";
+  }
+  return "status-pill status-pill-danger";
+}
+
 function getAliasStatusClass(status: string) {
   return status === "mapped" ? "status-pill status-pill-success" : "status-pill status-pill-warning";
+}
+
+function getPdfExtractionStatusLabel(status: string) {
+  const labels: Record<string, string> = {
+    parsed_review_required: "Előtöltve, review kell",
+    no_candidates: "Nincs felismerhető adat",
+    no_text: "Nincs PDF text layer",
+    not_started: "Nincs indítva",
+  };
+  return labels[status] ?? status;
+}
+
+function getPdfExtractionStatusClass(status: string) {
+  if (status === "parsed_review_required") {
+    return "status-pill status-pill-warning";
+  }
+  if (status === "no_candidates" || status === "no_text") {
+    return "status-pill status-pill-danger";
+  }
+  return "status-pill";
+}
+
+function formatConfidencePercent(value: string | null | undefined) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return "-";
+  }
+  return `${Math.round(parsed * 100)}%`;
 }
 
 function getAliasInventoryItemName(alias: SupplierItemAlias, items: InventoryItem[]) {
@@ -276,14 +323,18 @@ function formatBytes(value: number) {
 function summarizeInvoices(invoices: PurchaseInvoice[]) {
   return invoices.reduce(
     (summary, invoice) => {
-      const amount = Number(invoice.gross_total);
-      summary.total += Number.isFinite(amount) ? amount : 0;
+      const grossAmount = Number(invoice.gross_total);
+      const netAmount = Number(invoice.net_total);
+      const vatAmount = Number(invoice.vat_total ?? "0");
+      summary.total += Number.isFinite(grossAmount) ? grossAmount : 0;
+      summary.netTotal += Number.isFinite(netAmount) ? netAmount : 0;
+      summary.vatTotal += Number.isFinite(vatAmount) ? vatAmount : 0;
       if (invoice.is_posted) {
         summary.posted += 1;
       }
       return summary;
     },
-    { total: 0, posted: 0 },
+    { total: 0, netTotal: 0, vatTotal: 0, posted: 0 },
   );
 }
 
@@ -831,6 +882,14 @@ export function InvoicesPage() {
           <strong>{formatMoney(String(summary.total), "HUF")}</strong>
         </article>
         <article className="finance-summary-card">
+          <span>Nettó összesen</span>
+          <strong>{formatMoney(String(summary.netTotal), "HUF")}</strong>
+        </article>
+        <article className="finance-summary-card">
+          <span>ÁFA összesen</span>
+          <strong>{formatMoney(String(summary.vatTotal), "HUF")}</strong>
+        </article>
+        <article className="finance-summary-card">
           <span>Könyvelt számlák</span>
           <strong>{summary.posted}</strong>
         </article>
@@ -922,7 +981,11 @@ export function InvoicesPage() {
                         {draft.status}
                       </span>
                     </td>
-                    <td>{draft.extraction_status}</td>
+                    <td>
+                      <span className={getPdfExtractionStatusClass(draft.extraction_status)}>
+                        {getPdfExtractionStatusLabel(draft.extraction_status)}
+                      </span>
+                    </td>
                     <td>{formatBytes(draft.size_bytes)}</td>
                     <td>{formatDateTime(draft.created_at)}</td>
                     <td>
@@ -1267,6 +1330,11 @@ export function InvoicesPage() {
                       <small>
                         Netto {reviewedLine?.line_net_amount ?? "-"} / AFA {reviewedLine?.vat_amount ?? "-"} / Brutto {reviewedLine?.line_gross_amount ?? "-"}
                       </small>
+                      {reviewedLine?.extraction_confidence_score ? (
+                        <small>
+                          PDF bizalom: {formatConfidencePercent(reviewedLine.extraction_confidence_score)}
+                        </small>
+                      ) : null}
                       {reviewedLine?.calculation_issues.length ? (
                         <small>{reviewedLine.calculation_issues.join(", ")}</small>
                       ) : null}
@@ -1674,6 +1742,8 @@ export function InvoicesPage() {
                   <th>Dátum</th>
                   <th>Pénznem</th>
                   <th>Bruttó összeg</th>
+                  <th>Nettó / ÁFA</th>
+                  <th>ÁFA forrás</th>
                   <th>Sorok</th>
                   <th>Mapping</th>
                   <th>Státusz</th>
@@ -1689,6 +1759,17 @@ export function InvoicesPage() {
                     <td>{formatDate(invoice.invoice_date)}</td>
                     <td>{invoice.currency}</td>
                     <td>{formatMoney(invoice.gross_total, invoice.currency)}</td>
+                    <td>
+                      {formatMoney(invoice.net_total, invoice.currency)} /{" "}
+                      {invoice.vat_total
+                        ? formatMoney(invoice.vat_total, invoice.currency)
+                        : "-"}
+                    </td>
+                    <td>
+                      <span className={getInvoiceTaxBreakdownStatusClass(invoice)}>
+                        {getInvoiceTaxBreakdownStatusLabel(invoice)}
+                      </span>
+                    </td>
                     <td>{invoice.lines.length}</td>
                     <td>
                       <span className={getInvoiceMappingStatusClass(invoice)}>

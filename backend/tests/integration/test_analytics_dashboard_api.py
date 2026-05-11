@@ -34,6 +34,7 @@ from app.modules.master_data.infrastructure.orm.product_model import ProductMode
 from app.modules.master_data.infrastructure.orm.unit_of_measure_model import (
     UnitOfMeasureModel,
 )
+from app.modules.master_data.infrastructure.orm.vat_rate_model import VatRateModel
 from app.modules.production.infrastructure.orm.recipe_model import (
     RecipeIngredientModel,
     RecipeModel,
@@ -230,12 +231,14 @@ class AnalyticsTestDataBuilder:
         name: str,
         sale_price_gross: Decimal,
         default_unit_cost: Decimal | None = None,
+        default_vat_rate_id=None,
         category_id=None,
     ) -> ProductModel:
         product = ProductModel(
             business_unit_id=business_unit_id,
             category_id=category_id,
             sales_uom_id=sales_uom_id,
+            default_vat_rate_id=default_vat_rate_id,
             sku=f"RISK-{uuid4().hex[:8]}",
             name=name,
             product_type="finished_good",
@@ -894,6 +897,111 @@ def test_dashboard_product_source_rows_return_pos_import_rows(
     assert Decimal(str(payload[0]["quantity"])) == Decimal("3")
     assert Decimal(str(payload[0]["gross_amount"])) == Decimal("1800")
     assert payload[0]["source_layer"] == "import_derived"
+
+
+def test_dashboard_pos_revenue_tax_breakdown_is_derived_from_product_vat(
+    client: TestClient,
+    db_session: Session,
+    analytics_data_builder: AnalyticsTestDataBuilder,
+    test_business_unit: BusinessUnitModel,
+) -> None:
+    vat_rate = db_session.scalar(select(VatRateModel).where(VatRateModel.code == "HU_27"))
+    assert vat_rate is not None
+    analytics_data_builder.create_product(
+        business_unit_id=test_business_unit.id,
+        sales_uom_id=None,
+        name="VAT Croissant",
+        sale_price_gross=Decimal("1270"),
+        default_unit_cost=Decimal("400"),
+        default_vat_rate_id=vat_rate.id,
+    )
+    source_row = analytics_data_builder.create_pos_row(
+        business_unit_id=test_business_unit.id,
+        row_number=9,
+        payload_date=date(2032, 6, 7),
+        receipt_no="DASH-2601",
+        category_name="Pastry",
+        product_name="VAT Croissant",
+        quantity=Decimal("1"),
+        gross_amount=Decimal("1270"),
+    )
+    analytics_data_builder.create_pos_row(
+        business_unit_id=test_business_unit.id,
+        row_number=10,
+        payload_date=date(2032, 6, 8),
+        receipt_no="DASH-2602",
+        category_name="Beverage",
+        product_name="Missing VAT Soda",
+        quantity=Decimal("1"),
+        gross_amount=Decimal("127"),
+    )
+
+    common_params = {
+        "scope": "overall",
+        "business_unit_id": str(test_business_unit.id),
+        "period": "custom",
+        "start_date": "2032-06-01",
+        "end_date": "2032-06-30",
+    }
+    categories_response = client.get(
+        f"{API_PREFIX}/dashboard/categories",
+        params=common_params,
+    )
+    products_response = client.get(
+        f"{API_PREFIX}/dashboard/products",
+        params={**common_params, "category_name": "Pastry"},
+    )
+    source_response = client.get(
+        f"{API_PREFIX}/dashboard/product-rows",
+        params={**common_params, "category_name": "Pastry", "product_name": "VAT Croissant"},
+    )
+    dashboard_response = client.get(
+        f"{API_PREFIX}/dashboard",
+        params=common_params,
+    )
+
+    assert categories_response.status_code == 200
+    category = categories_response.json()[0]
+    assert category["label"] == "Pastry"
+    assert Decimal(str(category["revenue"])) == Decimal("1270")
+    assert Decimal(str(category["net_revenue"])) == Decimal("1000.00")
+    assert Decimal(str(category["vat_amount"])) == Decimal("270.00")
+    assert category["amount_basis"] == "gross"
+    assert category["tax_breakdown_source"] == "product_vat_derived"
+
+    assert products_response.status_code == 200
+    product = products_response.json()[0]
+    assert product["product_name"] == "VAT Croissant"
+    assert Decimal(str(product["net_revenue"])) == Decimal("1000.00")
+    assert Decimal(str(product["vat_amount"])) == Decimal("270.00")
+    assert Decimal(str(product["estimated_unit_cost_net"])) == Decimal("400")
+    assert Decimal(str(product["estimated_cogs_net"])) == Decimal("400")
+    assert Decimal(str(product["estimated_net_margin_amount"])) == Decimal("600.00")
+    assert Decimal(str(product["estimated_margin_percent"])) == Decimal("60.0")
+    assert product["tax_breakdown_source"] == "product_vat_derived"
+    assert product["cost_source"] == "recipe_or_unit_cost"
+    assert product["margin_status"] == "complete"
+
+    assert source_response.status_code == 200
+    source_payload = source_response.json()
+    assert len(source_payload) == 1
+    assert source_payload[0]["row_id"] == str(source_row.id)
+    assert Decimal(str(source_payload[0]["net_amount"])) == Decimal("1000.00")
+    assert Decimal(str(source_payload[0]["vat_amount"])) == Decimal("270.00")
+    assert Decimal(str(source_payload[0]["vat_rate_percent"])) == Decimal("27.0000")
+    assert source_payload[0]["tax_breakdown_source"] == "product_vat_derived"
+
+    assert dashboard_response.status_code == 200
+    readiness = dashboard_response.json()["vat_readiness"]
+    assert readiness["status"] == "partial"
+    assert Decimal(str(readiness["coverage_percent"])) == Decimal("90.91")
+    assert Decimal(str(readiness["gross_revenue"])) == Decimal("1397")
+    assert Decimal(str(readiness["covered_gross_revenue"])) == Decimal("1270")
+    assert Decimal(str(readiness["missing_gross_revenue"])) == Decimal("127")
+    assert readiness["total_row_count"] == 2
+    assert readiness["covered_row_count"] == 1
+    assert readiness["missing_row_count"] == 1
+    assert readiness["tax_breakdown_source"] == "partial_product_vat_derived"
 
 
 def test_dashboard_expense_drill_down_returns_financial_actual_rows(

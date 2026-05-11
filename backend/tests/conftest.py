@@ -564,6 +564,9 @@ def create_purchase_invoice(db_session: Session):
                     uom_id=line["uom_id"],
                     unit_net_amount=line["unit_net_amount"],
                     line_net_amount=line["line_net_amount"],
+                    vat_rate_id=line.get("vat_rate_id"),
+                    vat_amount=line.get("vat_amount"),
+                    line_gross_amount=line.get("line_gross_amount"),
                 )
                 for line in lines
             ],

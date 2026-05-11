@@ -144,6 +144,7 @@ Elv:
 - import parse es mapping legyen idempotens
 - nagy listakhoz backend filter/pagination irany kell, ha az adatmennyiseg no
 - frontend ne toltson le felesleges reszleteket a fold feletti dashboardhoz
+- nagy frontend oldalak route-level lazy loadinggal toltodnek, hogy a dashboard es event modulok ne noveljek minden oldal elso JS bundle-jet
 
 ## Production recipe boundary
 

@@ -31,6 +31,10 @@ export type RecipeIngredientCost = {
   estimated_stock_quantity: string | null;
   track_stock: boolean;
   stock_status: IngredientStockStatus;
+  default_vat_rate_id: string | null;
+  vat_rate_percent: string | null;
+  estimated_vat_amount: string | null;
+  estimated_gross_cost: string | null;
 };
 
 export type RecipeCostSummary = {
@@ -48,6 +52,12 @@ export type RecipeCostSummary = {
   known_total_cost: string;
   total_cost: string | null;
   unit_cost: string | null;
+  known_total_vat_amount: string | null;
+  total_vat_amount: string | null;
+  known_total_gross_cost: string | null;
+  total_gross_cost: string | null;
+  unit_gross_cost: string | null;
+  tax_status: "product_vat_derived" | "missing_vat_rate" | "incomplete_cost" | "not_available" | string;
   cost_status: RecipeCostStatus;
   readiness_status: RecipeReadinessStatus;
   warnings: string[];
@@ -58,6 +68,19 @@ export type RecipeFilters = {
   business_unit_id: string;
   product_id?: string;
   active_only?: boolean;
+};
+
+export type RecipeReadinessOverview = {
+  business_unit_id: string;
+  total_products: number;
+  ready_count: number;
+  incomplete_count: number;
+  critical_count: number;
+  readiness_counts: Record<string, number>;
+  cost_counts: Record<string, number>;
+  tax_counts: Record<string, number>;
+  warning_counts: Record<string, number>;
+  next_actions: string[];
 };
 
 export type RecipeIngredientPayload = {

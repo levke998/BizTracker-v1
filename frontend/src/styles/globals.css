@@ -1962,6 +1962,96 @@ select option:checked {
   background: rgba(8, 13, 28, 0.34);
 }
 
+.event-ticket-coverage-card {
+  overflow: hidden;
+}
+
+.event-ticket-coverage-summary {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.event-ticket-coverage-summary span {
+  display: grid;
+  gap: 4px;
+  min-height: 76px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.13);
+  background: rgba(8, 13, 28, 0.34);
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+}
+
+.event-ticket-coverage-summary strong {
+  color: var(--text-primary);
+  font-size: 1.05rem;
+}
+
+.event-ticket-worklist {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+.event-ticket-worklist-row {
+  display: grid;
+  align-items: center;
+  gap: 12px;
+  grid-template-columns: minmax(190px, 1.2fr) minmax(160px, 0.8fr);
+  width: 100%;
+  min-height: 74px;
+  padding: 12px;
+  border: 1px solid rgba(245, 158, 11, 0.2);
+  border-radius: 14px;
+  background:
+    linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(56, 189, 248, 0.04)),
+    rgba(15, 23, 42, 0.56);
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.event-ticket-worklist-row:hover {
+  border-color: rgba(245, 158, 11, 0.4);
+  transform: translateY(-1px);
+}
+
+.event-ticket-worklist-row div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.event-ticket-worklist-row strong,
+.event-ticket-worklist-row span,
+.event-ticket-worklist-row small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.event-ticket-worklist-row strong {
+  color: var(--text-primary);
+  font-size: 0.94rem;
+}
+
+.event-ticket-worklist-row span,
+.event-ticket-worklist-row small {
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+}
+
+.event-card-status-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
 .event-live-heading {
   align-items: center;
   display: flex;
@@ -2056,6 +2146,95 @@ select option:checked {
 
 .event-comparison-card {
   overflow: hidden;
+}
+
+.event-insight-panel {
+  overflow: hidden;
+}
+
+.event-insight-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.event-insight-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  min-height: 92px;
+  padding: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.58);
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.event-insight-row:hover {
+  border-color: rgba(56, 189, 248, 0.42);
+  transform: translateY(-1px);
+}
+
+.event-insight-row.success {
+  background:
+    linear-gradient(135deg, rgba(16, 185, 129, 0.16), rgba(56, 189, 248, 0.04)),
+    rgba(15, 23, 42, 0.58);
+}
+
+.event-insight-row.warning {
+  background:
+    linear-gradient(135deg, rgba(245, 158, 11, 0.17), rgba(56, 189, 248, 0.04)),
+    rgba(15, 23, 42, 0.58);
+}
+
+.event-insight-row.danger {
+  background:
+    linear-gradient(135deg, rgba(239, 68, 68, 0.17), rgba(56, 189, 248, 0.04)),
+    rgba(15, 23, 42, 0.58);
+}
+
+.event-insight-row.neutral {
+  background:
+    linear-gradient(135deg, rgba(14, 165, 233, 0.14), rgba(148, 163, 184, 0.05)),
+    rgba(15, 23, 42, 0.58);
+}
+
+.event-insight-row div {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.event-insight-row div:last-child {
+  justify-items: end;
+  text-align: right;
+}
+
+.event-insight-row span,
+.event-insight-row small {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.event-insight-row span {
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.event-insight-row strong {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 1rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .event-comparison-list {
@@ -2399,6 +2578,17 @@ select option:checked {
   text-decoration: none;
 }
 
+.production-template-starter {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+  padding: 12px;
+  border: 1px solid rgba(56, 189, 248, 0.16);
+  border-radius: 14px;
+  background: rgba(8, 13, 28, 0.34);
+}
+
 .text-button {
   border: 0;
   padding: 0;
@@ -2430,6 +2620,42 @@ select option:checked {
   border: 1px solid rgba(56, 189, 248, 0.16);
   border-radius: 16px;
   background: rgba(15, 23, 42, 0.5);
+}
+
+.production-version-policy {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(56, 189, 248, 0.18);
+  background: rgba(8, 13, 28, 0.34);
+}
+
+.production-version-policy span {
+  display: grid;
+  gap: 3px;
+  min-width: 92px;
+}
+
+.production-version-policy small {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.production-version-policy strong {
+  color: var(--text-primary);
+}
+
+.production-version-policy p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  line-height: 1.45;
 }
 
 .production-recipe-form-grid {
@@ -3083,6 +3309,20 @@ select option:checked {
   overflow-wrap: anywhere;
 }
 
+.finance-summary-card.success {
+  border-color: rgba(52, 211, 153, 0.24);
+  background:
+    linear-gradient(135deg, rgba(52, 211, 153, 0.13), rgba(56, 189, 248, 0.05)),
+    rgba(15, 23, 42, 0.74);
+}
+
+.finance-summary-card.warning {
+  border-color: rgba(245, 158, 11, 0.26);
+  background:
+    linear-gradient(135deg, rgba(245, 158, 11, 0.14), rgba(56, 189, 248, 0.05)),
+    rgba(15, 23, 42, 0.74);
+}
+
 .inventory-filter-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
@@ -3563,6 +3803,100 @@ select option:checked {
   border-color: rgba(148, 163, 184, 0.14);
 }
 
+.vat-readiness-card {
+  margin-top: 14px;
+  overflow: hidden;
+}
+
+.vat-readiness-card.success {
+  border-color: rgba(52, 211, 153, 0.24);
+}
+
+.vat-readiness-card.warning {
+  border-color: rgba(245, 158, 11, 0.28);
+}
+
+.vat-readiness-card.danger {
+  border-color: rgba(251, 113, 133, 0.3);
+}
+
+.vat-readiness-summary {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.vat-readiness-summary span {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  background: rgba(8, 13, 28, 0.32);
+}
+
+.vat-readiness-summary strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 1rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vat-readiness-summary small,
+.vat-readiness-meta {
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+}
+
+.vat-readiness-track {
+  position: relative;
+  z-index: 1;
+  height: 10px;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: rgba(8, 13, 28, 0.58);
+}
+
+.vat-readiness-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(135deg, #34d399, #38bdf8);
+}
+
+.vat-readiness-card.warning .vat-readiness-track span {
+  background: linear-gradient(135deg, #f59e0b, #38bdf8);
+}
+
+.vat-readiness-card.danger .vat-readiness-track span {
+  background: linear-gradient(135deg, #fb7185, #f59e0b);
+}
+
+.vat-readiness-meta {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.vat-readiness-meta span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 3px 8px;
+  border-radius: var(--radius-pill);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  background: rgba(8, 13, 28, 0.32);
+}
+
 .business-specific-card {
   margin-top: 14px;
   overflow: hidden;
@@ -3631,6 +3965,118 @@ select option:checked {
   border-radius: inherit;
 }
 
+.flow-financial-mix-list {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(148, 163, 184, 0.16);
+}
+
+.flow-financial-mix-row {
+  display: grid;
+  align-items: center;
+  gap: 12px;
+  grid-template-columns: minmax(150px, 0.9fr) minmax(160px, 1fr) minmax(130px, 0.7fr);
+  min-height: 58px;
+  padding: 10px 12px;
+  border: 1px solid rgba(148, 163, 184, 0.13);
+  border-radius: 14px;
+  background: rgba(8, 13, 28, 0.3);
+}
+
+.flow-financial-mix-row.ticket {
+  border-color: rgba(245, 158, 11, 0.24);
+  background:
+    linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(56, 189, 248, 0.04)),
+    rgba(8, 13, 28, 0.3);
+}
+
+.flow-financial-mix-row div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.flow-financial-mix-row strong,
+.flow-financial-mix-row span,
+.flow-financial-mix-row small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flow-financial-mix-row strong {
+  color: var(--text-primary);
+  font-size: 0.9rem;
+}
+
+.flow-financial-mix-row span,
+.flow-financial-mix-row small {
+  color: var(--text-secondary);
+  font-size: 0.76rem;
+}
+
+.flow-financial-mix-row small {
+  text-align: right;
+}
+
+.flow-consumption-control-card {
+  margin-top: 14px;
+  overflow: hidden;
+}
+
+.flow-consumption-grid {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.flow-consumption-decision-list {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(148, 163, 184, 0.16);
+}
+
+.flow-consumption-decision-row {
+  display: grid;
+  gap: 5px;
+  min-height: 72px;
+  padding: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.13);
+  border-radius: 14px;
+  background:
+    linear-gradient(135deg, rgba(56, 189, 248, 0.08), rgba(52, 211, 153, 0.04)),
+    rgba(8, 13, 28, 0.3);
+}
+
+.flow-consumption-decision-row span {
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.flow-consumption-decision-row strong {
+  color: var(--text-primary);
+  font-size: 0.95rem;
+}
+
+.flow-consumption-decision-row small {
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
 .flow-event-performance-card {
   margin-top: 14px;
   overflow: hidden;
@@ -3645,7 +4091,7 @@ select option:checked {
 }
 
 .flow-event-summary-grid {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   margin-bottom: 14px;
 }
 
@@ -3669,8 +4115,37 @@ select option:checked {
 }
 
 .flow-event-highlight {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
   margin-bottom: 14px;
+}
+
+.flow-event-financial-mix {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.flow-event-financial-mix > div {
+  display: grid;
+  gap: 7px;
+  min-height: 96px;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  background: rgba(8, 13, 28, 0.34);
+}
+
+.flow-event-financial-mix span,
+.flow-event-financial-mix small {
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+}
+
+.flow-event-financial-mix strong {
+  color: var(--text-primary);
+  font-size: 1rem;
 }
 
 .flow-event-top {
@@ -7702,8 +8177,15 @@ select option:checked {
   .finance-summary-grid,
   .business-focus-grid,
   .business-specific-grid,
+  .flow-consumption-grid,
+  .vat-readiness-summary,
   .flow-event-summary-grid,
   .flow-event-highlight,
+  .flow-event-financial-mix,
+  .flow-financial-mix-row,
+  .event-ticket-coverage-summary,
+  .event-ticket-worklist-row,
+  .event-insight-list,
   .flow-forecast-summary,
   .flow-forecast-metrics,
   .flow-performer-list,
@@ -7812,6 +8294,16 @@ select option:checked {
     min-width: 826px;
   }
 
+  .event-insight-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .event-insight-row div:last-child {
+    justify-items: start;
+    text-align: left;
+  }
+
   .app-shell {
     grid-template-columns: 1fr;
   }
@@ -7908,8 +8400,14 @@ select option:checked {
   .finance-summary-grid,
   .business-focus-grid,
   .business-specific-grid,
+  .flow-consumption-grid,
   .flow-event-summary-grid,
   .flow-event-highlight,
+  .flow-event-financial-mix,
+  .flow-financial-mix-row,
+  .event-ticket-coverage-summary,
+  .event-ticket-worklist-row,
+  .event-insight-list,
   .flow-event-drilldown,
   .flow-event-detail-metrics,
   .flow-forecast-summary,
@@ -8075,7 +8573,9 @@ select option:checked {
   }
 
   .production-recipe-form-grid,
+  .production-version-policy,
   .production-recipe-line,
+  .production-template-starter,
   .production-quick-fix {
     grid-template-columns: 1fr;
   }

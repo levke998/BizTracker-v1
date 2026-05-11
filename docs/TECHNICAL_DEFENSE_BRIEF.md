@@ -173,10 +173,11 @@ average_basket_quantity = total basket quantity / basket count
 ```
 
 A dashboard minden fontos KPI-n jeloli, hogy az osszeg brutto/netto/mixed es actual/derived eredetu-e.
+POS bevetelnel a brutto kassza actual marad az igazsagforras, a netto/AFA bontas pedig termek AFA torzsadatbol szamolt derived adat. A dashboard kulon `vat_readiness` jelzest ad arra, hogy az adott idoszak POS forgalmanak mekkora reszehez van AFA-kulcs lefedettseg. Termek szinten a margin mar netto bevetelbol es netto COGS-bol szamolodik, kulon `margin_status` jelzessel, hogy hianyzo AFA vagy hianyzo koltseg ne torzitson.
 
 ## Mi van keszen?
 
-Kesz a backend/frontend alap, auth MVP, CSV import pipeline, POS dedupe, POS mapping munkalista, termek- es alapanyagkatalogus, recept readiness, estimated COGS, inventory actual es theoretical stock, fizikai keszletszamolas, variance elemzes, beszerzesi szamla review es posting elso szelete, dashboard v1, weather/forecast cache, valamint Flow event es ticket actual alap.
+Kesz a backend/frontend alap, auth MVP, CSV import pipeline, POS dedupe, POS mapping munkalista, termek- es alapanyagkatalogus, recept readiness, estimated COGS, inventory actual es theoretical stock, fizikai keszletszamolas, variance elemzes, beszerzesi szamla review es posting elso szelete, dashboard v1 POS AFA readiness jelzessel, weather/forecast cache, valamint Flow event es ticket actual alap.
 
 ## SOLID es Clean Code
 

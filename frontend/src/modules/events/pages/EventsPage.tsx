@@ -57,12 +57,22 @@ type TicketActualFormState = {
 };
 type EventPeriod = "alltime" | "last_30_days" | "last_90_days" | "year";
 type EventsPageMode = "planner" | "analytics";
+type EventInsightTone = "success" | "warning" | "danger" | "neutral";
 type CalendarDay = {
   key: string;
   dayNumber: number;
   isCurrentMonth: boolean;
   isToday: boolean;
   events: EventRecord[];
+};
+type EventInsight = {
+  key: string;
+  tone: EventInsightTone;
+  title: string;
+  eventId: string;
+  eventTitle: string;
+  metric: string;
+  detail: string;
 };
 
 const statusOptions: Array<{ value: EventStatus | "all"; label: string }> = [
@@ -98,10 +108,19 @@ function formatNumber(value: string | number | null | undefined) {
   }).format(toNumber(value));
 }
 
-function formatPercent(value: number) {
-  return new Intl.NumberFormat("hu-HU", {
-    maximumFractionDigits: 1,
-  }).format(value);
+function formatNullablePercent(value: string | number | null | undefined) {
+  if (value === null || value === undefined) {
+    return "-";
+  }
+  return `${formatNumber(value)}%`;
+}
+
+function toPercentNumber(value: string | number | null | undefined) {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function formatDateTime(value: string | null) {
@@ -165,11 +184,7 @@ function formatEventWeatherSummary(performance: EventPerformance) {
 }
 
 function getTicketSharePercent(performance: EventPerformance) {
-  const total = toNumber(performance.total_revenue_gross);
-  if (total <= 0) {
-    return 0;
-  }
-  return (toNumber(performance.ticket_revenue_gross) / total) * 100;
+  return toPercentNumber(performance.ticket_revenue_share_percent) ?? 0;
 }
 
 function getWeatherImpactLabel(performance: EventPerformance) {
@@ -190,6 +205,32 @@ function getWeatherImpactLabel(performance: EventPerformance) {
     return "Hideg idő";
   }
   return formatWeatherCondition(condition);
+}
+
+function formatProfitStatus(value: string) {
+  const labels: Record<string, string> = {
+    profitable: "Nyereséges",
+    break_even: "Nullszaldó",
+    loss: "Veszteséges",
+    no_revenue: "Nincs bevétel",
+  };
+  return labels[value] ?? value;
+}
+
+function formatTicketRevenueSource(value: string) {
+  const labels: Record<string, string> = {
+    ticket_actual: "Ticket actual",
+    not_recorded: "Nincs ticket actual",
+  };
+  return labels[value] ?? value;
+}
+
+function formatSettlementStatus(value: string) {
+  const labels: Record<string, string> = {
+    actual_ticket_settlement: "Ticket actual rögzítve",
+    ticket_actual_missing: "Ticket actual hiányzik",
+  };
+  return labels[value] ?? value;
 }
 
 function formatWeatherCoverageLabel(
@@ -603,12 +644,39 @@ export function EventsPage({ mode = "planner" }: { mode?: EventsPageMode }) {
         barRevenue: acc.barRevenue + toNumber(item.bar_revenue_gross),
         ownRevenue: acc.ownRevenue + toNumber(item.own_revenue),
         profit: acc.profit + toNumber(item.event_profit_lite),
+        profitableCount:
+          acc.profitableCount + ("profit_status" in item && item.profit_status === "profitable" ? 1 : 0),
+        lossCount:
+          acc.lossCount + ("profit_status" in item && item.profit_status === "loss" ? 1 : 0),
         receiptCount:
           acc.receiptCount + ("receipt_count" in item ? Number(item.receipt_count) : 0),
+        ticketActualCount:
+          acc.ticketActualCount + ("ticket_revenue_source" in item && item.ticket_revenue_source === "ticket_actual" ? 1 : 0),
+        missingTicketActualCount:
+          acc.missingTicketActualCount + ("ticket_revenue_source" in item && item.ticket_revenue_source !== "ticket_actual" ? 1 : 0),
       }),
-      { ticketRevenue: 0, barRevenue: 0, ownRevenue: 0, profit: 0, receiptCount: 0 },
+      {
+        ticketRevenue: 0,
+        barRevenue: 0,
+        ownRevenue: 0,
+        profit: 0,
+        profitableCount: 0,
+        lossCount: 0,
+        receiptCount: 0,
+        ticketActualCount: 0,
+        missingTicketActualCount: 0,
+      },
     );
   }, [eventPerformances, events, isPlanner]);
+  const missingTicketActualRows = useMemo(
+    () =>
+      eventPerformances
+        .filter((performance) => performance.ticket_revenue_source !== "ticket_actual")
+        .sort((left, right) => new Date(right.starts_at).getTime() - new Date(left.starts_at).getTime()),
+    [eventPerformances],
+  );
+  const ticketActualCoveragePercent =
+    eventPerformances.length > 0 ? (summary.ticketActualCount / eventPerformances.length) * 100 : 0;
   const performerRows = useMemo(() => {
     return Array.from(
       (isPlanner ? events : eventPerformances)
@@ -675,6 +743,113 @@ export function EventsPage({ mode = "planner" }: { mode?: EventsPageMode }) {
       )[0],
     [eventPerformances],
   );
+  const topMarginPerformance = useMemo(
+    () =>
+      [...eventPerformances]
+        .filter((performance) => performance.event_profit_margin_percent !== null)
+        .sort(
+          (left, right) =>
+            toNumber(right.event_profit_margin_percent) - toNumber(left.event_profit_margin_percent),
+        )[0],
+    [eventPerformances],
+  );
+  const highestCostRatioPerformance = useMemo(
+    () =>
+      [...eventPerformances]
+        .filter((performance) => performance.operating_cost_ratio_percent !== null)
+        .sort(
+          (left, right) =>
+            toNumber(right.operating_cost_ratio_percent) - toNumber(left.operating_cost_ratio_percent),
+      )[0],
+    [eventPerformances],
+  );
+  const eventInsights = useMemo<EventInsight[]>(() => {
+    const eventTitle = (performance: EventPerformance) =>
+      eventById.get(performance.event_id)?.title ?? "Ismeretlen esemény";
+    const insights: EventInsight[] = [];
+
+    if (missingTicketActualRows.length > 0) {
+      const missingTicketActual = missingTicketActualRows[0];
+      insights.push({
+        key: "ticket-actual-missing",
+        tone: "warning",
+        title: "Ticket actual hiányzik",
+        eventId: missingTicketActual.event_id,
+        eventTitle: eventTitle(missingTicketActual),
+        metric: `${missingTicketActualRows.length} event`,
+        detail: "Jegybevétel csak külön ticket actualból számolódik, POS-ból nem.",
+      });
+    }
+
+    if (topPerformance) {
+      insights.push({
+        key: "top-profit",
+        tone: "success",
+        title: "Legjobb üzleti eredmény",
+        eventId: topPerformance.event_id,
+        eventTitle: eventTitle(topPerformance),
+        metric: formatMoney(topPerformance.event_profit_lite),
+        detail: `${formatProfitStatus(topPerformance.profit_status)} · margin ${formatNullablePercent(
+          topPerformance.event_profit_margin_percent,
+        )}`,
+      });
+    }
+
+    if (highestCostRatioPerformance) {
+      const costRatio = toNumber(highestCostRatioPerformance.operating_cost_ratio_percent);
+      const costTone: EventInsightTone = costRatio >= 50 ? "danger" : costRatio >= 30 ? "warning" : "neutral";
+      insights.push({
+        key: "cost-risk",
+        tone: costTone,
+        title: costRatio >= 50 ? "Magas költségarány" : "Költségfigyelő",
+        eventId: highestCostRatioPerformance.event_id,
+        eventTitle: eventTitle(highestCostRatioPerformance),
+        metric: formatNullablePercent(highestCostRatioPerformance.operating_cost_ratio_percent),
+        detail: `Profit ${formatMoney(highestCostRatioPerformance.event_profit_lite)} · margin ${formatNullablePercent(
+          highestCostRatioPerformance.event_profit_margin_percent,
+        )}`,
+      });
+    }
+
+    const popularWeakMargin = [...eventPerformances]
+      .filter((performance) => {
+        const margin = toPercentNumber(performance.event_profit_margin_percent);
+        return performance.receipt_count > 0 && (performance.profit_status === "loss" || (margin !== null && margin < 20));
+      })
+      .sort((left, right) => Number(right.receipt_count) - Number(left.receipt_count))[0];
+    if (popularWeakMargin) {
+      insights.push({
+        key: "popular-weak-margin",
+        tone: popularWeakMargin.profit_status === "loss" ? "danger" : "warning",
+        title: "Népszerű, de gyenge margin",
+        eventId: popularWeakMargin.event_id,
+        eventTitle: eventTitle(popularWeakMargin),
+        metric: `${popularWeakMargin.receipt_count} nyugta`,
+        detail: `Margin ${formatNullablePercent(popularWeakMargin.event_profit_margin_percent)} · profit ${formatMoney(
+          popularWeakMargin.event_profit_lite,
+        )}`,
+      });
+    }
+
+    const strongestBarMix = [...eventPerformances]
+      .filter((performance) => toPercentNumber(performance.bar_revenue_share_percent) !== null)
+      .sort((left, right) => toNumber(right.bar_revenue_share_percent) - toNumber(left.bar_revenue_share_percent))[0];
+    if (strongestBarMix && toNumber(strongestBarMix.bar_revenue_share_percent) >= 50) {
+      insights.push({
+        key: "bar-mix",
+        tone: "neutral",
+        title: "Bárvezérelt event",
+        eventId: strongestBarMix.event_id,
+        eventTitle: eventTitle(strongestBarMix),
+        metric: formatNullablePercent(strongestBarMix.bar_revenue_share_percent),
+        detail: `Bárbevétel ${formatMoney(strongestBarMix.bar_revenue_gross)} · jegy ${formatNullablePercent(
+          strongestBarMix.ticket_revenue_share_percent,
+        )}`,
+      });
+    }
+
+    return insights.slice(0, 4);
+  }, [eventById, eventPerformances, highestCostRatioPerformance, missingTicketActualRows, topPerformance]);
   const comparisonRows = useMemo(
     () =>
       [...eventPerformances]
@@ -892,6 +1067,14 @@ export function EventsPage({ mode = "planner" }: { mode?: EventsPageMode }) {
             <span>Kapcsolt nyugták</span>
             <strong>{formatNumber(summary.receiptCount)}</strong>
           </article>
+          <article className={summary.missingTicketActualCount > 0 ? "finance-summary-card warning" : "finance-summary-card success"}>
+            <span>Ticket actual lefedettség</span>
+            <strong>{formatNullablePercent(ticketActualCoveragePercent)}</strong>
+          </article>
+          <article className={summary.missingTicketActualCount > 0 ? "finance-summary-card warning" : "finance-summary-card success"}>
+            <span>Ticket actual hiányzik</span>
+            <strong>{summary.missingTicketActualCount}</strong>
+          </article>
           <article className="finance-summary-card compact-title">
             <span>Legfelkapottabb</span>
             <strong>
@@ -908,8 +1091,115 @@ export function EventsPage({ mode = "planner" }: { mode?: EventsPageMode }) {
                 : "-"}
             </strong>
           </article>
+          <article className="finance-summary-card compact-title">
+            <span>Legjobb margin</span>
+            <strong>
+              {topMarginPerformance
+                ? `${formatNullablePercent(topMarginPerformance.event_profit_margin_percent)} · ${
+                    eventById.get(topMarginPerformance.event_id)?.title ?? "Ismeretlen"
+                  }`
+                : "-"}
+            </strong>
+          </article>
+          <article className="finance-summary-card compact-title">
+            <span>Költség figyelő</span>
+            <strong>
+              {highestCostRatioPerformance
+                ? `${formatNullablePercent(highestCostRatioPerformance.operating_cost_ratio_percent)} · ${
+                    eventById.get(highestCostRatioPerformance.event_id)?.title ?? "Ismeretlen"
+                  }`
+                : "-"}
+            </strong>
+          </article>
+          <article className="finance-summary-card compact-title">
+            <span>Nyereséges / veszteséges</span>
+            <strong>{summary.profitableCount} / {summary.lossCount}</strong>
+          </article>
         </div>
       )}
+
+      {!isPlanner && eventInsights.length > 0 ? (
+        <Card
+          className="event-insight-panel"
+          eyebrow="Döntési jelzések"
+          title="Event üzleti insightok"
+          subtitle="A backend read-model profit, margin, költségarány és bevételi mix mutatóiból kiemelt esetek."
+          count={`${eventInsights.length} jelzés`}
+        >
+          <div className="event-insight-list">
+            {eventInsights.map((insight) => (
+              <button
+                className={`event-insight-row ${insight.tone}`}
+                key={insight.key}
+                type="button"
+                onClick={() => setExpandedEventId(insight.eventId)}
+              >
+                <div>
+                  <span>{insight.title}</span>
+                  <strong>{insight.eventTitle}</strong>
+                </div>
+                <div>
+                  <strong>{insight.metric}</strong>
+                  <small>{insight.detail}</small>
+                </div>
+              </button>
+            ))}
+          </div>
+        </Card>
+      ) : null}
+
+      {!isPlanner ? (
+        <Card
+          className="event-ticket-coverage-card"
+          eyebrow="Ticket actual kontroll"
+          title="Jegyadat lefedettség"
+          subtitle="A jegybevétel külön ticket rendszerből rögzített actual; a POS sorok kizárólag bár/fogyasztás oldalt adnak."
+          count={formatNullablePercent(ticketActualCoveragePercent)}
+        >
+          <div className="event-ticket-coverage-summary">
+            <span>
+              <strong>{summary.ticketActualCount}</strong>
+              Ticket actual rögzítve
+            </span>
+            <span>
+              <strong>{summary.missingTicketActualCount}</strong>
+              Hiányzó ticket actual
+            </span>
+            <span>
+              <strong>{formatMoney(summary.ticketRevenue)}</strong>
+              Kapcsolt jegybevétel
+            </span>
+          </div>
+          {eventPerformances.length === 0 ? (
+            <p className="empty-message">Nincs még event performance adat az aktuális szűrésben.</p>
+          ) : missingTicketActualRows.length > 0 ? (
+            <div className="event-ticket-worklist">
+              {missingTicketActualRows.slice(0, 5).map((performance) => {
+                const event = eventById.get(performance.event_id);
+                return (
+                  <button
+                    className="event-ticket-worklist-row"
+                    key={performance.event_id}
+                    type="button"
+                    onClick={() => setExpandedEventId(performance.event_id)}
+                  >
+                    <div>
+                      <strong>{event?.title ?? "Ismeretlen esemény"}</strong>
+                      <small>{event?.performer_name ?? "Fellépő nélkül"} · {formatDateTime(performance.starts_at)}</small>
+                    </div>
+                    <div>
+                      <span>{formatSettlementStatus(performance.settlement_status)}</span>
+                      <small>Bár POS: {formatMoney(performance.bar_revenue_gross)} · nyugta {performance.receipt_count}</small>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="info-message">Minden aktuális eventhez van ticket actual réteg az elemző nézetben.</p>
+          )}
+        </Card>
+      ) : null}
 
       {isPlanner ? (
         <Card
@@ -966,7 +1256,7 @@ export function EventsPage({ mode = "planner" }: { mode?: EventsPageMode }) {
           className="flow-performer-ranking-card"
           eyebrow="Fellépők"
           title="Fellépő rangsor"
-          subtitle="Kapcsolt POS sorokból számolt, időszakos vagy all-time Flow teljesítmény"
+          subtitle="Ticket actual, POS bárbevétel és event költségek alapján számolt Flow teljesítmény"
           count={periodOptions.find((option) => option.value === selectedPeriod)?.label ?? "All-time"}
         >
           {performerRows.length > 0 ? (
@@ -984,8 +1274,8 @@ export function EventsPage({ mode = "planner" }: { mode?: EventsPageMode }) {
             </div>
           ) : (
             <p className="empty-message">
-              Nincs kapcsolt POS alapú fellépői rangsor az aktuális szűrésben. Amint az event időablakába
-              érkezik CSV vagy API eladás, az elemző ezt már onnan számolja.
+              Nincs event performance alapú fellépői rangsor az aktuális szűrésben. Amint az event időablakába
+              érkezik POS fogyasztás és/vagy ticket actual, az elemző ezt megjeleníti.
             </p>
           )}
         </Card>
@@ -996,7 +1286,7 @@ export function EventsPage({ mode = "planner" }: { mode?: EventsPageMode }) {
           className="flow-event-performance-card"
           eyebrow="Esemény elemző"
           title="Legerősebb kapcsolt event"
-          subtitle="A rangsor a mentett POS sorokból, nem kézi bevételi mezőből számol."
+          subtitle="A rangsor ticket actualból, POS bárbevételből és event költségekből számol."
           count={formatMoney(topPerformance.event_profit_lite)}
         >
           <div className="flow-event-top">
@@ -1021,7 +1311,7 @@ export function EventsPage({ mode = "planner" }: { mode?: EventsPageMode }) {
           className="event-comparison-card"
           eyebrow="Összehasonlítás"
           title="Event teljesítmény rangsor"
-          subtitle="Kapcsolt POS sorokból számolt profit, jegy-bár mix és időjárási kontextus."
+          subtitle="Ticket actual, POS bárbevétel, költségarány és időjárási kontextus alapján."
           count={`${comparisonRows.length} event`}
         >
           {eventPerformancesQuery.isLoading ? (
@@ -1035,7 +1325,6 @@ export function EventsPage({ mode = "planner" }: { mode?: EventsPageMode }) {
               {comparisonRows.map((performance, index) => {
                 const event = eventById.get(performance.event_id);
                 const ticketShare = getTicketSharePercent(performance);
-                const barShare = Math.max(0, 100 - ticketShare);
                 return (
                   <button
                     className="event-comparison-row"
@@ -1053,8 +1342,8 @@ export function EventsPage({ mode = "planner" }: { mode?: EventsPageMode }) {
                     <div className="event-comparison-money">
                       <strong>{formatMoney(performance.event_profit_lite)}</strong>
                       <small>
-                        Jegy {formatMoney(performance.ticket_revenue_gross)} · Bár{" "}
-                        {formatMoney(performance.bar_revenue_gross)}
+                        {formatProfitStatus(performance.profit_status)} · Saját bevétel{" "}
+                        {formatMoney(performance.own_revenue)}
                       </small>
                     </div>
                     <div className="event-comparison-mix" aria-label="Jegy és bár arány">
@@ -1062,16 +1351,15 @@ export function EventsPage({ mode = "planner" }: { mode?: EventsPageMode }) {
                         <i style={{ width: `${Math.min(100, Math.max(0, ticketShare))}%` }} />
                       </span>
                       <small>
-                        Jegy {formatPercent(ticketShare)}% · Bár {formatPercent(barShare)}%
+                        Jegy {formatNullablePercent(performance.ticket_revenue_share_percent)} · Bár{" "}
+                        {formatNullablePercent(performance.bar_revenue_share_percent)}
                       </small>
                     </div>
                     <div className="event-comparison-weather">
-                      <strong>{getWeatherImpactLabel(performance)}</strong>
+                      <strong>Margin {formatNullablePercent(performance.event_profit_margin_percent)}</strong>
                       <small>
-                        {performance.weather.average_temperature_c
-                          ? `${formatNumber(performance.weather.average_temperature_c)} °C`
-                          : "Nincs átlaghőmérséklet"}{" "}
-                        · {performance.receipt_count} nyugta
+                        Költségarány {formatNullablePercent(performance.operating_cost_ratio_percent)} ·{" "}
+                        {getWeatherImpactLabel(performance)}
                       </small>
                     </div>
                   </button>
@@ -1134,13 +1422,29 @@ export function EventsPage({ mode = "planner" }: { mode?: EventsPageMode }) {
                   </>
                 )}
               </div>
+              {!isPlanner && rowPerformance ? (
+                <div className="event-card-status-strip">
+                  <span
+                    className={
+                      rowPerformance.ticket_revenue_source === "ticket_actual"
+                        ? "status-pill status-pill-success"
+                        : "status-pill status-pill-warning"
+                    }
+                  >
+                    {formatSettlementStatus(rowPerformance.settlement_status)}
+                  </span>
+                  <span className="status-pill">
+                    Jegyforrás: {formatTicketRevenueSource(rowPerformance.ticket_revenue_source)}
+                  </span>
+                </div>
+              ) : null}
               {expanded ? (
                 <div className="catalog-details" onClick={(clickEvent) => clickEvent.stopPropagation()}>
                   <div className="event-settlement-grid">
                     <article className="catalog-decision-card primary">
                       <span>Teljes bevétel</span>
                       <strong>{formatMoney(toNumber(displayedTicketRevenue) + toNumber(displayedBarRevenue))}</strong>
-                      <small>{isPlanner ? "Tervezési rekord szerinti bevétel." : "Kapcsolt POS sorok alapján."}</small>
+                      <small>{isPlanner ? "Tervezési rekord szerinti bevétel." : "Ticket actual + POS bár alapján."}</small>
                     </article>
                     <article className="catalog-decision-card warning">
                       <span>Fellépő része</span>
@@ -1320,20 +1624,38 @@ export function EventsPage({ mode = "planner" }: { mode?: EventsPageMode }) {
                         <strong>{performance.source_row_count} POS sor · {performance.receipt_count} nyugta</strong>
                       </div>
                       <div className="event-settlement-grid">
-                        <article className="catalog-decision-card primary">
-                          <span>Kapcsolt jegybevétel</span>
+                        <article
+                          className={
+                            performance.ticket_revenue_source === "ticket_actual"
+                              ? "catalog-decision-card primary"
+                              : "catalog-decision-card warning"
+                          }
+                        >
+                          <span>Ticket actual bevétel</span>
                           <strong>{formatMoney(performance.ticket_revenue_gross)}</strong>
-                          <small>{formatNumber(performance.ticket_quantity)} jegy jellegű mennyiség.</small>
+                          <small>
+                            {formatNumber(performance.ticket_quantity)} jegy. {formatSettlementStatus(performance.settlement_status)}.
+                          </small>
                         </article>
                         <article className="catalog-decision-card success">
-                          <span>Kapcsolt bárbevétel</span>
+                          <span>POS bárbevétel</span>
                           <strong>{formatMoney(performance.bar_revenue_gross)}</strong>
-                          <small>{formatNumber(performance.bar_quantity)} fogyasztási mennyiség.</small>
+                          <small>{formatNumber(performance.bar_quantity)} fogyasztási mennyiség. Mix: {formatNullablePercent(performance.bar_revenue_share_percent)}</small>
                         </article>
                         <article className="catalog-decision-card warning">
                           <span>Előadói rész</span>
                           <strong>{formatMoney(performance.performer_share_amount)}</strong>
                           <small>{formatNumber(performance.performer_share_percent)}% a kapcsolt jegybevételből.</small>
+                        </article>
+                        <article className="catalog-decision-card neutral">
+                          <span>Event költség</span>
+                          <strong>{formatMoney(performance.operating_cost_gross)}</strong>
+                          <small>Platform {formatMoney(performance.platform_fee_gross)} · Költségarány: {formatNullablePercent(performance.operating_cost_ratio_percent)}</small>
+                        </article>
+                        <article className="catalog-decision-card primary">
+                          <span>Event profit</span>
+                          <strong>{formatMoney(performance.event_profit_lite)}</strong>
+                          <small>{formatProfitStatus(performance.profit_status)} · Margin: {formatNullablePercent(performance.event_profit_margin_percent)}</small>
                         </article>
                         <article className="catalog-decision-card neutral">
                           <span>Időjárás</span>

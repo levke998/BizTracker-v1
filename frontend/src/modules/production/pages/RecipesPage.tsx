@@ -7,7 +7,7 @@ import {
   listCatalogIngredients,
   updateCatalogIngredient,
 } from "../../catalog/api/catalogApi";
-import { listUnitsOfMeasure } from "../../masterData/api/masterDataApi";
+import { listUnitsOfMeasure, listVatRates } from "../../masterData/api/masterDataApi";
 import type {
   CatalogIngredient,
   CatalogIngredientPayload,
@@ -27,6 +27,7 @@ type RecipeFilter =
   | "all"
   | "missing_recipe"
   | "missing_cost"
+  | "missing_vat"
   | "missing_stock"
   | "empty_recipe"
   | "ready";
@@ -84,6 +85,16 @@ function formatCostStatus(value: RecipeCostStatus) {
     missing_cost: "Hianyzo ar",
     no_recipe: "Nincs recept",
     empty_recipe: "Ures recept",
+  };
+  return labels[value] ?? value;
+}
+
+function formatTaxStatus(value: RecipeCostSummary["tax_status"]) {
+  const labels: Record<string, string> = {
+    product_vat_derived: "ÁFA számolt",
+    missing_vat_rate: "ÁFA kulcs hiányzik",
+    incomplete_cost: "ÁFA nem teljes",
+    not_available: "ÁFA nincs",
   };
   return labels[value] ?? value;
 }
@@ -153,12 +164,22 @@ function getNextAction(row: RecipeCostSummary) {
   if (row.readiness_status === "empty_recipe") {
     return "Osszetevo sorok hozzaadasa a recepthez.";
   }
+  if (row.tax_status === "missing_vat_rate") {
+    return "ÁFA kulcs pótlása az érintett összetevőknél.";
+  }
   return "Nincs surgos recept oldali teendo.";
+}
+
+function formatNextVersion(row: RecipeCostSummary) {
+  return row.version_no === null ? "v1" : `v${row.version_no + 1}`;
 }
 
 function matchesFilter(row: RecipeCostSummary, filter: RecipeFilter) {
   if (filter === "all") {
     return true;
+  }
+  if (filter === "missing_vat") {
+    return row.tax_status === "missing_vat_rate";
   }
   if (filter === "missing_stock") {
     return row.readiness_status === "missing_stock";
@@ -285,6 +306,7 @@ function RecipesHeaderControls({
           <option value="all">Osszes</option>
           <option value="missing_recipe">Recept hianyzik</option>
           <option value="missing_cost">Ar hianyzik</option>
+          <option value="missing_vat">AFA kulcs hianyzik</option>
           <option value="missing_stock">Keszletjelzes</option>
           <option value="empty_recipe">Ures recept</option>
           <option value="ready">Rendben</option>
@@ -308,6 +330,7 @@ export function RecipesPage() {
   const {
     businessUnits,
     recipes,
+    overview,
     selectedBusinessUnitId,
     setSelectedBusinessUnitId,
     activeOnly,
@@ -324,6 +347,8 @@ export function RecipesPage() {
   const [formError, setFormError] = useState("");
   const [quickCostInputs, setQuickCostInputs] = useState<Record<string, string>>({});
   const [quickStockInputs, setQuickStockInputs] = useState<Record<string, string>>({});
+  const [quickVatInputs, setQuickVatInputs] = useState<Record<string, string>>({});
+  const [selectedTemplateProductId, setSelectedTemplateProductId] = useState("");
   const [quickMessage, setQuickMessage] = useState("");
   const [quickError, setQuickError] = useState("");
 
@@ -334,6 +359,11 @@ export function RecipesPage() {
   const units = unitsQuery.data ?? [];
   const fallbackUnitId =
     units.find((unit) => unit.code === "pcs")?.id ?? units[0]?.id ?? "";
+  const vatRatesQuery = useQuery({
+    queryKey: ["vat-rates"],
+    queryFn: listVatRates,
+  });
+  const vatRates = vatRatesQuery.data ?? [];
 
   const ingredientsQuery = useQuery({
     queryKey: ["catalog-ingredients", selectedBusinessUnitId],
@@ -390,6 +420,11 @@ export function RecipesPage() {
         delete next[updatedIngredient.id];
         return next;
       });
+      setQuickVatInputs((current) => {
+        const next = { ...current };
+        delete next[updatedIngredient.id];
+        return next;
+      });
       await queryClient.invalidateQueries({ queryKey: ["production-recipes"] });
       await queryClient.invalidateQueries({ queryKey: ["catalog-ingredients"] });
       await queryClient.invalidateQueries({ queryKey: ["catalog-products"] });
@@ -417,22 +452,29 @@ export function RecipesPage() {
     visibleRecipes.find((row) => row.product_id === selectedProductId) ??
     visibleRecipes[0] ??
     null;
+  const templateRecipes = recipes.filter(
+    (row) => row.recipe_id !== null && row.ingredients.length > 0,
+  );
   const isEditingSelected =
     selectedRecipe !== null && editingProductId === selectedRecipe.product_id && form !== null;
 
-  const readyCount = recipes.filter((row) => row.readiness_status === "ready").length;
-  const missingRecipeCount = recipes.filter(
-    (row) => row.readiness_status === "missing_recipe",
-  ).length;
-  const missingCostCount = recipes.filter(
-    (row) => row.readiness_status === "missing_cost",
-  ).length;
-  const stockSignalCount = recipes.filter(
-    (row) => row.readiness_status === "missing_stock",
-  ).length;
-  const emptyRecipeCount = recipes.filter(
-    (row) => row.readiness_status === "empty_recipe",
-  ).length;
+  const readyCount =
+    overview?.ready_count ?? recipes.filter((row) => row.readiness_status === "ready").length;
+  const missingRecipeCount =
+    overview?.readiness_counts.missing_recipe ??
+    recipes.filter((row) => row.readiness_status === "missing_recipe").length;
+  const missingCostCount =
+    overview?.readiness_counts.missing_cost ??
+    recipes.filter((row) => row.readiness_status === "missing_cost").length;
+  const stockSignalCount =
+    overview?.readiness_counts.missing_stock ??
+    recipes.filter((row) => row.readiness_status === "missing_stock").length;
+  const missingVatCount =
+    overview?.tax_counts.missing_vat_rate ??
+    recipes.filter((row) => row.tax_status === "missing_vat_rate").length;
+  const emptyRecipeCount =
+    overview?.readiness_counts.empty_recipe ??
+    recipes.filter((row) => row.readiness_status === "empty_recipe").length;
 
   useEffect(() => {
     setControls(
@@ -473,6 +515,34 @@ export function RecipesPage() {
     setForm(buildRecipeForm(row, fallbackUnitId));
     setFormMessage("");
     setFormError("");
+  }
+
+  function startFromTemplate(target: RecipeCostSummary, source: RecipeCostSummary) {
+    setEditingProductId(target.product_id);
+    setSelectedProductId(target.product_id);
+    setForm({
+      name: `${target.product_name} recept`,
+      yield_quantity: source.yield_quantity ?? "1",
+      yield_uom_id: source.yield_uom_id ?? fallbackUnitId,
+      ingredients: source.ingredients.map((ingredient) => ({
+        inventory_item_id: ingredient.inventory_item_id,
+        quantity: ingredient.quantity,
+        uom_id: ingredient.uom_id,
+      })),
+    });
+    setFormMessage(`Sablon betoltve: ${source.product_name}. Mentes elott ellenorizd.`);
+    setFormError("");
+  }
+
+  function loadSelectedTemplate(target: RecipeCostSummary) {
+    const source =
+      templateRecipes.find((row) => row.product_id === selectedTemplateProductId) ??
+      templateRecipes.find((row) => row.product_id !== target.product_id);
+    if (!source) {
+      setFormError("Nincs betoltheto recept sablon.");
+      return;
+    }
+    startFromTemplate(target, source);
   }
 
   function focusFirstIssue(nextFilter: RecipeFilter) {
@@ -587,6 +657,22 @@ export function RecipesPage() {
     });
   }
 
+  function quickUpdateIngredientVat(inventoryItemId: string) {
+    const ingredient = ingredientsById.get(inventoryItemId);
+    const value = quickVatInputs[inventoryItemId]?.trim();
+    if (!ingredient || !value) {
+      setQuickError("Valassz AFA kulcsot.");
+      return;
+    }
+
+    quickUpdateIngredientMutation.mutate({
+      inventoryItemId,
+      payload: buildIngredientPayload(ingredient, {
+        default_vat_rate_id: value,
+      }),
+    });
+  }
+
   return (
     <section className="page-section production-recipes-page">
       <div className="finance-summary-grid">
@@ -606,6 +692,10 @@ export function RecipesPage() {
           <span>Ar / keszlet jelzes</span>
           <strong>{missingCostCount + stockSignalCount}</strong>
         </article>
+        <article className="finance-summary-card">
+          <span>AFA kulcs jelzes</span>
+          <strong>{missingVatCount}</strong>
+        </article>
       </div>
 
       <div className="production-work-queue-actions">
@@ -624,6 +714,14 @@ export function RecipesPage() {
           disabled={missingCostCount === 0}
         >
           Ar hianyok ({missingCostCount})
+        </button>
+        <button
+          type="button"
+          className="text-button"
+          onClick={() => focusFirstIssue("missing_vat")}
+          disabled={missingVatCount === 0}
+        >
+          AFA hianyok ({missingVatCount})
         </button>
         <button
           type="button"
@@ -694,7 +792,9 @@ export function RecipesPage() {
                       </span>
                       <div className="metric-stack">
                         <span>Egys.: {formatMoney(row.unit_cost)}</span>
+                        <span>Bruttó egys.: {formatMoney(row.unit_gross_cost)}</span>
                         <span>Ismert: {formatMoney(row.known_total_cost)}</span>
+                        <span>{formatTaxStatus(row.tax_status)}</span>
                       </div>
                     </td>
                     <td>{row.ingredients.length}</td>
@@ -724,6 +824,12 @@ export function RecipesPage() {
                   <strong>{selectedRecipe.recipe_name ?? "Hianyzik"}</strong>
                 </span>
                 <span>
+                  <small>Aktiv verzio</small>
+                  <strong>
+                    {selectedRecipe.version_no ? `v${selectedRecipe.version_no}` : "Nincs"}
+                  </strong>
+                </span>
+                <span>
                   <small>Kihozatal</small>
                   <strong>
                     {formatQuantity(
@@ -737,8 +843,24 @@ export function RecipesPage() {
                   <strong>{formatMoney(selectedRecipe.total_cost)}</strong>
                 </span>
                 <span>
+                  <small>ÁFA</small>
+                  <strong>{formatMoney(selectedRecipe.total_vat_amount)}</strong>
+                </span>
+                <span>
+                  <small>Bruttó költség</small>
+                  <strong>{formatMoney(selectedRecipe.total_gross_cost)}</strong>
+                </span>
+                <span>
                   <small>Egységkoltseg</small>
                   <strong>{formatMoney(selectedRecipe.unit_cost)}</strong>
+                </span>
+                <span>
+                  <small>Bruttó egységköltség</small>
+                  <strong>{formatMoney(selectedRecipe.unit_gross_cost)}</strong>
+                </span>
+                <span>
+                  <small>ÁFA státusz</small>
+                  <strong>{formatTaxStatus(selectedRecipe.tax_status)}</strong>
                 </span>
               </div>
 
@@ -753,11 +875,60 @@ export function RecipesPage() {
                 </button>
               </div>
 
+              {(selectedRecipe.readiness_status === "missing_recipe" ||
+                selectedRecipe.readiness_status === "empty_recipe") &&
+              templateRecipes.some((row) => row.product_id !== selectedRecipe.product_id) ? (
+                <div className="production-template-starter">
+                  <label className="field">
+                    <span>Sablon recept</span>
+                    <select
+                      className="field-input"
+                      value={selectedTemplateProductId}
+                      onChange={(event) => setSelectedTemplateProductId(event.target.value)}
+                    >
+                      <option value="">Valassz sablont</option>
+                      {templateRecipes
+                        .filter((row) => row.product_id !== selectedRecipe.product_id)
+                        .map((row) => (
+                          <option key={row.product_id} value={row.product_id}>
+                            {row.product_name} ({row.ingredients.length} osszetevo)
+                          </option>
+                        ))}
+                    </select>
+                  </label>
+                  <button
+                    type="button"
+                    className="text-button"
+                    onClick={() => loadSelectedTemplate(selectedRecipe)}
+                  >
+                    Sablon betoltese
+                  </button>
+                </div>
+              ) : null}
+
               {formMessage ? <div className="success-banner">{formMessage}</div> : null}
               {formError ? <div className="error-banner">{formError}</div> : null}
 
               {isEditingSelected && form ? (
                 <form className="production-recipe-form" onSubmit={submitRecipeForm}>
+                  <div className="production-version-policy">
+                    <span>
+                      <small>Aktiv verzio</small>
+                      <strong>
+                        {selectedRecipe.version_no
+                          ? `v${selectedRecipe.version_no}`
+                          : "Nincs"}
+                      </strong>
+                    </span>
+                    <span>
+                      <small>Mentes utan</small>
+                      <strong>{formatNextVersion(selectedRecipe)}</strong>
+                    </span>
+                    <p>
+                      A mentes uj aktiv receptverziot hoz letre. A korabbi aktiv verzio
+                      archivalt marad, a POS eladast es importot ez nem blokkolja.
+                    </p>
+                  </div>
                   <div className="production-recipe-form-grid">
                     <label className="field">
                       <span>Recept neve</span>
@@ -883,7 +1054,9 @@ export function RecipesPage() {
                       className="button"
                       disabled={saveRecipeMutation.isPending}
                     >
-                      {saveRecipeMutation.isPending ? "Mentes..." : "Recept mentese"}
+                      {saveRecipeMutation.isPending
+                        ? "Mentes..."
+                        : `Uj verzio mentese (${formatNextVersion(selectedRecipe)})`}
                     </button>
                   </div>
                 </form>
@@ -897,6 +1070,7 @@ export function RecipesPage() {
                       <th>Mennyiseg</th>
                       <th>Ar</th>
                       <th>Koltseg</th>
+                      <th>ÁFA / bruttó</th>
                       <th>Keszlet</th>
                     </tr>
                   </thead>
@@ -939,6 +1113,51 @@ export function RecipesPage() {
                           ) : null}
                         </td>
                         <td>{formatMoney(ingredient.estimated_cost)}</td>
+                        <td>
+                          <div className="metric-stack">
+                            <span>
+                              {ingredient.vat_rate_percent
+                                ? `${formatNumber(ingredient.vat_rate_percent)}%`
+                                : "ÁFA kulcs hiányzik"}
+                            </span>
+                            <span>ÁFA: {formatMoney(ingredient.estimated_vat_amount)}</span>
+                            <span>Bruttó: {formatMoney(ingredient.estimated_gross_cost)}</span>
+                          </div>
+                          {ingredient.vat_rate_percent === null ? (
+                            <div className="production-quick-fix">
+                              <select
+                                className="field-input"
+                                value={quickVatInputs[ingredient.inventory_item_id] ?? ""}
+                                onChange={(event) =>
+                                  setQuickVatInputs((current) => ({
+                                    ...current,
+                                    [ingredient.inventory_item_id]: event.target.value,
+                                  }))
+                                }
+                              >
+                                <option value="">AFA kulcs</option>
+                                {vatRates.map((vatRate) => (
+                                  <option key={vatRate.id} value={vatRate.id}>
+                                    {vatRate.name}
+                                  </option>
+                                ))}
+                              </select>
+                              <button
+                                type="button"
+                                className="text-button"
+                                onClick={() =>
+                                  quickUpdateIngredientVat(ingredient.inventory_item_id)
+                                }
+                                disabled={
+                                  quickUpdateIngredientMutation.isPending ||
+                                  vatRates.length === 0
+                                }
+                              >
+                                AFA mentese
+                              </button>
+                            </div>
+                          ) : null}
+                        </td>
                         <td>
                           <span className={getStockStatusClass(ingredient.stock_status)}>
                             {formatStockStatus(ingredient.stock_status)}
@@ -987,7 +1206,7 @@ export function RecipesPage() {
                     ))}
                     {selectedRecipe.ingredients.length === 0 ? (
                       <tr>
-                        <td colSpan={5}>Ehhez a termekhez meg nincs receptsor.</td>
+                        <td colSpan={6}>Ehhez a termekhez meg nincs receptsor.</td>
                       </tr>
                     ) : null}
                   </tbody>

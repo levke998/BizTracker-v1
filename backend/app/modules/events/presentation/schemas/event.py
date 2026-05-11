@@ -167,8 +167,17 @@ class EventPerformanceResponse(BaseModel):
     performer_share_percent: Decimal
     performer_share_amount: Decimal
     retained_ticket_revenue: Decimal
+    platform_fee_gross: Decimal
     own_revenue: Decimal
+    operating_cost_gross: Decimal
     event_profit_lite: Decimal
+    event_profit_margin_percent: Decimal | None
+    operating_cost_ratio_percent: Decimal | None
+    ticket_revenue_share_percent: Decimal | None
+    bar_revenue_share_percent: Decimal | None
+    profit_status: str
+    ticket_revenue_source: str
+    settlement_status: str
     categories: tuple[EventPerformanceCategoryResponse, ...]
     top_products: tuple[EventPerformanceProductResponse, ...]
     weather: EventWeatherSummaryResponse

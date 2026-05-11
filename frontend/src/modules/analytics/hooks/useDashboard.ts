@@ -10,6 +10,8 @@ import {
   listDashboardProductRows,
   listDashboardProducts,
 } from "../api/analyticsApi";
+import { listEventPerformances, listEvents } from "../../events/api/eventsApi";
+import type { EventPerformance, EventRecord } from "../../events/types/events";
 import type {
   DashboardBasketPairRow,
   DashboardBasketReceipt,
@@ -32,12 +34,20 @@ export type DashboardTopProductRow = DashboardBreakdownRow & {
   category_name?: string;
   previous_revenue?: string;
   revenue_change_percent?: string;
+  estimated_unit_cost_net?: string | null;
+  estimated_cogs_net?: string | null;
+  estimated_net_margin_amount?: string | null;
+  estimated_margin_percent?: string | null;
+  cost_source?: string;
+  margin_status?: string;
 };
 
 type DashboardState = {
   dashboard: DashboardData | null;
   basketPairs: DashboardBasketPairRow[];
   basketReceipts: DashboardBasketReceipt[];
+  flowEvents: EventRecord[];
+  flowEventPerformances: EventPerformance[];
   topProducts: DashboardTopProductRow[];
   productDetails: DashboardProductDetailRow[];
   productSourceRows: DashboardPosSourceRow[];
@@ -65,6 +75,7 @@ type DashboardState = {
   isDrilldownLoading: boolean;
   isTopProductsLoading: boolean;
   isBasketReceiptsLoading: boolean;
+  isFlowEventsLoading: boolean;
   errorMessage: string;
 };
 
@@ -258,11 +269,61 @@ export function useDashboard(): DashboardState {
       selectedBasketPair !== null &&
       (period !== "custom" || (Boolean(startDate) && Boolean(endDate))),
   });
+  const flowEventPerformancesQuery = useQuery({
+    queryKey: [
+      "analytics-dashboard-flow-event-performances",
+      scope,
+      dashboardQuery.data?.business_unit_id ?? "",
+      dashboardQuery.data?.period.start_date ?? "",
+      dashboardQuery.data?.period.end_date ?? "",
+    ],
+    queryFn: () =>
+      listEventPerformances({
+        business_unit_id: dashboardQuery.data?.business_unit_id ?? undefined,
+        starts_from: dashboardQuery.data
+          ? `${dashboardQuery.data.period.start_date}T00:00:00`
+          : undefined,
+        starts_to: dashboardQuery.data
+          ? `${dashboardQuery.data.period.end_date}T23:59:59`
+          : undefined,
+        limit: 100,
+      }),
+    enabled:
+      scope === "flow" &&
+      Boolean(dashboardQuery.data?.business_unit_id) &&
+      (period !== "custom" || (Boolean(startDate) && Boolean(endDate))),
+  });
+  const flowEventsQuery = useQuery({
+    queryKey: [
+      "analytics-dashboard-flow-events",
+      scope,
+      dashboardQuery.data?.business_unit_id ?? "",
+      dashboardQuery.data?.period.start_date ?? "",
+      dashboardQuery.data?.period.end_date ?? "",
+    ],
+    queryFn: () =>
+      listEvents({
+        business_unit_id: dashboardQuery.data?.business_unit_id ?? undefined,
+        starts_from: dashboardQuery.data
+          ? `${dashboardQuery.data.period.start_date}T00:00:00`
+          : undefined,
+        starts_to: dashboardQuery.data
+          ? `${dashboardQuery.data.period.end_date}T23:59:59`
+          : undefined,
+        limit: 100,
+      }),
+    enabled:
+      scope === "flow" &&
+      Boolean(dashboardQuery.data?.business_unit_id) &&
+      (period !== "custom" || (Boolean(startDate) && Boolean(endDate))),
+  });
 
   return {
     dashboard: dashboardQuery.data ?? null,
     basketPairs: basketPairsQuery.data ?? [],
     basketReceipts: basketReceiptsQuery.data ?? [],
+    flowEvents: flowEventsQuery.data ?? [],
+    flowEventPerformances: flowEventPerformancesQuery.data ?? [],
     topProducts: (topProductsQuery.data ?? []).map((row) => {
       const previousRow = (previousTopProductsQuery.data ?? []).find(
         (item) =>
@@ -283,9 +344,19 @@ export function useDashboard(): DashboardState {
         label: row.product_name,
         category_name: row.category_name,
         revenue: row.revenue,
+        net_revenue: row.net_revenue,
+        vat_amount: row.vat_amount,
         quantity: row.quantity,
         transaction_count: row.transaction_count,
         source_layer: row.source_layer,
+        amount_basis: row.amount_basis,
+        tax_breakdown_source: row.tax_breakdown_source,
+        estimated_unit_cost_net: row.estimated_unit_cost_net,
+        estimated_cogs_net: row.estimated_cogs_net,
+        estimated_net_margin_amount: row.estimated_net_margin_amount,
+        estimated_margin_percent: row.estimated_margin_percent,
+        cost_source: row.cost_source,
+        margin_status: row.margin_status,
         previous_revenue: previousRevenue,
         revenue_change_percent: String(revenueChangePercent),
       };
@@ -322,8 +393,14 @@ export function useDashboard(): DashboardState {
     isTopProductsLoading:
       topProductsQuery.isLoading || previousTopProductsQuery.isLoading,
     isBasketReceiptsLoading: basketReceiptsQuery.isLoading,
+    isFlowEventsLoading:
+      flowEventPerformancesQuery.isLoading || flowEventsQuery.isLoading,
     errorMessage:
       (dashboardQuery.error instanceof Error && dashboardQuery.error.message) ||
+      (flowEventsQuery.error instanceof Error &&
+        flowEventsQuery.error.message) ||
+      (flowEventPerformancesQuery.error instanceof Error &&
+        flowEventPerformancesQuery.error.message) ||
       (productDetailsQuery.error instanceof Error &&
         productDetailsQuery.error.message) ||
       (productSourceRowsQuery.error instanceof Error &&
