@@ -36,6 +36,7 @@ import type {
   DashboardWeatherCategoryInsightRow,
   DashboardWeatherConditionInsightRow,
 } from "../types/analytics";
+import type { PosMappingReadiness } from "../../posIngestion/types/posIngestion";
 
 type TrendMetric = "revenue" | "cost" | "profit";
 type MixMetric = "revenue" | "quantity";
@@ -1156,6 +1157,67 @@ function VatReadinessCard({ readiness }: { readiness: DashboardVatReadiness }) {
         <span>{readiness.covered_row_count} lefedett sor</span>
         <span>{readiness.missing_row_count} hiányos sor</span>
         <span>{readiness.total_row_count} összes POS sor</span>
+      </div>
+    </Card>
+  );
+}
+
+function MappingReadinessCard({
+  readiness,
+}: {
+  readiness: PosMappingReadiness;
+}) {
+  const coverage = Math.min(
+    100,
+    Math.max(0, toNumber(readiness.gross_revenue_coverage_percent)),
+  );
+  const statusTone =
+    readiness.status === "complete"
+      ? "success"
+      : readiness.status === "partial"
+        ? "warning"
+        : readiness.status === "missing"
+          ? "danger"
+          : "neutral";
+  const statusLabel =
+    readiness.status === "complete"
+      ? "Teljes"
+      : readiness.status === "partial"
+        ? "Reszleges"
+        : readiness.status === "missing"
+          ? "Hianyzik"
+          : "Nincs adat";
+
+  return (
+    <Card
+      hoverable
+      className={`vat-readiness-card ${statusTone}`}
+      eyebrow="Mapping-lefedettseg"
+      title="POS termekazonossag keszultseg"
+      subtitle="Jovahagyott aliasokkal lefedett idoszaki forgalom"
+      count={statusLabel}
+    >
+      <div className="vat-readiness-summary">
+        <span>
+          <strong>{formatNumber(coverage)}%</strong>
+          <small>Jovahagyott brutto forgalom</small>
+        </span>
+        <span>
+          <strong>{formatMoney(readiness.mapped_gross_revenue)}</strong>
+          <small>Biztos mapping</small>
+        </span>
+        <span>
+          <strong>{formatMoney(readiness.automatic_gross_revenue)}</strong>
+          <small>Automatikus mapping</small>
+        </span>
+      </div>
+      <div className="vat-readiness-track" aria-hidden="true">
+        <span style={{ width: `${coverage}%` }} />
+      </div>
+      <div className="vat-readiness-meta">
+        <span>{readiness.mapped_row_count} jovahagyott sor</span>
+        <span>{readiness.automatic_row_count} ellenorzendo sor</span>
+        <span>{readiness.missing_row_count} mapping nelkuli sor</span>
       </div>
     </Card>
   );
@@ -4822,6 +4884,7 @@ export function DashboardPage() {
   const [categoryMixMetric, setCategoryMixMetric] = useState<MixMetric>("revenue");
   const {
     dashboard,
+    mappingReadiness,
     basketPairs,
     basketReceipts,
     flowEvents,
@@ -4991,6 +5054,9 @@ export function DashboardPage() {
                 </>
               ) : null}
               <VatReadinessCard readiness={dashboard.vat_readiness} />
+              {mappingReadiness ? (
+                <MappingReadinessCard readiness={mappingReadiness} />
+              ) : null}
 
               <CategoryMixCard
                 categories={dashboard.category_breakdown}

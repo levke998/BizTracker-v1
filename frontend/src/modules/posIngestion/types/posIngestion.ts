@@ -24,6 +24,39 @@ export type PosProductAliasApprovalPayload = {
   notes?: string | null;
 };
 
+export type PosProductAliasBulkApprovalItem = PosProductAliasApprovalPayload & {
+  alias_id: string;
+};
+
+export type PosProductAliasBulkApprovalPayload = {
+  mappings: PosProductAliasBulkApprovalItem[];
+};
+
+export type PosProductAliasBulkApprovalResult = {
+  updated_count: number;
+  aliases: PosProductAlias[];
+};
+
+export type PosMappingReadiness = {
+  status: "complete" | "partial" | "missing" | "no_data" | string;
+  alias_coverage_percent: string;
+  row_coverage_percent: string;
+  gross_revenue_coverage_percent: string;
+  total_alias_count: number;
+  mapped_alias_count: number;
+  automatic_alias_count: number;
+  missing_alias_count: number;
+  total_row_count: number;
+  mapped_row_count: number;
+  automatic_row_count: number;
+  missing_row_count: number;
+  total_gross_revenue: string;
+  mapped_gross_revenue: string;
+  automatic_gross_revenue: string;
+  missing_gross_revenue: string;
+  source_layer: string;
+};
+
 export type PosMissingRecipeProduct = {
   product_id: string;
   business_unit_id: string;

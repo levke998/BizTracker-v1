@@ -188,16 +188,26 @@ Scope pontositas:
 
 Ez a lista csak a nyitott, soron kovetkezo fejleszteseket tartalmazza. A mar lezart elemek az alatta levo merfoldko osszefoglaloba kerultek, hogy a sorvezeto tiszta maradjon.
 
-1. PDF beszerzesi szamla kinyeres kovetkezo szelet: valodi PDF text/OCR adapter valasztas es beszallitoi szamla mintak validalasa, ha a konkret szamlak megerkeznek.
-2. Recept/production workflow kovetkezo szelet: recept hiany/missing cost/missing vat tomeges muveletek es import/segedlet, ha a konkret receptlista megerkezik.
-3. POS mapping/recept hiany munkalistak UX finomitasa: tomeges alias review, katalogusbol visszajelzes, mapping readiness allapotok.
-4. Flow event elszamolasi melyites kovetkezo szelet: event koltsegsorok vagy ticket import adapter, performer settlement szabalyok es event profit osszehasonlitas.
-5. Gourmand specifikus dashboard melyites: termek/recept/keszlet/weather osszefuggesek, elokeszitesi es keszlethiany dontestamogatas.
-6. Inventory controlling ok- es item-szintu dontesi javaslatok melyitese a mar mentett kuszobok es periodus-osszehasonlitas alapjan.
-7. Netto/brutto/AFA reporting kovetkezo melyitese: termek margin utan kategoriak/uzletagak osszesitett netto margin es AFA visszaigenylesi nezet.
-8. Statisztikai alapok v1: adatminosegi kapuk, median/percentilisek, rolling trendek es elso anomalia modul valos dashboard kontextusban.
-9. Predikcios alapok: pesszimista/realista/optimista savok, forecast readiness, majd regression/Bayes/scenario planning elokeszitese.
-10. Technikai stabilitas: regresszios tesztcsomagok bovites, demo/test adat takaritas erosites, dokumentacio frissitese minden lezart szelet utan.
+1. Technikai stabilitasi kapu: dedikalt `biztracker_test` adatbazis, egyparancsos unit/integration/frontend validacio es PostgreSQL 18 reprodukalhato lokalis setup. Kesz elso szelet.
+2. POS mapping/recept hiany munkalistak UX finomitasa: a tomeges alias review
+   es az elso POS ingestion repository boundary kesz; az alias-, sor- es
+   bruttoforgalom-sulyozott mapping readiness/coverage is kesz az Import
+   kozpontban es a Dashboard idoszaki adatminosegi kartyajan. A katalogus es a
+   mapping munkalista kozotti oda-vissza navigacio, valamint az URL-ben
+   megoszthato vallalkozas/statusz/kereses/termek fokusz is kesz. A termek
+   nelkuli POS aliasbol indithato gyors belso termek-letrehozas es azonnali
+   mapping-jovahagyas is kesz. A recept hiany munkalista POS elofordulas alapjan
+   priorizalt, termekfokuszos deep linkkel kozvetlenul nyitja a receptszerkesztot,
+   es visszavezet az Import kozpontba. Kovetkezo szelet a recepthiany-lista
+   tenyleges bruttoforgalom-sulyozasa es a receptsablon-javaslatok finomitasa.
+3. PDF beszerzesi szamla kinyeres kovetkezo szelet: valodi PDF text/OCR adapter valasztas es beszallitoi szamla mintak validalasa, ha a konkret szamlak megerkeznek.
+4. Recept/production workflow kovetkezo szelet: recept hiany/missing cost/missing vat tomeges muveletek es import/segedlet, ha a konkret receptlista megerkezik.
+5. Flow event elszamolasi melyites kovetkezo szelet: event koltsegsorok vagy ticket import adapter, performer settlement szabalyok es event profit osszehasonlitas.
+6. Gourmand specifikus dashboard melyites: termek/recept/keszlet/weather osszefuggesek, elokeszitesi es keszlethiany dontestamogatas.
+7. Inventory controlling ok- es item-szintu dontesi javaslatok melyitese a mar mentett kuszobok es periodus-osszehasonlitas alapjan.
+8. Netto/brutto/AFA reporting kovetkezo melyitese: termek margin utan kategoriak/uzletagak osszesitett netto margin es AFA visszaigenylesi nezet.
+9. Statisztikai alapok v1: adatminosegi kapuk, median/percentilisek, rolling trendek es elso anomalia modul valos dashboard kontextusban.
+10. Predikcios alapok: pesszimista/realista/optimista savok, forecast readiness, majd regression/Bayes/scenario planning elokeszitese.
 
 ## Legutobb lezart merfoldkovek
 
@@ -244,6 +254,14 @@ A reszletes kesz allapot az `Allapot roviden` blokkban van. A fejlesztesi sorren
 - Flow POS-ticket korrekcio: az event performance es a Flow dashboard nem kovetkeztet jegyet POS termek/kategoria nevbol; minden POS sor bar/fogyasztasi bevetel, a jegy kizarolag ticket actual/import retegbol johet.
 - Flow POS fogyasztasi kontrollkartya: a Flow uzleti dashboard mar kulon mutatja a POS-only bar/fogyasztasi koncentraciot, top 3 kategoriaranyt, csucsterhelest, kosarprofilt, kategoriamozgast es AFA readiness jelzest event rangsor nelkul.
 - Event ticket actual lefedettseg szelet: az Event elemzo mar kulon jelzi a ticket actual coverage aranyt, a hianyzo ticket actual eventeket munkalistaban nyitja, es a szovegek ticket actual + POS bar alapon kezelik az event performance-t.
+- POS alias tomeges review: az Import kozpontban az ellenorzendo aliasok
+  kijelolhetok es egy tranzakcioban jovahagyhatok; hibas termekkapcsolatnal
+  nincs reszleges mentes. Az application service mar repository porton
+  keresztul dolgozik, nem kozvetlen ORM sessionnel.
+- POS mapping readiness: ugyanaz a read model alias-, sor- es bruttoforgalom
+  alapon jelzi a jovahagyott mapping aranyat. Az Import kozpont historikus
+  munkalista-osszefoglalot, a Dashboard a kivalasztott idoszakra szurt
+  adatminosegi kartyat mutat.
 
 ## Feature kesz definicio
 

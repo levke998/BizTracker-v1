@@ -185,6 +185,45 @@ Kotelezo elvek:
 - konfiguralt vagy adatbazisban tarolt szabaly, ha uzletileg valtozhat
 - hianyos adat nem okozhat nem kezelt kivetelt
 
+## Technikai refaktor sorrend
+
+A refaktor feature-szeletenkent, mukodo viselkedes megtartasaval tortenik. Nem
+inditunk teljes alkalmazast erinto ujrairast.
+
+1. Analytics read model felbontasa:
+   - a `sqlalchemy_analytics_repository.py` felelossegeit KPI, revenue,
+     expense, product, basket, weather es forecast query komponensekre bontjuk;
+   - a kozos datum-, scope- es amount-basis szabalyok explicit service/value
+     object hatart kapnak;
+   - a `DashboardPage.tsx` scope es uzleti panel szerint komponensekre bomlik.
+2. Catalog es production hatar tisztitasa:
+   - a catalog routerbol product/ingredient application use case-ek keszulnek;
+   - a presentation reteg nem ir es nem kerdez kozvetlen ORM modelleket;
+   - a receptverzio es readiness tovabbra is a production modul felelossege.
+3. Workflow oldalak komponensbontasa:
+   - `InvoicesPage`, `EventsPage`, `ImportCenterPage` es `RecipesPage`
+     container, munkalista, editor/dialog es summary komponensekre bomlik;
+   - uzleti szamitas nem kerul frontend helperbe.
+4. Application-infrastructure fuggosegek csokkentese:
+   - POS ingestion es procurement application service-ek repository/port
+     interfeszen keresztul erik el a perzisztenciat;
+   - kozvetlen ORM hasznalat az infrastructure adapterekbe kerul;
+   - minden atemeles elott es utan integration regresszios teszt fut.
+
+Elso kodszintu refaktor cel a POS mapping tomeges review szeletevel egyutt a
+POS ingestion repository boundary kialakitasa. Igy az architektura tisztitasa
+kozvetlenul egy felhasznaloi workflow-t szolgalo fejlesztes resze lesz.
+
+Az elso POS ingestion boundary szelet kesz:
+
+- `PosProductAlias` domain modell tartalmazza a manualis jovahagyas allapotat;
+- `PosProductAliasRepository` port valasztja el az application service-t az
+  SQLAlchemy modellektol;
+- `SqlAlchemyPosProductAliasRepository` az infrastructure adapter;
+- az egyedi es tomeges jovahagyas ugyanazt a tranzakcios application use case-t
+  hasznalja;
+- a presentation reteg csak request/response es HTTP hibaforditast vegez.
+
 ## Migration es DB
 
 Alembic revisionok a `backend/migrations/versions` alatt vannak. A DB allapotot kodolasi munka elott ellenorizni kell, ha schema valtozas erintett.

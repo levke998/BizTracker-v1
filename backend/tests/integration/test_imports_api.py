@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
 from pathlib import Path
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
@@ -316,6 +317,230 @@ def test_pos_product_alias_can_be_approved_and_stays_mapped_on_reimport(
     assert mapped_alias.status == "mapped"
     assert mapped_alias.mapping_confidence == "manual"
     assert mapped_alias.occurrence_count == 2
+
+
+def test_pos_product_aliases_can_be_approved_in_one_transaction(
+    client: TestClient,
+    db_session: Session,
+    imports_fixtures_dir: Path,
+    test_business_unit: BusinessUnitModel,
+    upload_import_fixture,
+) -> None:
+    upload_response = upload_import_fixture(
+        business_unit_id=test_business_unit.id,
+        import_type="pos_sales",
+        file_path=imports_fixtures_dir / "sample_pos_sales_clean.csv",
+    )
+    batch_id = upload_response.json()["id"]
+    assert client.post(f"{API_PREFIX}/batches/{batch_id}/parse").status_code == 200
+
+    db_session.expire_all()
+    aliases = db_session.scalars(
+        select(PosProductAliasModel)
+        .where(PosProductAliasModel.business_unit_id == test_business_unit.id)
+        .order_by(PosProductAliasModel.source_product_name.asc())
+    ).all()
+    assert len(aliases) >= 2
+
+    products = [
+        ProductModel(
+            business_unit_id=test_business_unit.id,
+            category_id=None,
+            sales_uom_id=None,
+            sku=f"BULK-{index}",
+            name=f"Bulk Approved Product {index}",
+            product_type="finished_good",
+            sale_price_gross=None,
+            default_unit_cost=None,
+            currency="HUF",
+            is_active=True,
+        )
+        for index in range(2)
+    ]
+    db_session.add_all(products)
+    db_session.commit()
+    for product in products:
+        db_session.refresh(product)
+
+    response = client.patch(
+        "/api/v1/pos-ingestion/product-aliases/mappings",
+        json={
+            "mappings": [
+                {
+                    "alias_id": str(alias.id),
+                    "product_id": str(product.id),
+                    "notes": "Bulk POS review",
+                }
+                for alias, product in zip(aliases[:2], products, strict=True)
+            ]
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["updated_count"] == 2
+    assert [item["status"] for item in payload["aliases"]] == ["mapped", "mapped"]
+    assert [item["mapping_confidence"] for item in payload["aliases"]] == [
+        "manual",
+        "manual",
+    ]
+
+    db_session.expire_all()
+    refreshed_aliases = [
+        db_session.get(PosProductAliasModel, alias.id)
+        for alias in aliases[:2]
+    ]
+    assert [alias.product_id for alias in refreshed_aliases if alias is not None] == [
+        product.id for product in products
+    ]
+
+
+def test_pos_mapping_readiness_reports_traffic_weighted_coverage(
+    client: TestClient,
+    db_session: Session,
+    imports_fixtures_dir: Path,
+    test_business_unit: BusinessUnitModel,
+    upload_import_fixture,
+) -> None:
+    upload_response = upload_import_fixture(
+        business_unit_id=test_business_unit.id,
+        import_type="pos_sales",
+        file_path=imports_fixtures_dir / "sample_pos_sales_clean.csv",
+    )
+    batch_id = upload_response.json()["id"]
+    assert client.post(f"{API_PREFIX}/batches/{batch_id}/parse").status_code == 200
+
+    initial_response = client.get(
+        "/api/v1/pos-ingestion/mapping-readiness",
+        params={"business_unit_id": str(test_business_unit.id)},
+    )
+    assert initial_response.status_code == 200
+    initial = initial_response.json()
+    assert initial["status"] == "missing"
+    assert initial["total_alias_count"] == 4
+    assert initial["mapped_alias_count"] == 0
+    assert initial["automatic_alias_count"] == 4
+    assert initial["total_row_count"] == 4
+    assert initial["mapped_row_count"] == 0
+    assert Decimal(initial["total_gross_revenue"]) == Decimal("7250")
+    assert Decimal(initial["gross_revenue_coverage_percent"]) == Decimal("0")
+
+    db_session.expire_all()
+    aliases = db_session.scalars(
+        select(PosProductAliasModel)
+        .where(PosProductAliasModel.business_unit_id == test_business_unit.id)
+        .order_by(PosProductAliasModel.source_product_name.asc())
+    ).all()
+    bulk_response = client.patch(
+        "/api/v1/pos-ingestion/product-aliases/mappings",
+        json={
+            "mappings": [
+                {
+                    "alias_id": str(alias.id),
+                    "product_id": str(alias.product_id),
+                }
+                for alias in aliases[:2]
+            ]
+        },
+    )
+    assert bulk_response.status_code == 200
+
+    partial_response = client.get(
+        "/api/v1/pos-ingestion/mapping-readiness",
+        params={
+            "business_unit_id": str(test_business_unit.id),
+            "start_date": "2026-04-22",
+            "end_date": "2026-04-22",
+        },
+    )
+    assert partial_response.status_code == 200
+    partial = partial_response.json()
+    assert partial["status"] == "partial"
+    assert partial["mapped_alias_count"] == 2
+    assert partial["automatic_alias_count"] == 2
+    assert partial["mapped_row_count"] == 2
+    assert Decimal(partial["mapped_gross_revenue"]) == Decimal("3300")
+    assert Decimal(partial["alias_coverage_percent"]) == Decimal("50")
+    assert Decimal(partial["row_coverage_percent"]) == Decimal("50")
+    assert Decimal(partial["gross_revenue_coverage_percent"]) == Decimal("45.52")
+
+    no_data_response = client.get(
+        "/api/v1/pos-ingestion/mapping-readiness",
+        params={
+            "business_unit_id": str(test_business_unit.id),
+            "start_date": "2025-01-01",
+            "end_date": "2025-01-31",
+        },
+    )
+    assert no_data_response.status_code == 200
+    assert no_data_response.json()["status"] == "no_data"
+
+
+def test_pos_product_alias_bulk_approval_is_atomic_on_invalid_product(
+    client: TestClient,
+    db_session: Session,
+    imports_fixtures_dir: Path,
+    test_business_unit: BusinessUnitModel,
+    upload_import_fixture,
+) -> None:
+    upload_response = upload_import_fixture(
+        business_unit_id=test_business_unit.id,
+        import_type="pos_sales",
+        file_path=imports_fixtures_dir / "sample_pos_sales_clean.csv",
+    )
+    batch_id = upload_response.json()["id"]
+    assert client.post(f"{API_PREFIX}/batches/{batch_id}/parse").status_code == 200
+
+    db_session.expire_all()
+    aliases = db_session.scalars(
+        select(PosProductAliasModel)
+        .where(PosProductAliasModel.business_unit_id == test_business_unit.id)
+        .order_by(PosProductAliasModel.source_product_name.asc())
+    ).all()
+    assert len(aliases) >= 2
+
+    valid_product = ProductModel(
+        business_unit_id=test_business_unit.id,
+        category_id=None,
+        sales_uom_id=None,
+        sku="BULK-ATOMIC",
+        name="Bulk Atomic Product",
+        product_type="finished_good",
+        sale_price_gross=None,
+        default_unit_cost=None,
+        currency="HUF",
+        is_active=True,
+    )
+    db_session.add(valid_product)
+    db_session.commit()
+    db_session.refresh(valid_product)
+
+    response = client.patch(
+        "/api/v1/pos-ingestion/product-aliases/mappings",
+        json={
+            "mappings": [
+                {
+                    "alias_id": str(aliases[0].id),
+                    "product_id": str(valid_product.id),
+                },
+                {
+                    "alias_id": str(aliases[1].id),
+                    "product_id": str(uuid4()),
+                },
+            ]
+        },
+    )
+
+    assert response.status_code == 422
+
+    db_session.expire_all()
+    unchanged_aliases = [
+        db_session.get(PosProductAliasModel, alias.id)
+        for alias in aliases[:2]
+    ]
+    assert all(alias is not None for alias in unchanged_aliases)
+    assert all(alias.status == "auto_created" for alias in unchanged_aliases if alias)
+    assert all(alias.mapping_confidence != "manual" for alias in unchanged_aliases if alias)
 
 
 def test_pos_catalog_sale_price_uses_latest_sale_date_not_import_order(

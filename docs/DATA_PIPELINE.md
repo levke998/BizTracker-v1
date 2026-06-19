@@ -120,7 +120,18 @@ Aktualis alap:
 - `occurrence_count`, `first_seen_at`, `last_seen_at` es `last_import_batch_id` segiti a review munkalistat
 - `GET /api/v1/pos-ingestion/product-aliases` listazza a mapping/quarantine sorokat
 - `PATCH /api/v1/pos-ingestion/product-aliases/{alias_id}/mapping` manualisan termekhez koti az aliast es `mapped` statuszba allitja
+- `PATCH /api/v1/pos-ingestion/product-aliases/mappings` tobb aliast egy
+  tranzakcioban hagy jova; hianyzo alias vagy masik uzlethez tartozo termek
+  eseten egyetlen sor sem modosul
 - az Import kozpontban van elso POS mapping munkalista termekvalasztassal
+- az Import kozpontban az ellenorzendo aliasok kijelolhetok, egyben
+  jovahagyhatok, es a tomeges mentes csak akkor indithato, ha minden kijelolt
+  sorhoz van belso termek
+- `GET /api/v1/pos-ingestion/mapping-readiness` alias-, POS-sor- es brutto
+  forgalom alapon ad `complete`, `partial`, `missing` vagy `no_data` allapotot;
+  uzletre es datumintervallumra szurheto
+- a coverage csak a `mapped` aliasokat kezeli biztos mappingkent; az
+  `auto_created` forgalom kulon ellenorzendo reteg marad
 - kovetkezo importnal a `mapped` alias iranyitja a catalog sync es estimated consumption termekfeloldast
 
 ## Flow Ticket Actual

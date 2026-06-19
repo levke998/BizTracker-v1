@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { useTopbarControls } from "../../../shared/components/layout/TopbarControlsContext";
@@ -834,10 +834,13 @@ function CatalogRecipesPanel({
 export function CatalogProductsPage() {
   const { setControls } = useTopbarControls();
   const queryClient = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedBusinessUnitId = searchParams.get("business_unit_id") ?? "";
+  const requestedProductId = searchParams.get("product_id") ?? "";
   const [selectedBusinessUnitId, setSelectedBusinessUnitId] = useState("");
   const [catalogMode, setCatalogMode] = useState<CatalogMode>("products");
   const [selectedCategory, setSelectedCategory] = useState("all");
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(() => searchParams.get("search") ?? "");
   const [sort, setSort] = useState<ProductSort>("top");
   const [riskFilter, setRiskFilter] = useState<ProductRiskFilter>("all");
   const [expandedProductId, setExpandedProductId] = useState<string | null>(null);
@@ -853,10 +856,41 @@ export function CatalogProductsPage() {
   const businessUnits = businessUnitsQuery.data ?? [];
 
   useEffect(() => {
-    if (!selectedBusinessUnitId && businessUnits.length > 0) {
+    if (businessUnits.length === 0) {
+      return;
+    }
+    const requestedUnit = businessUnits.find(
+      (unit) => unit.id === requestedBusinessUnitId,
+    );
+    if (requestedUnit && requestedUnit.id !== selectedBusinessUnitId) {
+      setSelectedBusinessUnitId(requestedUnit.id);
+      return;
+    }
+    if (!selectedBusinessUnitId) {
       setSelectedBusinessUnitId(businessUnits[0].id);
     }
-  }, [businessUnits, selectedBusinessUnitId]);
+  }, [businessUnits, requestedBusinessUnitId, selectedBusinessUnitId]);
+
+  useEffect(() => {
+    if (
+      selectedBusinessUnitId &&
+      !businessUnits.some((unit) => unit.id === requestedBusinessUnitId)
+    ) {
+      setSearchParams(
+        (current) => {
+          const next = new URLSearchParams(current);
+          next.set("business_unit_id", selectedBusinessUnitId);
+          return next;
+        },
+        { replace: true },
+      );
+    }
+  }, [
+    businessUnits,
+    requestedBusinessUnitId,
+    selectedBusinessUnitId,
+    setSearchParams,
+  ]);
 
   const productsQuery = useQuery({
     queryKey: ["catalog-products", selectedBusinessUnitId],
@@ -941,6 +975,57 @@ export function CatalogProductsPage() {
     }, 0);
   }, [form.recipe_ingredients, ingredients]);
 
+  useEffect(() => {
+    if (
+      requestedProductId &&
+      products.some((product) => product.id === requestedProductId)
+    ) {
+      setCatalogMode("products");
+      setExpandedProductId(requestedProductId);
+    }
+  }, [products, requestedProductId]);
+
+  function updateRouteParameter(name: string, value: string) {
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        if (value) {
+          next.set(name, value);
+        } else {
+          next.delete(name);
+        }
+        return next;
+      },
+      { replace: true },
+    );
+  }
+
+  function selectBusinessUnit(value: string) {
+    setSelectedBusinessUnitId(value);
+    setExpandedProductId(null);
+    setIsCreating(false);
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        next.set("business_unit_id", value);
+        next.delete("product_id");
+        return next;
+      },
+      { replace: true },
+    );
+  }
+
+  function updateSearch(value: string) {
+    setSearch(value);
+    updateRouteParameter("search", value);
+  }
+
+  function toggleExpandedProduct(productId: string) {
+    const nextProductId = expandedProductId === productId ? "" : productId;
+    setExpandedProductId(nextProductId || null);
+    updateRouteParameter("product_id", nextProductId);
+  }
+
   const saveMutation = useMutation({
     mutationFn: (payload: CatalogProductPayload & { id?: string }) => {
       if (payload.id) {
@@ -1016,13 +1101,9 @@ export function CatalogProductsPage() {
       <CatalogProductsHeaderControls
         businessUnits={businessUnits}
         selectedBusinessUnitId={selectedBusinessUnitId}
-        setSelectedBusinessUnitId={(value) => {
-          setSelectedBusinessUnitId(value);
-          setExpandedProductId(null);
-          setIsCreating(false);
-        }}
+        setSelectedBusinessUnitId={selectBusinessUnit}
         search={search}
-        setSearch={setSearch}
+        setSearch={updateSearch}
         sort={sort}
         setSort={setSort}
         riskFilter={riskFilter}
@@ -1367,7 +1448,7 @@ export function CatalogProductsPage() {
               title={product.name}
               subtitle={product.sku ?? formatProductType(product.product_type)}
               count={formatMoney(product.sale_price_gross)}
-              onClick={() => setExpandedProductId(expanded ? null : product.id)}
+              onClick={() => toggleExpandedProduct(product.id)}
             >
               <div className="catalog-card-status-row">
                 <span className={productHealth.className}>{productHealth.label}</span>
@@ -1410,6 +1491,17 @@ export function CatalogProductsPage() {
                       <strong>{decisionSummary.actionTitle}</strong>
                     </div>
                     <div className="catalog-editor-actions">
+                      <Link
+                        className="secondary-button"
+                        to={`${routes.imports}?${new URLSearchParams({
+                          business_unit_id: product.business_unit_id,
+                          mapping_status: "all",
+                          mapping_search: product.name,
+                          product_id: product.id,
+                        }).toString()}`}
+                      >
+                        POS mappingek
+                      </Link>
                       <Button type="button" variant="secondary" onClick={() => startEdit(product)}>Szerkesztés</Button>
                       <Button type="button" variant="secondary" onClick={() => archiveProduct(product)} disabled={deleteMutation.isPending}>Archiválás</Button>
                     </div>

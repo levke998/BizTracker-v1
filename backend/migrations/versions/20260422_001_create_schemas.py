@@ -17,6 +17,12 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # Alembic creates this table before running the first revision. Later
+    # BizTracker revision identifiers exceed Alembic's default VARCHAR(32).
+    op.execute(
+        "ALTER TABLE alembic_version "
+        "ALTER COLUMN version_num TYPE VARCHAR(64)"
+    )
     op.execute("CREATE SCHEMA IF NOT EXISTS auth")
     op.execute("CREATE SCHEMA IF NOT EXISTS core")
     op.execute("CREATE SCHEMA IF NOT EXISTS ingest")

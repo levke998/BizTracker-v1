@@ -66,6 +66,11 @@ POS product alias:
 - `auto_created` allapot review munkalista alap, nem vegleges uzleti igazolas
 - `mapped` felhasznaloi jovahagyast jelent, es kovetkezo importnal a POS source nev ezt a belso termeket hasznalja
 - recept es inventory fogyas csak biztos termekkapcsolatnal lehet eros uzleti jelzes
+- mapping readiness harom sulyozast mutat: erintett aliasok aranya, POS sorok
+  aranya es brutto actual forgalom aranya
+- `complete` csak akkor lehet, ha az idoszak minden POS sora felhasznalo altal
+  jovahagyott `mapped` aliashoz kapcsolodik; az automatikus nev/SKU kapcsolat
+  tovabbra is ellenorzendo adatminosegi reteg
 
 POS ar es historikus tenyadat:
 - a POS CSV sor brutto osszege revenue actual
@@ -391,5 +396,11 @@ Ezeket UI-ban is uzleti allapotkent kell megmutatni.
 
 Aktualis UI alap:
 - Import kozpont: POS alias mapping munkalista
+- Import kozpont: termek nelkuli POS aliasbol belso katalogustermek hozhato
+  letre, majd ugyanabban a workflow-ban a mapping jovahagyhato
 - Import kozpont: POS recept munkalista kasszabol ismert, de recept nelkuli termekekre
+- A POS recept munkalista elofordulasszam szerint priorizal, es termekfokuszos
+  URL-lel kozvetlenul a recept readiness szerkeszto munkafolyamatat nyitja
+- Katalogus es POS mapping munkalista: termekfokuszos oda-vissza navigacio,
+  URL-ben megoszthato vallalkozas/statusz/kereses/termek szurokkel
 - Dashboard: nem jelenit meg kulon POS recept hiany munkalistat

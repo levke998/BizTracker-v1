@@ -152,3 +152,28 @@ Az adatbazis dumpot nem kell minden gepvaltaskor mozgatni. Csak akkor keszits
 uj snapshotot, ha az aktualis lokalis adatok tenylegesen szuksegesek a masik
 gepen. Az adatbazis semmilyen korulmenyek kozott nem helyettesiti a migraciot:
 minden schema-valtozas Alembic migration legyen es keruljon Gitre.
+
+## 7. Teljes lokalis validacio
+
+A repository gyokerebol:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\validate.ps1
+```
+
+A script:
+
+- elinditja es healthcheckkel ellenorzi a helyi PostgreSQL kontenert;
+- lefuttatja a DB-fuggetlen unit teszteket;
+- minden futasnal ujraletrehozza a kulon `biztracker_test` adatbazist;
+- migraciot es referenciaadat-bootstrapot futtat a tesztadatbazison;
+- szekvencialisan lefuttatja az integration teszteket;
+- kulon, Git-altal ignoralt konyvtarba kesziti el a frontend ellenorzo buildet.
+
+A helyi `biztracker` adatbazisban levo Gourmand/Flow snapshotot a validacio nem
+modositja. Gyorsabb, reszleges ellenorzes:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\validate.ps1 -SkipIntegration
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\validate.ps1 -SkipFrontend
+```

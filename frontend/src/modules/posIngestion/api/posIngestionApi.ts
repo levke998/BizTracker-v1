@@ -1,8 +1,11 @@
 import { apiGet, apiPatchJson } from "../../../services/api/client";
 import type {
   PosMissingRecipeProduct,
+  PosMappingReadiness,
   PosProductAlias,
   PosProductAliasApprovalPayload,
+  PosProductAliasBulkApprovalPayload,
+  PosProductAliasBulkApprovalResult,
 } from "../types/posIngestion";
 
 export function listPosProductAliases(businessUnitId: string, status?: string) {
@@ -29,4 +32,24 @@ export function approvePosProductAliasMapping(
     `pos-ingestion/product-aliases/${aliasId}/mapping`,
     payload,
   );
+}
+
+export function getPosMappingReadiness(filters: {
+  business_unit_id?: string;
+  start_date?: string;
+  end_date?: string;
+}) {
+  return apiGet<PosMappingReadiness>(
+    "pos-ingestion/mapping-readiness",
+    filters,
+  );
+}
+
+export function bulkApprovePosProductAliasMappings(
+  payload: PosProductAliasBulkApprovalPayload,
+) {
+  return apiPatchJson<
+    PosProductAliasBulkApprovalPayload,
+    PosProductAliasBulkApprovalResult
+  >("pos-ingestion/product-aliases/mappings", payload);
 }

@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
+from decimal import Decimal
 import uuid
 from typing import Annotated
 
@@ -26,9 +27,14 @@ from app.modules.demo_pos.presentation.schemas.demo_pos import (
     DemoPosReceiptResponse,
 )
 from app.modules.pos_ingestion.application.services.pos_product_alias_mapping import (
+    PosProductAliasBulkValidationError,
+    PosProductAliasMapping,
     PosProductAliasMappingService,
     PosProductAliasNotFoundError,
     PosProductAliasProductMismatchError,
+)
+from app.modules.pos_ingestion.infrastructure.repositories.sqlalchemy_product_alias_repository import (
+    SqlAlchemyPosProductAliasRepository,
 )
 from app.modules.pos_ingestion.application.services.pos_missing_recipe_worklist import (
     PosMissingRecipeWorklistService,
@@ -75,6 +81,30 @@ class PosProductAliasResponse(BaseModel):
     updated_at: datetime
 
 
+class PosMappingReadinessResponse(BaseModel):
+    """Traffic-weighted POS mapping readiness."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    status: str
+    alias_coverage_percent: Decimal
+    row_coverage_percent: Decimal
+    gross_revenue_coverage_percent: Decimal
+    total_alias_count: int
+    mapped_alias_count: int
+    automatic_alias_count: int
+    missing_alias_count: int
+    total_row_count: int
+    mapped_row_count: int
+    automatic_row_count: int
+    missing_row_count: int
+    total_gross_revenue: Decimal
+    mapped_gross_revenue: Decimal
+    automatic_gross_revenue: Decimal
+    missing_gross_revenue: Decimal
+    source_layer: str
+
+
 class PosMissingRecipeWorklistResponse(BaseModel):
     """One POS-origin product that still needs recipe setup."""
 
@@ -101,7 +131,9 @@ def get_pos_product_alias_mapping_service(
 ) -> PosProductAliasMappingService:
     """Wire POS alias review operations."""
 
-    return PosProductAliasMappingService(session)
+    return PosProductAliasMappingService(
+        SqlAlchemyPosProductAliasRepository(session)
+    )
 
 
 def get_pos_missing_recipe_worklist_service(
@@ -117,6 +149,27 @@ class ApprovePosProductAliasRequest(BaseModel):
 
     product_id: uuid.UUID
     notes: str | None = None
+
+
+class BulkApprovePosProductAliasItem(BaseModel):
+    """One row in a transactional POS alias bulk approval."""
+
+    alias_id: uuid.UUID
+    product_id: uuid.UUID
+    notes: str | None = None
+
+
+class BulkApprovePosProductAliasesRequest(BaseModel):
+    """Approve multiple POS aliases in one transaction."""
+
+    mappings: list[BulkApprovePosProductAliasItem]
+
+
+class BulkApprovePosProductAliasesResponse(BaseModel):
+    """Result of a transactional bulk approval."""
+
+    updated_count: int
+    aliases: list[PosProductAliasResponse]
 
 
 @router.get("/product-aliases", response_model=list[PosProductAliasResponse])
@@ -135,6 +188,35 @@ def list_pos_product_aliases(
         status=status_filter,
     )
     return [PosProductAliasResponse.model_validate(alias) for alias in aliases]
+
+
+@router.get(
+    "/mapping-readiness",
+    response_model=PosMappingReadinessResponse,
+)
+def get_pos_mapping_readiness(
+    service: Annotated[
+        PosProductAliasMappingService,
+        Depends(get_pos_product_alias_mapping_service),
+    ],
+    business_unit_id: uuid.UUID | None = Query(default=None),
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
+) -> PosMappingReadinessResponse:
+    """Return traffic-weighted POS alias mapping coverage."""
+
+    try:
+        readiness = service.get_mapping_readiness(
+            business_unit_id=business_unit_id,
+            start_date=start_date,
+            end_date=end_date,
+        )
+    except PosProductAliasBulkValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
+    return PosMappingReadinessResponse.model_validate(readiness)
 
 
 @router.get(
@@ -211,6 +293,53 @@ def approve_pos_product_alias_mapping(
     return PosProductAliasResponse.model_validate(alias)
 
 
+@router.patch(
+    "/product-aliases/mappings",
+    response_model=BulkApprovePosProductAliasesResponse,
+)
+def bulk_approve_pos_product_alias_mappings(
+    payload: BulkApprovePosProductAliasesRequest,
+    service: Annotated[
+        PosProductAliasMappingService,
+        Depends(get_pos_product_alias_mapping_service),
+    ],
+) -> BulkApprovePosProductAliasesResponse:
+    """Approve multiple POS source aliases atomically."""
+
+    try:
+        aliases = service.approve_mappings(
+            mappings=tuple(
+                PosProductAliasMapping(
+                    alias_id=item.alias_id,
+                    product_id=item.product_id,
+                    notes=item.notes,
+                )
+                for item in payload.mappings
+            )
+        )
+    except PosProductAliasNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except (
+        PosProductAliasProductMismatchError,
+        PosProductAliasBulkValidationError,
+    ) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
+
+    return BulkApprovePosProductAliasesResponse(
+        updated_count=len(aliases),
+        aliases=[
+            PosProductAliasResponse.model_validate(alias)
+            for alias in aliases
+        ],
+    )
+
+
 @router.post(
     "/receipts",
     response_model=DemoPosReceiptResponse,
@@ -250,7 +379,7 @@ def ingest_pos_receipt(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except DemoPosValidationError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(exc),
         ) from exc
 

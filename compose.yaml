@@ -2,6 +2,7 @@ services:
   db:
     image: postgres:18
     container_name: biztracker-postgres
+    command: ["postgres", "-c", "timezone=Europe/Budapest"]
     environment:
       POSTGRES_DB: biztracker
       POSTGRES_USER: biztracker
@@ -14,7 +15,7 @@ services:
       timeout: 5s
       retries: 10
     volumes:
-      - biztracker_postgres_data:/var/lib/postgresql/data
+      - biztracker_postgres_data:/var/lib/postgresql
 
 volumes:
   biztracker_postgres_data:

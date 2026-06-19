@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link, useSearchParams } from "react-router-dom";
 
 import { useTopbarControls } from "../../../shared/components/layout/TopbarControlsContext";
+import { routes } from "../../../shared/constants/routes";
 import {
   listCatalogIngredients,
   updateCatalogIngredient,
@@ -327,6 +329,11 @@ function RecipesHeaderControls({
 export function RecipesPage() {
   const { setControls } = useTopbarControls();
   const queryClient = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedBusinessUnitId = searchParams.get("business_unit_id") ?? "";
+  const requestedProductId = searchParams.get("product_id") ?? "";
+  const requestedEdit = searchParams.get("edit") === "1";
+  const openedFromImports = searchParams.get("from") === "imports";
   const {
     businessUnits,
     recipes,
@@ -338,8 +345,18 @@ export function RecipesPage() {
     isLoading,
     errorMessage,
   } = useRecipes();
-  const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<RecipeFilter>("all");
+  const [search, setSearch] = useState(() => searchParams.get("search") ?? "");
+  const requestedFilter = searchParams.get("filter");
+  const [filter, setFilter] = useState<RecipeFilter>(
+    requestedFilter === "missing_recipe" ||
+      requestedFilter === "missing_cost" ||
+      requestedFilter === "missing_vat" ||
+      requestedFilter === "missing_stock" ||
+      requestedFilter === "empty_recipe" ||
+      requestedFilter === "ready"
+      ? requestedFilter
+      : "all",
+  );
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
   const [form, setForm] = useState<RecipeFormState | null>(null);
@@ -476,6 +493,45 @@ export function RecipesPage() {
     overview?.readiness_counts.empty_recipe ??
     recipes.filter((row) => row.readiness_status === "empty_recipe").length;
 
+  function updateRouteParameter(name: string, value: string) {
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        if (value) {
+          next.set(name, value);
+        } else {
+          next.delete(name);
+        }
+        return next;
+      },
+      { replace: true },
+    );
+  }
+
+  useEffect(() => {
+    if (
+      requestedBusinessUnitId &&
+      requestedBusinessUnitId !== selectedBusinessUnitId &&
+      businessUnits.some((unit) => unit.id === requestedBusinessUnitId)
+    ) {
+      setSelectedBusinessUnitId(requestedBusinessUnitId);
+    }
+  }, [
+    businessUnits,
+    requestedBusinessUnitId,
+    selectedBusinessUnitId,
+    setSelectedBusinessUnitId,
+  ]);
+
+  useEffect(() => {
+    if (
+      selectedBusinessUnitId &&
+      !businessUnits.some((unit) => unit.id === requestedBusinessUnitId)
+    ) {
+      updateRouteParameter("business_unit_id", selectedBusinessUnitId);
+    }
+  }, [businessUnits, requestedBusinessUnitId, selectedBusinessUnitId]);
+
   useEffect(() => {
     setControls(
       <RecipesHeaderControls
@@ -484,13 +540,27 @@ export function RecipesPage() {
         setSelectedBusinessUnitId={(value) => {
           setSelectedBusinessUnitId(value);
           setSelectedProductId(null);
+          setSearchParams(
+            (current) => {
+              const next = new URLSearchParams(current);
+              next.set("business_unit_id", value);
+              next.delete("product_id");
+              next.delete("edit");
+              return next;
+            },
+            { replace: true },
+          );
         }}
         search={search}
-        setSearch={setSearch}
+        setSearch={(value) => {
+          setSearch(value);
+          updateRouteParameter("search", value);
+        }}
         filter={filter}
         setFilter={(value) => {
           setFilter(value);
           setSelectedProductId(null);
+          updateRouteParameter("filter", value === "all" ? "" : value);
         }}
         activeOnly={activeOnly}
         setActiveOnly={setActiveOnly}
@@ -512,10 +582,25 @@ export function RecipesPage() {
   function startEditing(row: RecipeCostSummary) {
     setEditingProductId(row.product_id);
     setSelectedProductId(row.product_id);
+    updateRouteParameter("product_id", row.product_id);
     setForm(buildRecipeForm(row, fallbackUnitId));
     setFormMessage("");
     setFormError("");
   }
+
+  useEffect(() => {
+    const requestedRecipe = recipes.find(
+      (row) => row.product_id === requestedProductId,
+    );
+    if (!requestedRecipe) {
+      return;
+    }
+    setSelectedProductId(requestedRecipe.product_id);
+    if (requestedEdit && fallbackUnitId) {
+      startEditing(requestedRecipe);
+      updateRouteParameter("edit", "");
+    }
+  }, [fallbackUnitId, recipes, requestedEdit, requestedProductId]);
 
   function startFromTemplate(target: RecipeCostSummary, source: RecipeCostSummary) {
     setEditingProductId(target.product_id);
@@ -549,6 +634,20 @@ export function RecipesPage() {
     const firstMatch = recipes.find((row) => matchesFilter(row, nextFilter));
     setFilter(nextFilter);
     setSelectedProductId(firstMatch?.product_id ?? null);
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        next.set("filter", nextFilter);
+        if (firstMatch) {
+          next.set("product_id", firstMatch.product_id);
+        } else {
+          next.delete("product_id");
+        }
+        next.delete("edit");
+        return next;
+      },
+      { replace: true },
+    );
     setEditingProductId(null);
     setForm(null);
     setFormError("");
@@ -745,6 +844,19 @@ export function RecipesPage() {
       {isLoading ? <div className="loading-state">Receptek betoltese...</div> : null}
       {quickMessage ? <div className="success-banner">{quickMessage}</div> : null}
       {quickError ? <div className="error-banner">{quickError}</div> : null}
+      {openedFromImports ? (
+        <div className="production-return-banner">
+          <span>Az Import központ recepthiány-munkalistájáról érkeztél.</span>
+          <Link
+            className="secondary-button"
+            to={`${routes.imports}?${new URLSearchParams({
+              business_unit_id: selectedBusinessUnitId,
+            }).toString()}`}
+          >
+            Vissza az Import központba
+          </Link>
+        </div>
+      ) : null}
 
       <div className="production-recipes-layout">
         <section className="panel production-recipes-list-panel">
@@ -772,7 +884,10 @@ export function RecipesPage() {
                         ? "production-recipe-row production-recipe-row-selected"
                         : "production-recipe-row"
                     }
-                    onClick={() => setSelectedProductId(row.product_id)}
+                    onClick={() => {
+                      setSelectedProductId(row.product_id);
+                      updateRouteParameter("product_id", row.product_id);
+                    }}
                   >
                     <td>
                       <strong>{row.product_name}</strong>

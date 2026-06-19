@@ -12,6 +12,8 @@ import {
 } from "../api/analyticsApi";
 import { listEventPerformances, listEvents } from "../../events/api/eventsApi";
 import type { EventPerformance, EventRecord } from "../../events/types/events";
+import { getPosMappingReadiness } from "../../posIngestion/api/posIngestionApi";
+import type { PosMappingReadiness } from "../../posIngestion/types/posIngestion";
 import type {
   DashboardBasketPairRow,
   DashboardBasketReceipt,
@@ -44,6 +46,7 @@ export type DashboardTopProductRow = DashboardBreakdownRow & {
 
 type DashboardState = {
   dashboard: DashboardData | null;
+  mappingReadiness: PosMappingReadiness | null;
   basketPairs: DashboardBasketPairRow[];
   basketReceipts: DashboardBasketReceipt[];
   flowEvents: EventRecord[];
@@ -133,6 +136,22 @@ export function useDashboard(): DashboardState {
     queryFn: () =>
       getDashboardData(baseFilters),
     enabled: period !== "custom" || (Boolean(startDate) && Boolean(endDate)),
+  });
+
+  const mappingReadinessQuery = useQuery({
+    queryKey: [
+      "pos-mapping-readiness",
+      dashboardQuery.data?.business_unit_id ?? "overall",
+      dashboardQuery.data?.period.start_date ?? "",
+      dashboardQuery.data?.period.end_date ?? "",
+    ],
+    queryFn: () =>
+      getPosMappingReadiness({
+        business_unit_id: dashboardQuery.data?.business_unit_id ?? undefined,
+        start_date: dashboardQuery.data?.period.start_date,
+        end_date: dashboardQuery.data?.period.end_date,
+      }),
+    enabled: Boolean(dashboardQuery.data),
   });
 
   const productDetailsQuery = useQuery({
@@ -320,6 +339,7 @@ export function useDashboard(): DashboardState {
 
   return {
     dashboard: dashboardQuery.data ?? null,
+    mappingReadiness: mappingReadinessQuery.data ?? null,
     basketPairs: basketPairsQuery.data ?? [],
     basketReceipts: basketReceiptsQuery.data ?? [],
     flowEvents: flowEventsQuery.data ?? [],
@@ -397,6 +417,8 @@ export function useDashboard(): DashboardState {
       flowEventPerformancesQuery.isLoading || flowEventsQuery.isLoading,
     errorMessage:
       (dashboardQuery.error instanceof Error && dashboardQuery.error.message) ||
+      (mappingReadinessQuery.error instanceof Error &&
+        mappingReadinessQuery.error.message) ||
       (flowEventsQuery.error instanceof Error &&
         flowEventsQuery.error.message) ||
       (flowEventPerformancesQuery.error instanceof Error &&

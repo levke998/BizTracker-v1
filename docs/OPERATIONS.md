@@ -45,6 +45,16 @@ Szabalyok:
 
 ## Tesztek
 
+Teljes lokalis validacio a repository gyokerebol:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\validate.ps1
+```
+
+Az integration suite dedikalt, minden futasnal ujraletrehozott
+`biztracker_test` adatbazison fut. A helyi uzleti snapshoton integration tesztet
+nem futtatunk.
+
 Backend integration tesztek:
 
 ```powershell
@@ -63,7 +73,7 @@ Kritikus tesztteruletek:
 - weather
 - identity/auth
 
-Legutobb dokumentalt teljes integration allapot: `94 passed`.
+Legutobb dokumentalt teljes integration allapot: `157 passed`.
 
 Legutobbi celzott validacio:
 - Event ticket actual lefedettseg frontend szelet utan:
