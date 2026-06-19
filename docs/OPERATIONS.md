@@ -20,6 +20,9 @@ npm.cmd run dev
 
 ## Adatbazis es migration
 
+Uj fejlesztoi gep, Docker/PostgreSQL es gepkozi DB snapshot:
+[DEVELOPMENT_SETUP.md](DEVELOPMENT_SETUP.md).
+
 Aktualis Alembic allapot ellenorzese:
 
 ```powershell

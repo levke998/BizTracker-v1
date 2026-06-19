@@ -13,6 +13,7 @@ Fejlesztes elott ezt olvasd:
 3. [docs/DATA_PIPELINE.md](docs/DATA_PIPELINE.md) - CSV-first import, dedupe, mapping, PDF szamla pipeline.
 4. [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) - modularis monolit, clean architecture, frontend/backend felelossegek.
 5. [docs/OPERATIONS.md](docs/OPERATIONS.md) - futtatas, migration, teszt, dokumentaciofrissites.
+6. [docs/DEVELOPMENT_SETUP.md](docs/DEVELOPMENT_SETUP.md) - uj gep, GitHub Desktop, PostgreSQL es DB snapshot atadas.
 
 Dokumentacios index: [docs/DOCUMENTATION_STATUS.md](docs/DOCUMENTATION_STATUS.md).
 
