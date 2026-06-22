@@ -262,6 +262,24 @@ A reszletes kesz allapot az `Allapot roviden` blokkban van. A fejlesztesi sorren
   alapon jelzi a jovahagyott mapping aranyat. Az Import kozpont historikus
   munkalista-osszefoglalot, a Dashboard a kivalasztott idoszakra szurt
   adatminosegi kartyat mutat.
+- Analytics repository refaktor elso szelet: a POS AFA-feloldas, derived
+  AFA-szamitas, coverage source es margin readiness szabalyok adatbazis-fuggetlen,
+  kulon unit tesztelt modulba kerultek. A POS revenue/product/basket
+  aggregaciok, termek margin, termekpar es nyugta drill-down mar onallo,
+  session-fuggetlen builder komponensben vannak. Az expense aggregacio,
+  reszletes kiadaslista, supplier invoice AFA-osszesites es forras drill-down
+  szinten onallo infrastructure reader komponensbe kerult. A historikus
+  weather-category, homersekleti sav, condition aggregacio es shared
+  observation query szinten onallo weather reader komponensben van, kozos
+  osztalyozasi szabalyokkal. A forecast cache query, napi/idősavos/event
+  aggregacio es forecast condition szabalyok szinten onallo readerbe kerultek.
+  Az impact/kategoria/termek/csucsidő baseline statisztika, demand signal es
+  ajanlasi szabalyok kulon tiszta modulban vannak. A historikus POS/weather
+  baseline epites es a negy read-model orchestration szinten onallo builderben
+  van. A production preparation readiness es Flow event forecast szinten
+  onallo operativ reader komponensben van; a forecast repository-refaktor
+  lezart. A kovetkezo backend szelet a traffic/category trend es product/stock
+  risk felelossegek rendezese.
 
 ## Feature kesz definicio
 

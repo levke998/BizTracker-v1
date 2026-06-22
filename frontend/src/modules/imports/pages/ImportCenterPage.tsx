@@ -1,8 +1,7 @@
-import { Fragment, useEffect, useRef, useState, type FormEvent } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useSearchParams } from "react-router-dom";
 
 import { useTopbarControls } from "../../../shared/components/layout/TopbarControlsContext";
-import { routes } from "../../../shared/constants/routes";
 import { createCatalogProduct } from "../../catalog/api/catalogApi";
 import {
   listCategories,
@@ -10,13 +9,26 @@ import {
   listUnitsOfMeasure,
   listVatRates,
 } from "../../masterData/api/masterDataApi";
-import type {
-  BusinessUnit,
-  Category,
-  Product,
-  UnitOfMeasure,
-  VatRate,
-} from "../../masterData/types/masterData";
+import type { Category, Product, UnitOfMeasure, VatRate } from "../../masterData/types/masterData";
+import { ImportBatchCardsSection, ImportBatchLegacyTable } from "../components/ImportBatchPanels";
+import { ImportHeaderControls } from "../components/ImportHeaderControls";
+import { ImportUploadPanel } from "../components/ImportUploadPanel";
+import {
+  buildQuickProductForm,
+  classifyGourmandFile,
+  hasReadyGourmandPackage,
+  summarizeBatches,
+  type QuickProductForm,
+  type SelectedImportFile,
+} from "../components/importCenterView";
+import {
+  PosAliasReviewPanel,
+  PosMappingReadinessPanel,
+  PosMissingRecipePanel,
+  PosQuickProductCreatePanel,
+} from "../components/PosAliasPanels";
+import { useImportBatches } from "../hooks/useImportBatches";
+import { routes } from "../../../shared/constants/routes";
 import {
   approvePosProductAliasMapping,
   bulkApprovePosProductAliasMappings,
@@ -29,1154 +41,7 @@ import type {
   PosMissingRecipeProduct,
   PosProductAlias,
 } from "../../posIngestion/types/posIngestion";
-import { useImportBatches } from "../hooks/useImportBatches";
-import type {
-  ImportBatch,
-  ImportBatchWeatherRecommendation,
-  ImportErrorPreview,
-  ImportRowPreview,
-} from "../types/imports";
-
-type GourmandFileKind = "summary" | "detail" | "unknown";
-
-type SelectedImportFile = {
-  name: string;
-  kind: GourmandFileKind;
-};
-
-type QuickProductForm = {
-  name: string;
-  sku: string;
-  categoryId: string;
-  salesUomId: string;
-  vatRateId: string;
-  productType: string;
-  salePriceGross: string;
-};
-
-function buildQuickProductForm(
-  alias: PosProductAlias,
-  units: UnitOfMeasure[],
-): QuickProductForm {
-  const defaultUnit =
-    units.find((unit) => unit.code === "pcs") ??
-    units.find((unit) => unit.code === "db") ??
-    units[0];
-  return {
-    name: alias.source_product_name,
-    sku: alias.source_sku ?? "",
-    categoryId: "",
-    salesUomId: defaultUnit?.id ?? "",
-    vatRateId: "",
-    productType: "finished_good",
-    salePriceGross: "",
-  };
-}
-
-const importTypeLabels: Record<string, string> = {
-  pos_sales: "POS eladások",
-  gourmand_pos_sales: "Gourmand POS CSV",
-  flow_pos_sales: "Flow POS CSV",
-  supplier_invoice: "Beszerzési számlák",
-  ticket_sales: "Jegyeladások",
-  bar_sales: "Bár eladások",
-};
-
-const importStatusLabels: Record<string, string> = {
-  uploaded: "Feltöltve",
-  parsing: "Feldolgozás alatt",
-  parsed: "Feldolgozva",
-  failed: "Hibás",
-};
-
-const rowStatusLabels: Record<string, string> = {
-  pending: "Várakozik",
-  parsed: "Feldolgozva",
-  failed: "Hibás",
-  skipped: "Kihagyva",
-};
-
-const gourmandFileKindLabels: Record<GourmandFileKind, string> = {
-  summary: "Összesítő",
-  detail: "Tételes",
-  unknown: "Nem felismert",
-};
-
-function classifyGourmandFile(content: string, fileName: string): GourmandFileKind {
-  const normalizedName = fileName.toLocaleLowerCase("hu-HU");
-  const normalizedContent = content.toLocaleUpperCase("hu-HU");
-
-  if (
-    normalizedContent.includes("NAPI ÖSSZESSÍTÉS") ||
-    normalizedName.includes("osszesites") ||
-    normalizedName.includes("összesítés")
-  ) {
-    return "summary";
-  }
-
-  if (
-    normalizedContent.includes("TÉTELES RENDELÉSEK") ||
-    normalizedName.includes("teteles") ||
-    normalizedName.includes("tételes")
-  ) {
-    return "detail";
-  }
-
-  return "unknown";
-}
-
-function formatDateTime(value: string) {
-  return new Intl.DateTimeFormat("hu-HU", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(value));
-}
-
-function formatMoney(value: string | number | null | undefined) {
-  const parsed = Number(value ?? 0);
-  return new Intl.NumberFormat("hu-HU", {
-    style: "currency",
-    currency: "HUF",
-    maximumFractionDigits: 0,
-  }).format(Number.isFinite(parsed) ? parsed : 0);
-}
-
-function formatDate(value: string | null) {
-  if (!value) {
-    return "-";
-  }
-  return value.replace(/-/g, ". ");
-}
-
-function formatImportPeriod(batch: ImportBatch) {
-  if (!batch.first_occurred_at || !batch.last_occurred_at) {
-    return "Időszak: feldolgozás után látszik";
-  }
-  return `${formatDateTime(batch.first_occurred_at)} - ${formatDateTime(
-    batch.last_occurred_at,
-  )}`;
-}
-
-function formatBytes(value: number) {
-  if (value < 1024) {
-    return `${value} B`;
-  }
-  if (value < 1024 * 1024) {
-    return `${(value / 1024).toFixed(1)} KB`;
-  }
-  return `${(value / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function formatImportType(value: string) {
-  return importTypeLabels[value] ?? value;
-}
-
-function formatImportStatus(value: string) {
-  return importStatusLabels[value] ?? value;
-}
-
-function formatRowStatus(value: string) {
-  return rowStatusLabels[value] ?? value;
-}
-
-function summarizeBatches(batches: ImportBatch[]) {
-  return batches.reduce(
-    (summary, batch) => {
-      summary.totalRows += batch.total_rows;
-      summary.parsedRows += batch.parsed_rows;
-      summary.errorRows += batch.error_rows;
-      if (batch.status === "uploaded") {
-        summary.waitingBatches += 1;
-      }
-      return summary;
-    },
-    { totalRows: 0, parsedRows: 0, errorRows: 0, waitingBatches: 0 },
-  );
-}
-
-function summarizeFiles(batch: ImportBatch) {
-  if (batch.files.length === 0) {
-    return "-";
-  }
-  if (batch.files.length === 1) {
-    return batch.files[0].original_name;
-  }
-  return `${batch.files.length} fájl`;
-}
-
-function hasReadyGourmandPackage(files: SelectedImportFile[]) {
-  return (
-    files.some((file) => file.kind === "summary") &&
-    files.some((file) => file.kind === "detail") &&
-    files.every((file) => file.kind !== "unknown")
-  );
-}
-
-function renderPayload(payload: Record<string, unknown> | null) {
-  if (!payload) {
-    return "-";
-  }
-  return <pre className="json-preview">{JSON.stringify(payload, null, 2)}</pre>;
-}
-
-function ImportHeaderControls({
-  businessUnits,
-  selectedBusinessUnitId,
-  setSelectedBusinessUnitId,
-}: {
-  businessUnits: BusinessUnit[];
-  selectedBusinessUnitId: string;
-  setSelectedBusinessUnitId: (value: string) => void;
-}) {
-  return (
-    <div className="business-dashboard-filters topbar-dashboard-filters">
-      <label className="field topbar-field">
-        <span>Vállalkozás</span>
-        <select
-          value={selectedBusinessUnitId}
-          onChange={(event) => setSelectedBusinessUnitId(event.target.value)}
-          className="field-input"
-        >
-          <option value="">Válassz vállalkozást</option>
-          {businessUnits.map((businessUnit) => (
-            <option key={businessUnit.id} value={businessUnit.id}>
-              {businessUnit.name}
-            </option>
-          ))}
-        </select>
-      </label>
-
-      <label className="field topbar-field">
-        <span>Import típus</span>
-        <select
-          value=""
-          disabled
-          onChange={() => undefined}
-          className="field-input"
-        >
-          <option value="">POS CSV</option>
-        </select>
-      </label>
-    </div>
-  );
-}
-
-function GourmandImportGuide({ selectedFiles }: { selectedFiles: SelectedImportFile[] }) {
-  const hasSummary = selectedFiles.some((file) => file.kind === "summary");
-  const detailCount = selectedFiles.filter((file) => file.kind === "detail").length;
-  const hasUnknown = selectedFiles.some((file) => file.kind === "unknown");
-  const isReady = hasReadyGourmandPackage(selectedFiles);
-
-  return (
-    <div className="import-guide-card">
-      <div className="import-guide-header">
-        <span>POS CSV csomag</span>
-        <strong>{isReady ? "Feltölthető" : "Hiányos csomag"}</strong>
-      </div>
-      <div className="import-checklist">
-        <span className={hasSummary ? "check-item is-ready" : "check-item"}>
-          1 összesítő CSV
-        </span>
-        <span className={detailCount > 0 ? "check-item is-ready" : "check-item"}>
-          legalább 1 tételes CSV
-        </span>
-        <span className={!hasUnknown && selectedFiles.length > 0 ? "check-item is-ready" : "check-item"}>
-          felismerhető fájltípusok
-        </span>
-      </div>
-      <div className="import-flow-steps import-flow-steps-pos" aria-label="Import folyamat">
-        <span>Feltöltés</span>
-        <span>Ellenőrzés</span>
-        <span>Rögzítés</span>
-      </div>
-      <p className="import-guide-note">
-        Az összesítő fájl adja a kategóriákat és termékárakat, a tételes fájlok adják
-        az időpontos eladási sorokat. Azonos időszak lekérdezéseit töltsd fel; egy
-        összesítőhöz több tételes CSV is tartozhat.
-      </p>
-    </div>
-  );
-}
-
-function SelectedFilesPreview({
-  files,
-  isGourmandImport,
-}: {
-  files: SelectedImportFile[];
-  isGourmandImport: boolean;
-}) {
-  if (files.length === 0) {
-    return null;
-  }
-
-  return (
-    <div className="selected-file-list">
-      {files.map((file) => (
-        <span key={file.name} className={`selected-file-chip file-kind-${file.kind}`}>
-          {isGourmandImport ? <strong>{gourmandFileKindLabels[file.kind]}</strong> : null}
-          {file.name}
-        </span>
-      ))}
-    </div>
-  );
-}
-
-function SummaryPreview({ batch }: { batch: ImportBatch }) {
-  const totalSize = batch.files.reduce((sum, file) => sum + file.size_bytes, 0);
-
-  return (
-    <div className="summary-grid">
-      <div className="summary-item">
-        <span className="summary-label">Import típus</span>
-        <strong>{formatImportType(batch.import_type)}</strong>
-      </div>
-      <div className="summary-item">
-        <span className="summary-label">Státusz</span>
-        <strong>{formatImportStatus(batch.status)}</strong>
-      </div>
-      <div className="summary-item">
-        <span className="summary-label">Létrehozva</span>
-        <strong>{formatDateTime(batch.created_at)}</strong>
-      </div>
-      <div className="summary-item">
-        <span className="summary-label">Befejezve</span>
-        <strong>{batch.finished_at ? formatDateTime(batch.finished_at) : "-"}</strong>
-      </div>
-      <div className="summary-item">
-        <span className="summary-label">Fájlok</span>
-        <strong>{batch.files.length || "-"}</strong>
-      </div>
-      <div className="summary-item">
-        <span className="summary-label">Fájlméret</span>
-        <strong>{totalSize ? formatBytes(totalSize) : "-"}</strong>
-      </div>
-      <div className="summary-item">
-        <span className="summary-label">Sorállapot</span>
-        <strong>
-          {batch.total_rows} / {batch.parsed_rows} / {batch.error_rows}
-        </strong>
-      </div>
-      <div className="summary-item summary-item-wide">
-        <span className="summary-label">Eredeti fájlok</span>
-        <strong>{batch.files.map((file) => file.original_name).join(", ") || "-"}</strong>
-      </div>
-    </div>
-  );
-}
-
-function RowsPreview({ rows }: { rows: ImportRowPreview[] }) {
-  if (rows.length === 0) {
-    return <p className="empty-message">Nincs megjeleníthető staging sor.</p>;
-  }
-
-  return (
-    <div className="table-wrap">
-      <table className="data-table details-table">
-        <thead>
-          <tr>
-            <th>Sor</th>
-            <th>Státusz</th>
-            <th>Nyers adat</th>
-            <th>Normalizált adat</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row, index) => (
-            <tr key={`${row.row_number}-${row.parse_status}-${index}`}>
-              <td>{row.row_number}</td>
-              <td>{formatRowStatus(row.parse_status)}</td>
-              <td>{renderPayload(row.raw_payload)}</td>
-              <td>{renderPayload(row.normalized_payload)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function ErrorsPreview({ errors }: { errors: ImportErrorPreview[] }) {
-  if (errors.length === 0) {
-    return <p className="empty-message">Nincs tárolt feldolgozási hiba.</p>;
-  }
-
-  return (
-    <div className="table-wrap">
-      <table className="data-table details-table">
-        <thead>
-          <tr>
-            <th>Sor</th>
-            <th>Hibakód</th>
-            <th>Üzenet</th>
-            <th>Nyers adat</th>
-          </tr>
-        </thead>
-        <tbody>
-          {errors.map((error, index) => (
-            <tr key={`${error.error_code}-${error.row_number ?? "na"}-${index}`}>
-              <td>{error.row_number ?? "-"}</td>
-              <td>{error.error_code}</td>
-              <td>{error.message}</td>
-              <td>{renderPayload(error.raw_payload)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function WeatherPreparationPanel({
-  recommendation,
-  isPreparing,
-  onPrepare,
-}: {
-  recommendation: ImportBatchWeatherRecommendation | undefined;
-  isPreparing: boolean;
-  onPrepare: () => void;
-}) {
-  if (!recommendation) {
-    return <p className="info-message">Időjárás-előkészítés állapotának betöltése...</p>;
-  }
-
-  const isComplete =
-    recommendation.requested_hours > 0 && recommendation.missing_hours === 0;
-  const canStart = recommendation.can_backfill && recommendation.missing_hours > 0;
-
-  return (
-    <div className="weather-preparation-card">
-      <div className="weather-preparation-copy">
-        <span className="summary-label">Időjárás-előkészítés</span>
-        <strong>
-          {isComplete
-            ? "Előkészítve"
-            : recommendation.can_backfill
-              ? "Előkészíthető"
-              : "Nem indítható"}
-        </strong>
-        <p>
-          {recommendation.reason ??
-            `${formatDate(recommendation.start_date)} - ${formatDate(
-              recommendation.end_date,
-            )}, ${recommendation.suggested_location_name}`}
-        </p>
-      </div>
-      <div className="weather-preparation-stats">
-        <span>
-          <strong>{recommendation.requested_hours}</strong>
-          várható óra
-        </span>
-        <span>
-          <strong>{recommendation.cached_hours}</strong>
-          cache-elt
-        </span>
-        <span>
-          <strong>{recommendation.missing_hours}</strong>
-          hiányzik
-        </span>
-      </div>
-      <button
-        type="button"
-        className="primary-button"
-        disabled={!canStart || isPreparing}
-        onClick={onPrepare}
-      >
-        {isPreparing
-          ? "Előkészítés..."
-          : isComplete
-            ? "Időjárás kész"
-            : "Időjárás előkészítése"}
-      </button>
-    </div>
-  );
-}
-
-function getImportBatchStatusText(batch: ImportBatch) {
-  if (batch.error_rows > 0 || batch.status === "failed") {
-    return "Ellenőrzést igényel";
-  }
-  if (batch.status === "parsed") {
-    return "Rögzítésre kész";
-  }
-  if (batch.status === "uploaded") {
-    return "Feltöltve";
-  }
-  return formatImportStatus(batch.status);
-}
-
-function formatAliasStatus(value: string) {
-  if (value === "mapped") {
-    return "Jovahagyva";
-  }
-  if (value === "auto_created") {
-    return "Ellenorzendo";
-  }
-  if (value === "needs_review") {
-    return "Review";
-  }
-  return value;
-}
-
-function formatMappingReadinessStatus(value: string) {
-  if (value === "complete") {
-    return "Teljes";
-  }
-  if (value === "partial") {
-    return "Reszleges";
-  }
-  if (value === "missing") {
-    return "Nincs jovahagyott mapping";
-  }
-  return "Nincs POS adat";
-}
-
-function PosMappingReadinessPanel({
-  readiness,
-  isLoading,
-}: {
-  readiness: PosMappingReadiness | null;
-  isLoading: boolean;
-}) {
-  if (isLoading) {
-    return <p className="info-message">Mapping coverage betoltese...</p>;
-  }
-  if (!readiness) {
-    return null;
-  }
-
-  const grossCoverage = Math.min(
-    100,
-    Math.max(0, Number(readiness.gross_revenue_coverage_percent)),
-  );
-
-  return (
-    <div className={`pos-mapping-readiness status-${readiness.status}`}>
-      <div className="pos-mapping-readiness-heading">
-        <div>
-          <span>Mapping readiness</span>
-          <strong>{formatMappingReadinessStatus(readiness.status)}</strong>
-        </div>
-        <strong>{grossCoverage.toFixed(1)}%</strong>
-      </div>
-      <div className="vat-readiness-track" aria-hidden="true">
-        <span style={{ width: `${grossCoverage}%` }} />
-      </div>
-      <div className="pos-mapping-readiness-grid">
-        <span>
-          <strong>{readiness.mapped_alias_count}/{readiness.total_alias_count}</strong>
-          Jovahagyott alias
-        </span>
-        <span>
-          <strong>{readiness.mapped_row_count}/{readiness.total_row_count}</strong>
-          Lefedett POS sor
-        </span>
-        <span>
-          <strong>{formatMoney(readiness.mapped_gross_revenue)}</strong>
-          Jovahagyott forgalom
-        </span>
-        <span>
-          <strong>{formatMoney(readiness.automatic_gross_revenue)}</strong>
-          Automatikus mapping
-        </span>
-      </div>
-    </div>
-  );
-}
-
-function PosQuickProductCreatePanel({
-  alias,
-  form,
-  categories,
-  units,
-  vatRates,
-  isSaving,
-  onFormChange,
-  onCancel,
-  onSubmit,
-}: {
-  alias: PosProductAlias;
-  form: QuickProductForm;
-  categories: Category[];
-  units: UnitOfMeasure[];
-  vatRates: VatRate[];
-  isSaving: boolean;
-  onFormChange: (next: QuickProductForm) => void;
-  onCancel: () => void;
-  onSubmit: () => void;
-}) {
-  return (
-    <section className="panel pos-quick-product-panel">
-      <div className="panel-header">
-        <div>
-          <h2>Új belső termék</h2>
-          <p className="panel-description">
-            Forrás: {alias.source_product_name} · {alias.source_system}
-          </p>
-        </div>
-        <button type="button" className="secondary-button" onClick={onCancel}>
-          Mégse
-        </button>
-      </div>
-
-      <div className="form-grid">
-        <label className="field">
-          <span>Név</span>
-          <input
-            className="field-input"
-            value={form.name}
-            maxLength={200}
-            required
-            onChange={(event) => onFormChange({ ...form, name: event.target.value })}
-          />
-        </label>
-        <label className="field">
-          <span>SKU</span>
-          <input
-            className="field-input"
-            value={form.sku}
-            maxLength={64}
-            onChange={(event) => onFormChange({ ...form, sku: event.target.value })}
-          />
-        </label>
-        <label className="field">
-          <span>Kategória</span>
-          <select
-            className="field-input"
-            value={form.categoryId}
-            onChange={(event) =>
-              onFormChange({ ...form, categoryId: event.target.value })
-            }
-          >
-            <option value="">Nincs kategória</option>
-            {categories.map((category) => (
-              <option key={category.id} value={category.id}>
-                {category.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="field">
-          <span>Értékesítési egység</span>
-          <select
-            className="field-input"
-            value={form.salesUomId}
-            onChange={(event) =>
-              onFormChange({ ...form, salesUomId: event.target.value })
-            }
-          >
-            <option value="">Nincs egység</option>
-            {units.map((unit) => (
-              <option key={unit.id} value={unit.id}>
-                {unit.name} ({unit.symbol ?? unit.code})
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="field">
-          <span>Típus</span>
-          <select
-            className="field-input"
-            value={form.productType}
-            onChange={(event) =>
-              onFormChange({ ...form, productType: event.target.value })
-            }
-          >
-            <option value="finished_good">Késztermék</option>
-            <option value="resale">Továbbértékesített termék</option>
-            <option value="service">Szolgáltatás</option>
-          </select>
-        </label>
-        <label className="field">
-          <span>Eladási ár</span>
-          <input
-            className="field-input"
-            type="number"
-            min="0"
-            step="1"
-            value={form.salePriceGross}
-            onChange={(event) =>
-              onFormChange({ ...form, salePriceGross: event.target.value })
-            }
-          />
-        </label>
-        <label className="field">
-          <span>ÁFA kulcs</span>
-          <select
-            className="field-input"
-            value={form.vatRateId}
-            onChange={(event) =>
-              onFormChange({ ...form, vatRateId: event.target.value })
-            }
-          >
-            <option value="">Nincs beállítva</option>
-            {vatRates.map((vatRate) => (
-              <option key={vatRate.id} value={vatRate.id}>
-                {vatRate.name}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
-
-      <div className="pos-quick-product-actions">
-        <small>
-          A mentés létrehozza a katalógusterméket és jóváhagyja ezt a POS
-          mappinget.
-        </small>
-        <button
-          type="button"
-          className="primary-button"
-          disabled={!form.name.trim() || isSaving}
-          onClick={onSubmit}
-        >
-          {isSaving ? "Létrehozás és mapping..." : "Létrehozás és jóváhagyás"}
-        </button>
-      </div>
-    </section>
-  );
-}
-
-function PosAliasReviewPanel({
-  aliases,
-  products,
-  businessUnitId,
-  isLoading,
-  approvingAliasId,
-  isBulkApproving,
-  statusFilter,
-  searchTerm,
-  focusedProductId,
-  selectedAliasIds,
-  selectedProductIds,
-  onStatusFilterChange,
-  onSearchTermChange,
-  onClearProductFocus,
-  onStartCreateProduct,
-  onSelectProduct,
-  onToggleAlias,
-  onToggleAllPending,
-  onApprove,
-  onApproveSelected,
-}: {
-  aliases: PosProductAlias[];
-  products: Product[];
-  businessUnitId: string;
-  isLoading: boolean;
-  approvingAliasId: string;
-  isBulkApproving: boolean;
-  statusFilter: "all" | "pending" | "mapped";
-  searchTerm: string;
-  focusedProductId: string;
-  selectedAliasIds: string[];
-  selectedProductIds: Record<string, string>;
-  onStatusFilterChange: (value: "all" | "pending" | "mapped") => void;
-  onSearchTermChange: (value: string) => void;
-  onClearProductFocus: () => void;
-  onStartCreateProduct: (alias: PosProductAlias) => void;
-  onSelectProduct: (aliasId: string, productId: string) => void;
-  onToggleAlias: (aliasId: string) => void;
-  onToggleAllPending: (aliasIds: string[]) => void;
-  onApprove: (aliasId: string) => void;
-  onApproveSelected: () => void;
-}) {
-  const pendingAliases = aliases.filter((alias) => alias.status !== "mapped");
-  const mappedAliases = aliases.filter((alias) => alias.status === "mapped");
-  const productById = new Map(products.map((product) => [product.id, product]));
-  const focusedProduct = focusedProductId
-    ? productById.get(focusedProductId)
-    : undefined;
-  const selectedAliasIdSet = new Set(selectedAliasIds);
-  const normalizedSearch = searchTerm.trim().toLocaleLowerCase("hu-HU");
-  const filteredAliases = aliases.filter((alias) => {
-    const selectedProductId =
-      selectedProductIds[alias.id] ?? alias.product_id ?? "";
-    if (focusedProductId && selectedProductId !== focusedProductId) {
-      return false;
-    }
-    if (statusFilter === "pending" && alias.status === "mapped") {
-      return false;
-    }
-    if (statusFilter === "mapped" && alias.status !== "mapped") {
-      return false;
-    }
-    if (!normalizedSearch) {
-      return true;
-    }
-    return [
-      alias.source_product_name,
-      alias.source_product_key,
-      alias.source_sku ?? "",
-      productById.get(selectedProductId)?.name ?? "",
-    ].some((value) =>
-      value.toLocaleLowerCase("hu-HU").includes(normalizedSearch),
-    );
-  });
-  const visiblePendingAliases = filteredAliases.filter(
-    (alias) => alias.status !== "mapped",
-  );
-  const selectedPendingAliases = visiblePendingAliases.filter((alias) =>
-    selectedAliasIdSet.has(alias.id),
-  );
-  const selectedMissingProductCount = selectedPendingAliases.filter(
-    (alias) => !(selectedProductIds[alias.id] ?? alias.product_id),
-  ).length;
-  const allPendingSelected =
-    visiblePendingAliases.length > 0 &&
-    visiblePendingAliases.every((alias) => selectedAliasIdSet.has(alias.id));
-
-  return (
-    <section className="panel">
-      <div className="panel-header">
-        <h2>POS termek mapping</h2>
-        <span className="panel-count">
-          {pendingAliases.length > 0
-            ? `${pendingAliases.length} ellenorzendo`
-            : `${mappedAliases.length} jovahagyva`}
-        </span>
-      </div>
-
-      <div className="pos-alias-filter-toolbar">
-        <div className="toolbar-group">
-          {(["pending", "mapped", "all"] as const).map((filter) => (
-            <button
-              type="button"
-              className={
-                statusFilter === filter
-                  ? "filter-chip filter-chip-active"
-                  : "filter-chip"
-              }
-              key={filter}
-              onClick={() => onStatusFilterChange(filter)}
-            >
-              {filter === "pending"
-                ? `Ellenorzendo (${pendingAliases.length})`
-                : filter === "mapped"
-                  ? `Jovahagyva (${mappedAliases.length})`
-                  : `Mind (${aliases.length})`}
-            </button>
-          ))}
-        </div>
-        <input
-          className="field-input pos-alias-search"
-          value={searchTerm}
-          placeholder="Kassza- vagy belso termek keresese"
-          onChange={(event) => onSearchTermChange(event.target.value)}
-        />
-      </div>
-
-      {focusedProductId ? (
-        <div className="pos-alias-focus-banner">
-          <span>
-            Katalogus fokusz: <strong>{focusedProduct?.name ?? focusedProductId}</strong>
-          </span>
-          <button type="button" className="secondary-button" onClick={onClearProductFocus}>
-            Fokusz torlese
-          </button>
-        </div>
-      ) : null}
-
-      {visiblePendingAliases.length > 0 ? (
-        <div className="pos-alias-bulk-toolbar">
-          <label className="checkbox-field">
-            <input
-              type="checkbox"
-              checked={allPendingSelected}
-              onChange={() =>
-                onToggleAllPending(visiblePendingAliases.map((alias) => alias.id))
-              }
-            />
-            <span>Minden ellenorzendo alias kijelolese</span>
-          </label>
-          <div className="pos-alias-bulk-summary">
-            <span>{selectedPendingAliases.length} kijelolve</span>
-            {selectedMissingProductCount > 0 ? (
-              <small>
-                {selectedMissingProductCount} sorhoz meg nincs belso termek
-              </small>
-            ) : null}
-          </div>
-          <button
-            type="button"
-            className="primary-button"
-            disabled={
-              selectedPendingAliases.length === 0 ||
-              selectedMissingProductCount > 0 ||
-              isBulkApproving
-            }
-            onClick={onApproveSelected}
-          >
-            {isBulkApproving
-              ? "Tomeges mentes..."
-              : `${selectedPendingAliases.length} mapping jovahagyasa`}
-          </button>
-        </div>
-      ) : null}
-
-      {isLoading ? <p className="info-message">POS mapping lista betoltese...</p> : null}
-
-      {!isLoading && aliases.length === 0 ? (
-        <p className="empty-message">Nincs POS termek alias a kivalasztott vallalkozasnal.</p>
-      ) : null}
-
-      {!isLoading && aliases.length > 0 && filteredAliases.length === 0 ? (
-        <p className="empty-message">
-          A jelenlegi mapping szurokkel nincs talalat.
-        </p>
-      ) : null}
-
-      {filteredAliases.length > 0 ? (
-        <div className="table-wrap">
-          <table className="data-table details-table">
-            <thead>
-              <tr>
-                <th>Kijeloles</th>
-                <th>Kassza termek</th>
-                <th>Forras</th>
-                <th>Allapot</th>
-                <th>Belso termek</th>
-                <th>Elofordulas</th>
-                <th>Muvelet</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredAliases.map((alias) => {
-                const selectedProductId =
-                  selectedProductIds[alias.id] ?? alias.product_id ?? "";
-                const selectedProduct = selectedProductId
-                  ? productById.get(selectedProductId)
-                  : undefined;
-
-                return (
-                  <tr
-                    key={alias.id}
-                    className={selectedAliasIdSet.has(alias.id) ? "selected-row" : undefined}
-                  >
-                    <td>
-                      <input
-                        type="checkbox"
-                        aria-label={`${alias.source_product_name} kijelolese`}
-                        checked={selectedAliasIdSet.has(alias.id)}
-                        disabled={alias.status === "mapped" || isBulkApproving}
-                        onChange={() => onToggleAlias(alias.id)}
-                      />
-                    </td>
-                    <td>
-                      <strong>{alias.source_product_name}</strong>
-                      <div className="metric-stack">
-                        <span>{alias.source_product_key}</span>
-                        {alias.source_sku ? <span>SKU: {alias.source_sku}</span> : null}
-                      </div>
-                    </td>
-                    <td>{alias.source_system}</td>
-                    <td>
-                      <span className={`status-badge status-${alias.status}`}>
-                        {formatAliasStatus(alias.status)}
-                      </span>
-                    </td>
-                    <td>
-                      <select
-                        className="field-input"
-                        value={selectedProductId}
-                        disabled={isBulkApproving}
-                        onChange={(event) =>
-                          onSelectProduct(alias.id, event.target.value)
-                        }
-                      >
-                        <option value="">Valassz termeket</option>
-                        {products.map((product) => (
-                          <option key={product.id} value={product.id}>
-                            {product.name}
-                            {product.sku ? ` (${product.sku})` : ""}
-                          </option>
-                        ))}
-                      </select>
-                      {selectedProduct ? (
-                        <small>
-                          {selectedProduct.product_type} ·{" "}
-                          <Link
-                            to={`${routes.catalogProducts}?${new URLSearchParams({
-                              business_unit_id: businessUnitId,
-                              product_id: selectedProduct.id,
-                              search: selectedProduct.name,
-                            }).toString()}`}
-                          >
-                            Megnyitas a katalogusban
-                          </Link>
-                        </small>
-                      ) : null}
-                    </td>
-                    <td>
-                      <div className="metric-stack">
-                        <span>{alias.occurrence_count} sor</span>
-                        <span>
-                          {alias.last_seen_at ? formatDateTime(alias.last_seen_at) : "-"}
-                        </span>
-                      </div>
-                    </td>
-                    <td>
-                      <div className="pos-alias-row-actions">
-                        {alias.status !== "mapped" && !selectedProductId ? (
-                          <button
-                            type="button"
-                            className="secondary-button"
-                            disabled={isBulkApproving}
-                            onClick={() => onStartCreateProduct(alias)}
-                          >
-                            Új termék
-                          </button>
-                        ) : null}
-                        <button
-                          type="button"
-                          className="secondary-button"
-                          disabled={
-                            !selectedProductId ||
-                            approvingAliasId === alias.id ||
-                            isBulkApproving
-                          }
-                          onClick={() => onApprove(alias.id)}
-                        >
-                          {approvingAliasId === alias.id
-                            ? "Mentes..."
-                            : alias.status === "mapped"
-                              ? "Frissites"
-                              : "Jovahagyas"}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      ) : null}
-    </section>
-  );
-}
-
-function PosMissingRecipePanel({
-  items,
-  isLoading,
-}: {
-  items: PosMissingRecipeProduct[];
-  isLoading: boolean;
-}) {
-  const sortedItems = [...items].sort((left, right) => {
-    if (right.occurrence_count !== left.occurrence_count) {
-      return right.occurrence_count - left.occurrence_count;
-    }
-    return (right.last_seen_at ?? "").localeCompare(left.last_seen_at ?? "");
-  });
-  const maximumOccurrenceCount = sortedItems[0]?.occurrence_count ?? 0;
-
-  function getPriority(item: PosMissingRecipeProduct) {
-    if (
-      maximumOccurrenceCount > 0 &&
-      item.occurrence_count >= maximumOccurrenceCount * 0.5
-    ) {
-      return { label: "Magas", className: "status-pill status-pill-danger" };
-    }
-    if (
-      maximumOccurrenceCount > 0 &&
-      item.occurrence_count >= maximumOccurrenceCount * 0.2
-    ) {
-      return { label: "Közepes", className: "status-pill status-pill-warning" };
-    }
-    return { label: "Normál", className: "status-pill" };
-  }
-
-  return (
-    <section className="panel">
-      <div className="panel-header">
-        <h2>POS recept munkalista</h2>
-        <span className="panel-count">
-          {items.length > 0 ? `${items.length} recept hianyzik` : "Receptfedettseg"}
-        </span>
-      </div>
-
-      {isLoading ? <p className="info-message">Recept munkalista betoltese...</p> : null}
-
-      {!isLoading && items.length === 0 ? (
-        <p className="empty-message">
-          Nincs POS-bol erkezett aktiv termek recept hiany jelzessel.
-        </p>
-      ) : null}
-
-      {items.length > 0 ? (
-        <div className="table-wrap">
-          <table className="data-table details-table">
-            <thead>
-              <tr>
-                <th>Termek</th>
-                <th>Kategoria</th>
-                <th>Aktualis ar</th>
-                <th>POS forras</th>
-                <th>Eladasi jelzes</th>
-                <th>Prioritas</th>
-                <th>Utoljara latva</th>
-                <th>Muvelet</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sortedItems.map((item) => {
-                const priority = getPriority(item);
-                return (
-                <tr key={item.product_id}>
-                  <td>
-                    <strong>{item.product_name}</strong>
-                    <div className="metric-stack">
-                      <span>{item.product_type}</span>
-                      {item.latest_source_product_name &&
-                      item.latest_source_product_name !== item.product_name ? (
-                        <span>POS nev: {item.latest_source_product_name}</span>
-                      ) : null}
-                    </div>
-                  </td>
-                  <td>{item.category_name ?? "-"}</td>
-                  <td>
-                    <div className="metric-stack">
-                      <span>{formatMoney(item.sale_price_gross)}</span>
-                      <span>{item.sale_price_source ?? "-"}</span>
-                    </div>
-                  </td>
-                  <td>
-                    <div className="metric-stack">
-                      <span>{item.latest_source_system ?? "-"}</span>
-                      <span>{item.alias_count} alias</span>
-                    </div>
-                  </td>
-                  <td>{item.occurrence_count} sor</td>
-                  <td>
-                    <span className={priority.className}>{priority.label}</span>
-                  </td>
-                  <td>{item.last_seen_at ? formatDateTime(item.last_seen_at) : "-"}</td>
-                  <td>
-                    <Link
-                      className="secondary-button"
-                      to={`${routes.productionRecipes}?${new URLSearchParams({
-                        business_unit_id: item.business_unit_id,
-                        product_id: item.product_id,
-                        search: item.product_name,
-                        edit: "1",
-                        from: "imports",
-                      }).toString()}`}
-                    >
-                      Recept létrehozása
-                    </Link>
-                  </td>
-                </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      ) : null}
-    </section>
-  );
-}
+import type { ImportBatch } from "../types/imports";
 
 export function ImportCenterPage() {
   const { setControls } = useTopbarControls();
@@ -1220,20 +85,15 @@ export function ImportCenterPage() {
   const [catalogCategories, setCatalogCategories] = useState<Category[]>([]);
   const [unitsOfMeasure, setUnitsOfMeasure] = useState<UnitOfMeasure[]>([]);
   const [vatRates, setVatRates] = useState<VatRate[]>([]);
-  const [posMappingReadiness, setPosMappingReadiness] =
-    useState<PosMappingReadiness | null>(null);
-  const [posMissingRecipeProducts, setPosMissingRecipeProducts] = useState<
-    PosMissingRecipeProduct[]
-  >([]);
+  const [posMappingReadiness, setPosMappingReadiness] = useState<PosMappingReadiness | null>(null);
+  const [posMissingRecipeProducts, setPosMissingRecipeProducts] = useState<PosMissingRecipeProduct[]>([]);
   const [posAliasSelections, setPosAliasSelections] = useState<Record<string, string>>({});
   const [selectedPosAliasIds, setSelectedPosAliasIds] = useState<string[]>([]);
   const [isLoadingPosAliases, setIsLoadingPosAliases] = useState(false);
   const [approvingAliasId, setApprovingAliasId] = useState("");
   const [isBulkApprovingAliases, setIsBulkApprovingAliases] = useState(false);
-  const [quickCreateAlias, setQuickCreateAlias] =
-    useState<PosProductAlias | null>(null);
-  const [quickProductForm, setQuickProductForm] =
-    useState<QuickProductForm | null>(null);
+  const [quickCreateAlias, setQuickCreateAlias] = useState<PosProductAlias | null>(null);
+  const [quickProductForm, setQuickProductForm] = useState<QuickProductForm | null>(null);
   const [isCreatingQuickProduct, setIsCreatingQuickProduct] = useState(false);
   const [posAliasError, setPosAliasError] = useState("");
   const [posAliasSuccess, setPosAliasSuccess] = useState("");
@@ -1248,9 +108,7 @@ export function ImportCenterPage() {
   const mappingSearchTerm = searchParams.get("mapping_search") ?? "";
   const focusedProductId = searchParams.get("product_id") ?? "";
   const summary = summarizeBatches(batches);
-  const isGourmandImport = ["gourmand_pos_sales", "flow_pos_sales"].includes(
-    selectedImportType,
-  );
+  const isGourmandImport = ["gourmand_pos_sales", "flow_pos_sales"].includes(selectedImportType);
   const isGourmandPackageReady = !isGourmandImport || hasReadyGourmandPackage(selectedFiles);
   const hasSelectedFiles = selectedFiles.length > 0;
 
@@ -1308,18 +166,13 @@ export function ImportCenterPage() {
     );
 
     return () => setControls(null);
-  }, [
-    businessUnits,
-    selectedBusinessUnitId,
-    setControls,
-  ]);
+  }, [businessUnits, selectedBusinessUnitId, setControls]);
 
   useEffect(() => {
     const selectedUnit = businessUnits.find((unit) => unit.id === selectedBusinessUnitId);
-    const nextImportType =
-      selectedUnit?.code.toLocaleLowerCase("hu-HU").includes("flow")
-        ? "flow_pos_sales"
-        : "gourmand_pos_sales";
+    const nextImportType = selectedUnit?.code.toLocaleLowerCase("hu-HU").includes("flow")
+      ? "flow_pos_sales"
+      : "gourmand_pos_sales";
 
     if (importTypes.includes(nextImportType) && selectedImportType !== nextImportType) {
       setSelectedImportType(nextImportType);
@@ -1391,9 +244,7 @@ export function ImportCenterPage() {
       });
       setSelectedPosAliasIds((current) => {
         const pendingAliasIds = new Set(
-          aliases
-            .filter((alias) => alias.status !== "mapped")
-            .map((alias) => alias.id),
+          aliases.filter((alias) => alias.status !== "mapped").map((alias) => alias.id),
         );
         return current.filter((aliasId) => pendingAliasIds.has(aliasId));
       });
@@ -1420,9 +271,7 @@ export function ImportCenterPage() {
     setPosAliasError("");
     setPosAliasSuccess("");
     try {
-      await approvePosProductAliasMapping(aliasId, {
-        product_id: productId,
-      });
+      await approvePosProductAliasMapping(aliasId, { product_id: productId });
       await refreshPosAliasReview();
       setPosAliasSuccess("POS termek mapping jovahagyva.");
     } catch (error) {
@@ -1447,12 +296,7 @@ export function ImportCenterPage() {
   }
 
   async function createProductAndApproveAlias() {
-    if (
-      !quickCreateAlias ||
-      !quickProductForm ||
-      !selectedBusinessUnitId ||
-      !quickProductForm.name.trim()
-    ) {
+    if (!quickCreateAlias || !quickProductForm || !selectedBusinessUnitId || !quickProductForm.name.trim()) {
       return;
     }
 
@@ -1500,14 +344,12 @@ export function ImportCenterPage() {
       }));
 
       try {
-        await approvePosProductAliasMapping(quickCreateAlias.id, {
-          product_id: product.id,
-        });
+        await approvePosProductAliasMapping(quickCreateAlias.id, { product_id: product.id });
       } catch (error) {
         setPosAliasError(
           error instanceof Error
-            ? `A termék létrejött, de a mapping jóváhagyása sikertelen: ${error.message}`
-            : "A termék létrejött, de a mapping jóváhagyása sikertelen.",
+            ? `A termek letrejott, de a mapping jovahagyasa sikertelen: ${error.message}`
+            : "A termek letrejott, de a mapping jovahagyasa sikertelen.",
         );
         setQuickCreateAlias(null);
         setQuickProductForm(null);
@@ -1517,12 +359,10 @@ export function ImportCenterPage() {
       setQuickCreateAlias(null);
       setQuickProductForm(null);
       await refreshPosAliasReview();
-      setPosAliasSuccess("A belső termék létrejött és a POS mapping jóváhagyva.");
+      setPosAliasSuccess("A belso termek letrejott es a POS mapping jovahagyva.");
     } catch (error) {
       setPosAliasError(
-        error instanceof Error
-          ? error.message
-          : "Nem sikerült létrehozni a belső terméket.",
+        error instanceof Error ? error.message : "Nem sikerult letrehozni a belso termeket.",
       );
     } finally {
       setIsCreatingQuickProduct(false);
@@ -1554,19 +394,14 @@ export function ImportCenterPage() {
   async function approveSelectedAliases() {
     const selectedAliasIdSet = new Set(selectedPosAliasIds);
     const mappings = posAliases
-      .filter(
-        (alias) =>
-          alias.status !== "mapped" && selectedAliasIdSet.has(alias.id),
-      )
+      .filter((alias) => alias.status !== "mapped" && selectedAliasIdSet.has(alias.id))
       .map((alias) => ({
         alias_id: alias.id,
         product_id: posAliasSelections[alias.id] ?? alias.product_id ?? "",
       }));
 
     if (mappings.length === 0 || mappings.some((mapping) => !mapping.product_id)) {
-      setPosAliasError(
-        "Minden kijelolt POS aliashoz valassz belso termeket.",
-      );
+      setPosAliasError("Minden kijelolt POS aliashoz valassz belso termeket.");
       return;
     }
 
@@ -1577,9 +412,7 @@ export function ImportCenterPage() {
       const result = await bulkApprovePosProductAliasMappings({ mappings });
       setSelectedPosAliasIds([]);
       await refreshPosAliasReview();
-      setPosAliasSuccess(
-        `${result.updated_count} POS termek mapping jovahagyva.`,
-      );
+      setPosAliasSuccess(`${result.updated_count} POS termek mapping jovahagyva.`);
     } catch (error) {
       setPosAliasError(
         error instanceof Error
@@ -1599,11 +432,7 @@ export function ImportCenterPage() {
   }
 
   function clearFileInputs() {
-    for (const inputRef of [
-      genericFileInputRef,
-      summaryFileInputRef,
-      detailFilesInputRef,
-    ]) {
+    for (const inputRef of [genericFileInputRef, summaryFileInputRef, detailFilesInputRef]) {
       if (inputRef.current) {
         inputRef.current.value = "";
       }
@@ -1707,17 +536,16 @@ export function ImportCenterPage() {
           </strong>
         </article>
         <article className="finance-summary-card">
-          <span>Hibák</span>
+          <span>Hibak</span>
           <strong>{summary.errorRows}</strong>
         </article>
       </div>
 
       {posAliasError ? <p className="error-message">{posAliasError}</p> : null}
       {posAliasSuccess ? <p className="success-message">{posAliasSuccess}</p> : null}
-      <PosMappingReadinessPanel
-        readiness={posMappingReadiness}
-        isLoading={isLoadingPosAliases}
-      />
+
+      <PosMappingReadinessPanel readiness={posMappingReadiness} isLoading={isLoadingPosAliases} />
+
       {quickCreateAlias && quickProductForm ? (
         <PosQuickProductCreatePanel
           alias={quickCreateAlias}
@@ -1731,6 +559,7 @@ export function ImportCenterPage() {
           onSubmit={() => void createProductAndApproveAlias()}
         />
       ) : null}
+
       <PosAliasReviewPanel
         aliases={posAliases}
         products={posAliasProducts}
@@ -1755,387 +584,63 @@ export function ImportCenterPage() {
         onApprove={(aliasId) => void approveAlias(aliasId)}
         onApproveSelected={() => void approveSelectedAliases()}
       />
-      <PosMissingRecipePanel
-        items={posMissingRecipeProducts}
-        isLoading={isLoadingPosAliases}
+
+      <PosMissingRecipePanel items={posMissingRecipeProducts} isLoading={isLoadingPosAliases} />
+
+      <ImportUploadPanel
+        waitingBatches={summary.waitingBatches}
+        isGourmandImport={isGourmandImport}
+        isUploading={isUploading}
+        selectedFiles={selectedFiles}
+        summaryFile={summaryFile}
+        detailFiles={detailFiles}
+        genericFileInputRef={genericFileInputRef}
+        summaryFileInputRef={summaryFileInputRef}
+        detailFilesInputRef={detailFilesInputRef}
+        hasSelectedFiles={hasSelectedFiles}
+        isGourmandPackageReady={isGourmandPackageReady}
+        onRefreshGenericFileSelection={() => void refreshGenericFileSelection()}
+        onRefreshSummaryFileSelection={() => void refreshSummaryFileSelection()}
+        onAppendDetailFileSelection={() => void appendDetailFileSelection()}
+        onSubmit={handleSubmit}
       />
 
-      <div className="panel">
-        <div className="panel-header">
-          <h2>Fájl feltöltése</h2>
-          <span className="panel-count">
-            {summary.waitingBatches > 0
-              ? `${summary.waitingBatches} feldolgozásra vár`
-              : "Import"}
-          </span>
-        </div>
-
-        {isGourmandImport ? <GourmandImportGuide selectedFiles={selectedFiles} /> : null}
-
-        <form className={isGourmandImport ? "form-grid import-upload-form" : "form-grid"} onSubmit={handleSubmit}>
-          {isGourmandImport ? (
-            <>
-              <label className={summaryFile ? "field import-upload-zone import-upload-zone-ready" : "field import-upload-zone"}>
-                <span>Összesítő CSV</span>
-                <strong>Kategóriák és termékárak</strong>
-                <small>Egy fájl, az adott időszak összesített lekérdezése.</small>
-                <input
-                  ref={summaryFileInputRef}
-                  type="file"
-                  className="field-input"
-                  accept=".csv,.txt"
-                  onChange={() => void refreshSummaryFileSelection()}
-                />
-                <em>{summaryFile ? summaryFile.name : "Nincs kiválasztott összesítő"}</em>
-              </label>
-              <label className={detailFiles.length > 0 ? "field import-upload-zone import-upload-zone-ready" : "field import-upload-zone"}>
-                <span>Tételes CSV-k</span>
-                <strong>Nyugták és időpontok</strong>
-                <small>Több heti tételes fájl is feltölthető ugyanahhoz az összesítőhöz.</small>
-                <input
-                  ref={detailFilesInputRef}
-                  type="file"
-                  className="field-input"
-                  accept=".csv,.txt"
-                  multiple
-                  onChange={() => void appendDetailFileSelection()}
-                />
-                <em>
-                  {detailFiles.length > 0
-                    ? `${detailFiles.length} tételes fájl kiválasztva`
-                    : "Nincs kiválasztott tételes fájl"}
-                </em>
-              </label>
-            </>
-          ) : (
-            <label className="field">
-              <span>Fájl</span>
-              <input
-                ref={genericFileInputRef}
-                type="file"
-                className="field-input"
-                accept=".csv,.xlsx,.xls,.txt"
-                onChange={() => void refreshGenericFileSelection()}
-              />
-            </label>
-          )}
-
-          <SelectedFilesPreview files={selectedFiles} isGourmandImport={isGourmandImport} />
-
-          <div className="form-actions">
-            <button
-              type="submit"
-              className="primary-button"
-              disabled={isUploading || !hasSelectedFiles || !isGourmandPackageReady}
-            >
-              {isUploading
-                ? "Feltöltés..."
-                : isGourmandImport
-                  ? "POS CSV csomag feltöltése"
-                  : "Fájl feltöltése"}
-            </button>
-          </div>
-        </form>
-      </div>
-
       <section className="panel">
-        <div className="panel-header">
-          <h2>Import csomagok</h2>
-          <span className="panel-count">{batches.length}</span>
-        </div>
+        <ImportBatchCardsSection
+          batches={batches}
+          isLoading={isLoading}
+          parsingBatchId={parsingBatchId}
+          mappingBatchId={mappingBatchId}
+          weatherBackfillBatchId={weatherBackfillBatchId}
+          registeredBatchIds={registeredBatchIds}
+          expandedBatchIds={expandedBatchIds}
+          detailsByBatchId={detailsByBatchId}
+          weatherByBatchId={weatherByBatchId}
+          detailLoadingByBatchId={detailLoadingByBatchId}
+          detailErrorByBatchId={detailErrorByBatchId}
+          onRegisterBatch={(batch) => void registerBatch(batch)}
+          onToggleBatchDetails={(batchId) => void toggleBatchDetails(batchId)}
+          onMapBatch={(batchId) => void mapBatch(batchId)}
+          onPrepareWeatherForBatch={(batchId) => void prepareWeatherForBatch(batchId)}
+        />
 
-        {isLoading ? <p className="info-message">Import csomagok betöltése...</p> : null}
-
-        {!isLoading && batches.length === 0 ? (
-          <p className="empty-message">Nincs import csomag a kiválasztott szűrőkkel.</p>
-        ) : null}
-
-        {batches.length > 0 ? (
-          <div className="import-batch-card-list">
-            {batches.map((batch) => {
-              const totalSize = batch.files.reduce((sum, file) => sum + file.size_bytes, 0);
-              const isUploaded = batch.status === "uploaded";
-              const isParsed = batch.status === "parsed";
-              const canMapToFinance = [
-                "pos_sales",
-                "gourmand_pos_sales",
-                "flow_pos_sales",
-              ].includes(batch.import_type);
-              const isParsing = parsingBatchId === batch.id;
-              const isMapping = mappingBatchId === batch.id;
-              const isExpanded = expandedBatchIds[batch.id] ?? false;
-              const isDetailsLoading = detailLoadingByBatchId[batch.id] ?? false;
-              const details = detailsByBatchId[batch.id];
-              const detailsError = detailErrorByBatchId[batch.id];
-
-              return (
-                <article
-                  className={isExpanded ? "import-batch-card import-batch-card-open" : "import-batch-card"}
-                  key={batch.id}
-                  onClick={() => void toggleBatchDetails(batch.id)}
-                >
-                  <div className="import-batch-card-main">
-                    <div className="import-batch-card-title">
-                      <span className={`status-badge status-${batch.status}`}>
-                        {getImportBatchStatusText(batch)}
-                      </span>
-                      <div>
-                        <strong>{summarizeFiles(batch)}</strong>
-                        <small>{formatImportPeriod(batch)} · {formatBytes(totalSize)}</small>
-                      </div>
-                    </div>
-
-                    <div className="import-batch-card-metrics">
-                      <span>
-                        <strong>{batch.files.length}</strong>
-                        Fájl
-                      </span>
-                      <span>
-                        <strong>{batch.parsed_rows}/{batch.total_rows}</strong>
-                        Feldolgozva
-                      </span>
-                      <span>
-                        <strong>{batch.error_rows}</strong>
-                        Hiba
-                      </span>
-                    </div>
-
-                    <button
-                      type="button"
-                      className="primary-button import-register-button"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        void registerBatch(batch);
-                      }}
-                      disabled={
-                        registeredBatchIds[batch.id] ||
-                        (!isUploaded && !isParsed) ||
-                        !canMapToFinance ||
-                        isParsing ||
-                        isMapping
-                      }
-                    >
-                      {isParsing || isMapping
-                        ? "Rögzítés..."
-                        : registeredBatchIds[batch.id]
-                          ? "Rögzítés..."
-                          : "Rögzítés"}
-                    </button>
-                  </div>
-
-                  {isExpanded ? (
-                    <div className="import-batch-card-detail">
-                      <div className="selected-file-list">
-                        {batch.files.map((file) => (
-                          <span className="selected-file-chip" key={file.id}>
-                            {file.original_name}
-                          </span>
-                        ))}
-                      </div>
-
-                      {isDetailsLoading ? (
-                        <p className="info-message">Részletek betöltése...</p>
-                      ) : null}
-                      {!isDetailsLoading && detailsError ? (
-                        <p className="error-message">{detailsError}</p>
-                      ) : null}
-                      {!isDetailsLoading && !detailsError ? (
-                        <div className="import-batch-result-grid">
-                          <span>
-                            <strong>{details?.errors.length ?? 0}</strong>
-                            Feldolgozási hiba
-                          </span>
-                          <span>
-                            <strong>{details?.rows.length ?? 0}</strong>
-                            Előkészített sor
-                          </span>
-                          <span>
-                            <strong>{formatImportType(batch.import_type)}</strong>
-                            POS CSV import
-                          </span>
-                        </div>
-                      ) : null}
-
-                      {(details?.errors.length ?? 0) > 0 ? (
-                        <ErrorsPreview errors={(details?.errors ?? []).slice(0, 5)} />
-                      ) : null}
-                    </div>
-                  ) : null}
-                </article>
-              );
-            })}
-          </div>
-        ) : null}
-
-        {batches.length > 0 ? (
-          <div className="table-wrap import-batch-legacy-table">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Import típus</th>
-                  <th>Státusz</th>
-                  <th>Sorok</th>
-                  <th>Időszak</th>
-                  <th>Létrehozva</th>
-                  <th>Eredeti fájlnév</th>
-                  <th>Méret</th>
-                  <th>Művelet</th>
-                </tr>
-              </thead>
-              <tbody>
-                {batches.map((batch) => {
-                  const totalSize = batch.files.reduce((sum, file) => sum + file.size_bytes, 0);
-                  const isUploaded = batch.status === "uploaded";
-                  const isParsed = batch.status === "parsed";
-                  const canMapToFinance = [
-                    "pos_sales",
-                    "gourmand_pos_sales",
-                    "flow_pos_sales",
-                  ].includes(batch.import_type);
-                  const isParsing = parsingBatchId === batch.id;
-                  const isMapping = mappingBatchId === batch.id;
-                  const isPreparingWeather = weatherBackfillBatchId === batch.id;
-                  const isExpanded = expandedBatchIds[batch.id] ?? false;
-                  const isDetailsLoading = detailLoadingByBatchId[batch.id] ?? false;
-                  const details = detailsByBatchId[batch.id];
-                  const detailsError = detailErrorByBatchId[batch.id];
-
-                  return (
-                    <Fragment key={batch.id}>
-                      <tr
-                        className="import-batch-row"
-                        onClick={() => void toggleBatchDetails(batch.id)}
-                      >
-                        <td>{formatImportType(batch.import_type)}</td>
-                        <td>
-                          <span className={`status-badge status-${batch.status}`}>
-                            {formatImportStatus(batch.status)}
-                          </span>
-                        </td>
-                        <td>
-                          <div className="metric-stack">
-                            <span>Összes: {batch.total_rows}</span>
-                            <span>Feldolgozva: {batch.parsed_rows}</span>
-                            <span>Hibák: {batch.error_rows}</span>
-                          </div>
-                        </td>
-                        <td>{formatImportPeriod(batch)}</td>
-                        <td>{formatDateTime(batch.created_at)}</td>
-                        <td>{summarizeFiles(batch)}</td>
-                        <td>{totalSize ? formatBytes(totalSize) : "-"}</td>
-                        <td>
-                          <div className="inline-actions">
-                            <button
-                              type="button"
-                              className="secondary-button"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                void registerBatch(batch);
-                              }}
-                              disabled={
-                                registeredBatchIds[batch.id] ||
-                                (!isUploaded && !isParsed) ||
-                                !canMapToFinance ||
-                                isParsing ||
-                                isMapping
-                              }
-                            >
-                              {isParsing ? "Feldolgozás..." : "Feldolgozás"}
-                            </button>
-                            <button
-                              type="button"
-                              className="secondary-button"
-                              onClick={() => void mapBatch(batch.id)}
-                              disabled={!isParsed || !canMapToFinance || isMapping}
-                              title="A feldolgozott POS sorokból pénzügyi tranzakciókat rögzít. A már rögzített sorokat nem duplázza."
-                            >
-                              {isMapping ? "Rögzítés..." : "Pénzügyi rögzítés"}
-                            </button>
-                            <button
-                              type="button"
-                              className="secondary-button"
-                              onClick={() => void toggleBatchDetails(batch.id)}
-                            >
-                              {isExpanded ? "Részletek elrejtése" : "Részletek"}
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-
-                      {isExpanded ? (
-                        <tr className="details-row">
-                          <td colSpan={8}>
-                            <div className="details-grid">
-                              <section className="details-panel details-panel-wide">
-                                <div className="details-panel-header">
-                                  <h3>Áttekintés</h3>
-                                </div>
-                                <SummaryPreview batch={batch} />
-                              </section>
-
-                              <section className="details-panel details-panel-wide">
-                                <div className="details-panel-header">
-                                  <h3>Időjárás</h3>
-                                  <span className="panel-count">Időjárási adatok</span>
-                                </div>
-                                {isDetailsLoading ? (
-                                  <p className="info-message">Időjárás-előkészítés betöltése...</p>
-                                ) : null}
-                                {!isDetailsLoading && !detailsError ? (
-                                  <WeatherPreparationPanel
-                                    recommendation={weatherByBatchId[batch.id]}
-                                    isPreparing={isPreparingWeather}
-                                    onPrepare={() => void prepareWeatherForBatch(batch.id)}
-                                  />
-                                ) : null}
-                              </section>
-
-                              <section className="details-panel">
-                                <div className="details-panel-header">
-                                  <h3>Sorok</h3>
-                                  <span className="panel-count">
-                                    {details?.rows.length ?? 0}
-                                  </span>
-                                </div>
-                                {isDetailsLoading ? (
-                                  <p className="info-message">Részletek betöltése...</p>
-                                ) : null}
-                                {!isDetailsLoading && detailsError ? (
-                                  <p className="error-message">{detailsError}</p>
-                                ) : null}
-                                {!isDetailsLoading && !detailsError ? (
-                                  <RowsPreview rows={details?.rows ?? []} />
-                                ) : null}
-                              </section>
-
-                              <section className="details-panel">
-                                <div className="details-panel-header">
-                                  <h3>Hibák</h3>
-                                  <span className="panel-count">
-                                    {details?.errors.length ?? 0}
-                                  </span>
-                                </div>
-                                {isDetailsLoading ? (
-                                  <p className="info-message">Részletek betöltése...</p>
-                                ) : null}
-                                {!isDetailsLoading && detailsError ? (
-                                  <p className="error-message">{detailsError}</p>
-                                ) : null}
-                                {!isDetailsLoading && !detailsError ? (
-                                  <ErrorsPreview errors={details?.errors ?? []} />
-                                ) : null}
-                              </section>
-                            </div>
-                          </td>
-                        </tr>
-                      ) : null}
-                    </Fragment>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        ) : null}
+        <ImportBatchLegacyTable
+          batches={batches}
+          isLoading={isLoading}
+          parsingBatchId={parsingBatchId}
+          mappingBatchId={mappingBatchId}
+          weatherBackfillBatchId={weatherBackfillBatchId}
+          registeredBatchIds={registeredBatchIds}
+          expandedBatchIds={expandedBatchIds}
+          detailsByBatchId={detailsByBatchId}
+          weatherByBatchId={weatherByBatchId}
+          detailLoadingByBatchId={detailLoadingByBatchId}
+          detailErrorByBatchId={detailErrorByBatchId}
+          onRegisterBatch={(batch) => void registerBatch(batch)}
+          onToggleBatchDetails={(batchId) => void toggleBatchDetails(batchId)}
+          onMapBatch={(batchId) => void mapBatch(batchId)}
+          onPrepareWeatherForBatch={(batchId) => void prepareWeatherForBatch(batchId)}
+        />
       </section>
     </section>
   );

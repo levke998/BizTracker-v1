@@ -224,6 +224,42 @@ Az elso POS ingestion boundary szelet kesz:
   hasznalja;
 - a presentation reteg csak request/response es HTTP hibaforditast vegez.
 
+Az analytics refaktor elso, viselkedestarto szelete is elindult:
+
+- a POS termekazonosito-normalizalas, AFA-kulcs feloldas, derived AFA-szamitas,
+  coverage source es margin readiness szabalyok kikerultek a nagy SQLAlchemy
+  repositorybol;
+- ezek adatbazis-fuggetlen, kulon unit tesztelt helper modulban vannak;
+- a POS revenue trend, kategoria/fizetesi mod/termek bontas, termek margin,
+  source-row drill-down, atlagkosar, kosarertek-eloszlas, termekpar es nyugta
+  drill-down kulon `PosSalesAnalyticsBuilder` komponensbe kerult;
+- a builder mar betoltott sorokbol epit read-modelt, nem ismeri a sessiont es
+  nem vegez perzisztencia-muveletet;
+- az expense bontas, reszletes kiadaslista, supplier invoice AFA-osszesites es
+  szamla/szamlasor forras drill-down kulon `ExpenseAnalyticsReader`
+  infrastructure query komponensbe kerult;
+- a historikus weather-category, homersekleti sav es idojarasi allapot
+  aggregaciok, valamint a shared observation query kulon
+  `WeatherAnalyticsReader` komponensbe kerultek;
+- az orakerekitessel, homersekleti savval, csapadekkal es weather condition
+  savval kapcsolatos szabalyok kozos weather helperkent a forecast baseline-ok
+  szamara is ugyanazt az igazsagot adjak;
+- a forecast refaktor elso zart alegysegeben a shared forecast cache query,
+  napi/idősavos aggregacio, event idoszak-lefedettseg, forecast csapadek es
+  condition osztalyozas kulon `ForecastAnalyticsReader` komponensbe kerult;
+- az impact/kategoria/termek/csucsidő modellek baseline-atlagolasa, dominans
+  cimke, demand signal kuszobei es uzleti ajanlasai adatbazis-fuggetlen,
+  kulon unit tesztelt `forecast_demand_rules` modulban vannak;
+- a negy keresletmodell historikus weather/POS baseline epítese, forecast
+  baseline-valasztasa, rangsorolasa es read-model orchestrationje kulon
+  `ForecastDemandAnalyticsBuilder` komponensbe kerult;
+- a production preparation readiness es a Flow event forecast lekerdezes,
+  idosav-lefedettseg, kockazati szint, fokusz es ajanlas kulon
+  `ForecastOperationsAnalyticsReader` komponensben van;
+- a nagy repository a scope/idoszak feloldast es a komponensek osszehangolasat
+  tartja meg. A forecast felelosseg levallasztasa lezart; a kovetkezo backend
+  szelet a traffic/category trend es product/stock risk komponensek rendezese.
+
 ## Migration es DB
 
 Alembic revisionok a `backend/migrations/versions` alatt vannak. A DB allapotot kodolasi munka elott ellenorizni kell, ha schema valtozas erintett.
@@ -243,4 +279,4 @@ Integration teszt kell minden olyan szeletre, amely:
 - dashboard read-modelt valtoztat
 - event performance vagy procurement posting viselkedest modosit
 
-Legutobb dokumentalt backend integration allapot: `94 passed`.
+Legutobb dokumentalt backend integration allapot: `157 passed`.
