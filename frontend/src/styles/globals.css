@@ -7878,6 +7878,26 @@ select option:checked {
   white-space: nowrap;
 }
 
+.dashboard-statistics-quality {
+  border-color: rgba(124, 58, 237, 0.28);
+  background:
+    radial-gradient(circle at top left, rgba(124, 58, 237, 0.16), transparent 34%),
+    var(--surface);
+}
+
+.dashboard-statistics-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.dashboard-statistics-grid .metric-stack {
+  padding: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.45);
+}
+
 .dashboard-card-pair {
   display: grid;
   gap: 14px;
@@ -8220,6 +8240,47 @@ select option:checked {
   justify-content: space-between;
   margin-bottom: 16px;
   padding: 12px 14px;
+}
+
+.action-target-focus-banner {
+  align-items: center;
+  background: rgba(56, 189, 248, 0.08);
+  border: 1px solid rgba(56, 189, 248, 0.24);
+  border-radius: 12px;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  padding: 12px 14px;
+}
+
+.action-target-focus-banner div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.action-target-focus-banner span {
+  color: var(--text-secondary);
+}
+
+.action-target-focused-card {
+  border-color: rgba(56, 189, 248, 0.46);
+  box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.16);
+}
+
+.action-target-focused-input {
+  border-color: rgba(56, 189, 248, 0.76);
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.14);
+}
+
+.action-target-focused-row td:first-child {
+  border-left: 3px solid rgba(56, 189, 248, 0.76);
+}
+
+.action-suggestion-focused-row td:first-child {
+  border-left: 3px solid rgba(56, 189, 248, 0.76);
+  font-weight: 800;
 }
 
 .pos-alias-bulk-toolbar {

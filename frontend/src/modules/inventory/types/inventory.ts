@@ -165,6 +165,56 @@ export type InventoryVariancePeriodComparisonFilters = {
   worsening_percent_threshold?: string;
 };
 
+export type InventoryVarianceActionSuggestion = {
+  id: string;
+  scope: string;
+  action_type: string;
+  severity: "critical" | "high" | "medium" | "low" | "info";
+  priority_score: number;
+  title: string;
+  rationale: string;
+  recommended_action: string;
+  inventory_item_id: string | null;
+  inventory_item_name: string | null;
+  reason_code: string | null;
+  estimated_impact_value: string | null;
+  action_target_type:
+    | "catalog_ingredients"
+    | "production_recipes"
+    | "imports"
+    | "procurement_invoices"
+    | "inventory_theoretical_stock"
+    | null;
+  action_target_label: string | null;
+  action_target_params: Record<string, string>;
+  review_status: "open" | "resolved";
+  review_note: string | null;
+  reviewed_at: string | null;
+};
+
+export type InventoryVarianceActionSuggestionFilters = {
+  business_unit_id?: string;
+  days?: number;
+  limit?: number;
+};
+
+export type InventoryVarianceActionReviewUpdatePayload = {
+  business_unit_id: string;
+  status: "open" | "resolved";
+  note?: string;
+};
+
+export type InventoryVarianceActionReview = {
+  id: string;
+  business_unit_id: string;
+  suggestion_id: string;
+  status: "open" | "resolved";
+  note: string | null;
+  resolved_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type InventoryVarianceThreshold = {
   id: string | null;
   business_unit_id: string;

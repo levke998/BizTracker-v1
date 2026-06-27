@@ -26,6 +26,9 @@ from app.modules.inventory.application.commands.update_inventory_item import (
 from app.modules.inventory.application.commands.upsert_variance_threshold import (
     UpsertInventoryVarianceThresholdCommand,
 )
+from app.modules.inventory.application.commands.upsert_variance_action_review import (
+    UpsertInventoryVarianceActionReviewCommand,
+)
 from app.modules.inventory.application.queries.list_inventory_items import (
     ListInventoryItemsQuery,
 )
@@ -46,6 +49,9 @@ from app.modules.inventory.application.queries.list_stock_levels import (
 )
 from app.modules.inventory.application.queries.list_theoretical_stock import (
     ListInventoryTheoreticalStockQuery,
+)
+from app.modules.inventory.application.queries.list_variance_action_suggestions import (
+    ListInventoryVarianceActionSuggestionsQuery,
 )
 from app.modules.inventory.application.queries.list_variance_reason_summary import (
     ListInventoryVarianceReasonSummaryQuery,
@@ -115,6 +121,15 @@ def get_list_inventory_variance_reason_summary_query(
     return ListInventoryVarianceReasonSummaryQuery(repository=repository)
 
 
+def get_list_inventory_variance_action_suggestions_query(
+    session: DbSession,
+) -> ListInventoryVarianceActionSuggestionsQuery:
+    """Wire the variance action suggestion query to its repository."""
+
+    repository = SqlAlchemyInventoryItemRepository(session)
+    return ListInventoryVarianceActionSuggestionsQuery(repository=repository)
+
+
 def get_list_inventory_variance_trend_query(
     session: DbSession,
 ) -> ListInventoryVarianceTrendQuery:
@@ -160,6 +175,15 @@ def get_upsert_inventory_variance_threshold_command(
     return UpsertInventoryVarianceThresholdCommand(repository=repository)
 
 
+def get_upsert_inventory_variance_action_review_command(
+    session: DbSession,
+) -> UpsertInventoryVarianceActionReviewCommand:
+    """Wire the variance action review upsert command to its repository."""
+
+    repository = SqlAlchemyInventoryItemRepository(session)
+    return UpsertInventoryVarianceActionReviewCommand(repository=repository)
+
+
 def get_create_inventory_item_command(session: DbSession) -> CreateInventoryItemCommand:
     """Wire the inventory create command to its repository."""
 
@@ -174,7 +198,9 @@ def get_update_inventory_item_command(session: DbSession) -> UpdateInventoryItem
     return UpdateInventoryItemCommand(repository=repository)
 
 
-def get_archive_inventory_item_command(session: DbSession) -> ArchiveInventoryItemCommand:
+def get_archive_inventory_item_command(
+    session: DbSession,
+) -> ArchiveInventoryItemCommand:
     """Wire the inventory archive command to its repository."""
 
     repository = SqlAlchemyInventoryItemRepository(session)

@@ -1,5 +1,8 @@
 import { apiDelete, apiGet, apiPost, apiPostJson, apiPutJson } from "../../../services/api/client";
 import type {
+  EventAnalyticsSummary,
+  EventCostLine,
+  EventCostLinePayload,
   EventFilters,
   EventPayload,
   EventPerformance,
@@ -15,6 +18,10 @@ export function listEvents(filters: EventFilters) {
 
 export function listEventPerformances(filters: EventFilters) {
   return apiGet<EventPerformance[]>("events/performance", filters);
+}
+
+export function getEventAnalyticsSummary(filters: EventFilters) {
+  return apiGet<EventAnalyticsSummary>("events/analytics-summary", filters);
 }
 
 export function createEvent(payload: EventPayload) {
@@ -35,6 +42,17 @@ export function getEventPerformance(eventId: string) {
 
 export function getEventTicketActual(eventId: string) {
   return apiGet<EventTicketActual | null>(`events/${eventId}/ticket-actual`);
+}
+
+export function listEventCostLines(eventId: string) {
+  return apiGet<EventCostLine[]>(`events/${eventId}/cost-lines`);
+}
+
+export function replaceEventCostLines(eventId: string, costLines: EventCostLinePayload[]) {
+  return apiPutJson<{ cost_lines: EventCostLinePayload[] }, EventCostLine[]>(
+    `events/${eventId}/cost-lines`,
+    { cost_lines: costLines },
+  );
 }
 
 export function upsertEventTicketActual(eventId: string, payload: EventTicketActualPayload) {

@@ -146,6 +146,8 @@ event letrehozas -> ticket actual rogzites/import -> Event elemzo performance
 
 Aktualis elso szelet:
 - `core.event_ticket_actual` tarolja az eventhez kapcsolt jegy actualt
+- `core.event.performer_settlement_type` tarolja, hogy a fellepo elszamolasa
+  `revenue_share`, `fixed_fee` vagy `hybrid`
 - `GET /api/v1/events/{event_id}/ticket-actual` visszaadja a rogzitett jegyadatot
 - `PUT /api/v1/events/{event_id}/ticket-actual` letrehozza vagy frissiti a jegy actualt
 - az Events feluleten a kinyitott eventnel van `Jegyadatok` panel
@@ -153,14 +155,32 @@ Aktualis elso szelet:
 - ticket actual platform dij az event performance profitban levonasra kerul `platform_fee_gross` mezokent
 - performance elszamolasi mezok: `ticket_revenue_source`, `settlement_status`, `operating_cost_gross`, `event_profit_lite`
 - dontestamogato performance mezok: `profit_status`, `event_profit_margin_percent`, `operating_cost_ratio_percent`, `ticket_revenue_share_percent`, `bar_revenue_share_percent`
+- performer elszamolasi performance mezok: `performer_settlement_type`,
+  `performer_share_amount`, `performer_fixed_fee_amount`,
+  `performer_total_compensation_gross`
+- `core.event_cost_line` tarolja az eventhez kapcsolt manualis/brutto
+  koltsegsorokat
+- `GET /api/v1/events/{event_id}/cost-lines` visszaadja az event
+  koltsegsorait
+- `PUT /api/v1/events/{event_id}/cost-lines` egy tranzakcioban csereli az
+  event koltsegsor listajat
+- az event performance `event_cost_lines_gross` mezoben mutatja a sorok
+  osszeget, es ezt beleszamitja az `operating_cost_gross` es
+  `event_profit_lite` mezokbe
+- az Events feluleten a kinyitott eventnel van `Event koltsegsorok` panel,
+  igy a backend kepesseg nem marad frontend nelkuli csonka funkcio
 
 Fontos:
 - event letrehozaskor a jegyadat nem kotelezo
 - POS CSV tovabbra is bar/fogyasztas actual
 - POS CSV-ben nem keresunk jegyet; nincs helyszini/POS jegyertekesites, ezert nincs POS-alapu jegybecsles
 - ticket actual lehet kezi rogzites, kesobb ticket CSV/API adapter
+- ticket import adapter jelenleg jegelve van: amig nincs konkret ticket export/API formatum, nem epitunk import-fuggo backend vagy frontend munkafolyamatot
 - AFA kulcs opcionalisan kapcsolhato a ticket actualhoz
 - Event elemzo frontend: ticket actual coverage, hianyzo ticket actual munkalista es eventenkenti ticket source/status jelzes ugyanebbol a read-modelbol dolgozik
+- Event elemzo frontend: az event szerkesztoben valaszthato a fellepo
+  elszamolasi modja; a reszletpanel es performance kartya ugyanazokat a
+  backend read-model mezoket jeleniti meg
 
 ## POS Recept Hiany Munkalista
 
@@ -359,8 +379,21 @@ Inventory korrekcio:
 - `inventory_variance_threshold` uzletenkent menti a `high_loss_value_threshold` es `worsening_percent_threshold` kuszobokat
 - a periodus-osszehasonlitas alapbol a mentett uzleti kuszobot hasznalja, request szintu kuszob csak explicit felulirasra marad
 - periodus dontesi statuszok: `stable`, `improving`, `watch`, `worsening`, `critical`, `missing_cost`; a valasz mindig tartalmaz kezelesi javaslatot
+- `GET /api/v1/inventory/variance-action-suggestions` a periodus statuszbol, top item anomaliakbol es ok-kod osszesitesbol priorizalt controlling akciokat ad
+- action suggestion mezok: `scope`, `action_type`, `severity`, `priority_score`, `title`, `rationale`, `recommended_action`, opcionalis `inventory_item_id`, `reason_code`, `estimated_impact_value`, `action_target_type`, `action_target_label` es `action_target_params`
+- `PUT /api/v1/inventory/variance-action-suggestions/{suggestion_id}/review` menti a generalt javaslat business-unit szintu `open/resolved` allapotat
+- `core.inventory_variance_action_review` egyedi kulcsa: `business_unit_id + suggestion_id`; ez nem importadat es nem leltar, hanem controlling munkalista state
+- a frontend Becsult/Teoretikus keszlet oldalan az Inventory akciojavaslatok panel fogyasztja ezt; nincs backend-only csonka kepesseg
+- a frontend `action_target_type` alapjan csak belso route-ot valaszt, az `action_target_params` alapjan query stringet epit; a javaslat celja, `action_suggestion_id` azonositoja es fokusza backend read-modelbol erkezik
+- a celoldali UI a fokuszparametert nem rejti el: bannerrel es kartya/sor kiemelessel jelzi, hogy akciojavaslatbol erkezett a felhasznalo, es ad visszautat/fokusz torlest, hogy a workflow ne ragadjon csonkan a celoldalon
+- `quick_action=complete_item_cost` eseten a frontend az alapanyag szerkesztot arpotlasra nyitja, az arat a katalogus update menti, majd a felhasznalo a meglovo review endpointtal lezarhatja a konkret action suggestiont
 - a frontend Becsult/Teoretikus keszlet oldala ezt Eltérés okok panelkent mutatja
 - ugyanott az Eltérés trend es veszteseg panel az utolso 30 napot es a legnagyobb vesztesegu keszletelemeket mutatja
+
+- `reason_code=recipe_error` es `quick_action=review_recipe_variance` eseten a frontend a Production/Receptek munkanezetet nyitja kontroll bannerrel; ez az ok-szintu jelzes nem feltetelez konkret termeket, ezert a lezaras felhasznaloi review utan tortenik, nem automatikus receptmentessel
+- `reason_code=mapping_error`, `quick_action=review_mapping_variance` es `mapping_status=pending` eseten a frontend az Import kozpont POS mapping review listajat nyitja kontroll bannerrel; a POS alias jovahagyas a pos-ingestion mapping endpointokon tortenik, az inventory review endpoint csak a controlling akcio allapotat zarja
+- `reason_code=missing_purchase_invoice` es `quick_action=review_missing_purchase_invoice` eseten a frontend a Procurement/Beszerzesi szamlak oldalt nyitja kontroll bannerrel; a PDF draft, manualis szamlarogzites, supplier alias mapping es posting a procurement workflow resze marad, az inventory review endpoint csak a controlling akcio allapotat zarja
+- `reason_code=waste|breakage|spoilage|theft_suspected` eseten a frontend a Becsult/Teoretikus keszlet oldalt nyitja fizikai kontroll bannerrel es okkod-fokuszos Eltérés okok tablaval; a lezaras a controlling akcio review allapotat zarja, nem a fizikai ok megszuneset allitja
 
 ## Teoretikus Keszlet Es Eltérés
 
@@ -369,6 +402,18 @@ A Gourmand keszlet nem fizikai, real-time raktarprogramkent mukodik, hanem contr
 - a POS eladas recept alapjan becsult alapanyag-fogyast general
 - selejt, tores, kiborulas, dolgozoi fogyasztas vagy lopas csak akkor latszik, ha fizikai szamolas/korrekcio vagy szokatlan variance jelzi
 - a rendszernek nem kell tudnia, melyik konkret szamlasorbol szarmazik a felhasznalt liszt
+
+## Dashboard 2.0 Statisztikai Alap
+
+Az elso statisztikai blokk nem kulon modulban jelenik meg, hanem a Business Dashboard read-model resze:
+
+- `GET /api/v1/analytics/dashboard` valaszban `statistics_quality` blokk jon
+- forras: idoszakba eso, mentett POS import sorok es nyugta/kosar azonosito
+- POS sorokbol es kosarakbol szamolt mezok: `pos_row_count`, `basket_count`, `active_sales_day_count`, `period_day_count`, `coverage_percent`
+- napi bevetel es kosarertek leiro statisztikak: atlag, median, P25, P75, P90, P95
+- `quality_level`: `strong`, `usable`, `limited`, `insufficient`; ez adatminosegi/readiness jelzes, nem modellpontossag
+- a frontend Dashboard 2.0 kartya ezt megjeleniti, nem szamolja ujra
+- forecast, weather es kesobbi ML reteg ezt a readiness/coverage jelzest hasznalhatja confidence es modellinditasi kapukent
 
 Keszlet ertek szabaly:
 - nincs FIFO retegzes az MVP-ben

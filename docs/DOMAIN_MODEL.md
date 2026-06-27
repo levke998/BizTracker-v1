@@ -92,9 +92,13 @@ Fontos objektumok:
 - `event_ticket_actual`: kulon ticket rendszerbol erkezo jegy darabszam, brutto/netto/AFA es platform dij actual
 - `ticket revenue`: `event_ticket_actual`, kesobb ticket CSV/API importbol; a Flow POS CSV nem tartalmaz jegyet es nincs POS-alapu jegybecsles
 - `bar revenue`: POS/CSV sales actual
-- `performer share`: konfiguralt szazalek vagy kesobb szabaly
-- `fixed fee`: fix fellepti dij
-- `event cost`: eventhez kapcsolt koltseg
+- `performer_settlement_type`: `revenue_share`, `fixed_fee` vagy `hybrid`
+- `performer share`: konfiguralt szazalek, csak `revenue_share` es `hybrid`
+  elszamolasnal aktiv
+- `fixed fee`: fix fellepti dij, csak `fixed_fee` es `hybrid`
+  elszamolasnal aktiv
+- `event cost`: eventhez kapcsolt koltseg; legacy osszegmezokent megmarad,
+  de az auditalhato bontas `event_cost_line` sorokban tortenik
 - `event performance`: idosav alapu read-model
 
 Event late-binding:
@@ -111,21 +115,29 @@ Flow UI scope:
 - az Event/Esemeny elemzo fule az eventek osszehasonlitasa: legerosebb, legfelkapottabb, performer, jegy/bar mix, POS sor/nyugta es weather kontextus
 - az Event/Esemeny elemzo reszletes eventenkenti rangsor/drilldown, a Flow dashboard nem masolja ezt a feladatot
 - az Event/Esemeny elemzo ticket actual lefedettseget es hianyzo ticket actual munkalistat is mutat, mert a jegybevetel nem POS-bol becsult adat
+- az Event/Esemeny elemzo eventenkent szerkesztheto koltsegsor panelt mutat;
+  ezek brutto actual/manual koltsegsorok, es a performance
+  `event_cost_lines_gross` mezon keresztul beleszamit az operating costba
 - event rangsor vagy event munkalista nem kerul a dashboardra kulon blokkent
 - kesz elso szelet: letrehozott eventhez manualisan rogzithet ticket actual, amely az Event elemzo performance ticket reteget adja; hianyaban a ticket bevetel nincs rogzitve
 
 Egyszerusitett Flow profit:
 
 ```text
-retained_ticket_revenue + POS bar_revenue - performer_fixed_fee - event_cost - ticket_platform_fee
+retained_ticket_revenue + POS bar_revenue - performer_fixed_fee - legacy_event_cost - event_cost_lines - ticket_platform_fee
 ```
 
 Az alap 80% performer share lehet uzleti kiindulas, de nem kodba egetett szabaly.
 
 Event performance elszamolasi jeloles:
+- `performer_settlement_type`: megmutatja, hogy a fellepo elszamolasa
+  jegybevetel-szazalekos, fix dijas vagy hibrid
+- `performer_total_compensation_gross`: a performance-ban hasznalt teljes
+  fellepoi kompenzacio, az aktiv settlement type szerint
 - `ticket_revenue_source`: `ticket_actual` vagy `not_recorded`
 - `settlement_status`: `actual_ticket_settlement` vagy `ticket_actual_missing`
-- `operating_cost_gross`: fix fellepti dij + egyeb event koltseg + ticket platform fee
+- `event_cost_lines_gross`: eventenkenti manualis/auditalhato koltsegsorok brutto osszege
+- `operating_cost_gross`: fix fellepti dij + legacy egyeb event koltseg + event cost line osszeg + ticket platform fee
 - `profit_status`: `profitable`, `break_even`, `loss` vagy `no_revenue`
 - `event_profit_margin_percent`: event profit / sajat bevetel
 - `operating_cost_ratio_percent`: event mukodesi koltseg / sajat bevetel
@@ -186,6 +198,26 @@ Fizikai szamolas/korrekcio elso szelet:
 - `inventory_variance_threshold` uzletenkent tarolja a magas veszteseg HUF kuszobot es a romlas szazalekos kuszobot
 - a periodus-osszehasonlitas a mentett business-unit kuszobokat hasznalja, explicit request parameter csak feluliras/spike celra marad
 - a Becsult/Teoretikus keszlet oldalon a kuszobok szerkeszthetok, igy a controlling jelzes nem kodba egetett szabaly
+- a `GET /api/v1/inventory/variance-action-suggestions` endpoint a periodus-osszehasonlitasbol, top vesztesegu tetelekbol es ok-kodokbol priorizalt akciojavaslatokat kepez
+- az akciojavaslat nem hidden frontend logika: scope, action type, severity, prioritas, indoklas, kovetkezo lepes, erintett inventory item/reason es becsult HUF hatas backend read-model mezokent jon
+- az `action_target_type`, `action_target_label` es `action_target_params` a backend read-model resze; a frontend ezt csak alkalmazason beluli route-ra forditja, igy a javaslat uzleti celpontja es fokuszparameterei nem rejtett UI szabalyok
+- az `action_target_params` celoldali linkeknel az `action_suggestion_id` mezot is hordozza, hogy a felhasznalo visszatalaljon a konkret javaslathoz, ne csak a keszletelemhez
+- hianyzo ar esetben az `action_target_params.quick_action = complete_item_cost`; ez nem uj ar-mento backend kepesseg, hanem workflow-kontekstus, a tenyleges arvaltozast tovabbra is a Catalog Ingredient update vegzi
+- `recipe_error` ok-szintu javaslatnal az `action_target_params.quick_action = review_recipe_variance`; mivel az okosszesites nem feltetlenul tud konkret termeket, ez a Production/Receptek munkalistara nyit kontroll-fokusszal, nem automatikus receptmodositasra
+- `mapping_error` ok-szintu javaslatnal az `action_target_params.quick_action = review_mapping_variance` es `mapping_status = pending`; ez az Import kozpont POS/katalogus mapping review listajara nyit, nem keszletkorrekciot vagy automatikus termekkapcsolatot hoz letre
+- `missing_purchase_invoice` ok-szintu javaslatnal az `action_target_params.quick_action = review_missing_purchase_invoice`; ez a Procurement/Beszerzesi szamlak oldalra nyit kontroll-fokusszal, nem automatikus szamlarogzitest vagy postingot vegez
+- `waste`, `breakage`, `spoilage` es `theft_suspected` ok-szintu javaslatnal az `action_target_params.quick_action` az adott fizikai kontroll action type: `review_waste_process`, `review_breakage_process`, `review_spoilage_process` vagy `review_theft_suspected`; ezek a Becsult/Teoretikus keszlet oldalon okkod-fokuszos kontrollnezetet nyitnak
+- a Katalogus/Alapanyagok es Becsult keszlet oldalak mar olvassak a `business_unit_id` es `inventory_item_id` query parametereket, hogy a javaslat konkret tetelre nyisson
+- akciojavaslatbol erkezeskor ezek az oldalak lathato fokusz bannert is mutatnak; a Katalogus az alapanyag kartyat, a Becsult keszlet a keszletsort vagy fizikai okkod-kontrollt emeli ki, a Receptek oldal receptkontroll munkalista-fokuszt, az Import kozpont pending POS mapping review fokuszt, a Procurement oldal pedig beszerzesi szamla/PDF/alias/posting kontroll fokuszt mutat, a fokusz torolheto, es a celoldalakbol vissza lehet lepni az akciojavaslatokhoz
+- a Katalogus/Alapanyagok gyorsjavitas nem zarhatja le a munkalistat armentes nelkul; sikeres arpotlas utan explicit `Javaslat lezarasa` muvelettel a meglovo inventory review endpoint `resolved` allapotot kap
+- a Receptek receptkontroll workflow-ban a lezaras explicit felhasznaloi kontroll utan tortenik a meglovo inventory review endpointtal; backend es frontend nem allitja, hogy receptadat automatikusan javult
+- az Import kozpont mapping kontroll workflow-ban a lezaras explicit felhasznaloi review utan tortenik; a POS alias jovahagyast tovabbra is a POS ingestion mapping endpointok vegzik, az inventory review csak a controlling akcio allapota
+- a Procurement kimaradt szamla workflow-ban a lezaras explicit felhasznaloi kontroll utan tortenik; a szamla letrehozasa, PDF review, supplier alias mapping es posting tovabbra is a procurement endpointok felelossege
+- a fizikai kontroll workflow-ban a lezaras explicit felhasznaloi kontroll utan tortenik; ez nem bizonyitja, hogy a selejt/tores/romlas/lopasgyanu megszunt, csak azt, hogy az adott controlling akcio at lett nezve
+- a Becsult/Teoretikus keszlet oldalon kulon Inventory akciojavaslatok panel mutatja ezeket, es item-szintu javaslatnal visszanyitja a fogyasi naplot
+- a `core.inventory_variance_action_review` nem magat a javaslatot tarolja le, hanem a generalt suggestion ID business-unit szintu review allapotat: `open` vagy `resolved`
+- a `PUT /api/v1/inventory/variance-action-suggestions/{suggestion_id}/review` endpoint allitja a review allapotot; a suggestion listazas visszaadja a `review_status`, `review_note` es `reviewed_at` mezoket
+- a lezart allapot munkalista kontroll, nem accounting teny: ha a mogottes variance tovabbra is fennall, a javaslat tovabbra is megjelenhet, de lezartkent latszik es ujranyithato
 - ez controlling jelzes: segit kiszurni selejtet, pazarlast, lopasgyanut, hibas receptet, hibas mappinget vagy kimaradt beszerzesi szamlat, de nem hivatalos leltarkonyv
 
 ## Procurement es accounting-ready irany
@@ -328,6 +360,13 @@ Dashboardon mindig latszodjon:
 - mi estimated
 - mi forecast
 - mihez hianyzik mapping vagy adat
+
+Dashboard 2.0 statisztikai alap:
+- a dashboard nem kulon statisztika oldal, hanem a vezeto elemzo felulet; a statisztikai read-modelek a meglovo KPI, trend, weather es forecast blokkok minoseget erositik
+- elso kesz szelet: `statistics_quality` read-model a dashboard payloadban, amely idoszaki POS sor-, kosar-, aktiv nap- es lefedettsegi mintameretet, napi bevetel es kosarertek atlag/median/P25/P75/P90/P95 mutatokat, valamint `quality_level` dontesi jelzest ad
+- az atlag es median parhuzamosan jelenik meg, mert a kosarertek es napi bevetel szelso ertekekre erzekeny
+- a `quality_level` nem modellpontossag, hanem adatminosegi/readiness jelzes: `strong`, `usable`, `limited`, `insufficient`
+- forecast, weather-alapu dontestamogatas es ML csak akkor epithet erre erosen, ha a statisztikai alap legalabb `usable`, es minden predikcio confidence/adatminoseg jelzessel jon
 
 ## Statisztikai es prediktiv elemzes
 

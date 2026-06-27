@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { useTopbarControls } from "../../../shared/components/layout/TopbarControlsContext";
@@ -14,6 +14,7 @@ import {
   listInventoryMovements,
   listInventoryStockLevels,
   listInventoryTheoreticalStock,
+  updateInventoryVarianceActionReview,
 } from "../../inventory/api/inventoryApi";
 import type { InventoryMovementCreatePayload } from "../../inventory/types/inventory";
 import {
@@ -302,6 +303,12 @@ function CatalogIngredientsHeaderControls({
 export function CatalogIngredientsPage() {
   const { setControls } = useTopbarControls();
   const queryClient = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedBusinessUnitId = searchParams.get("business_unit_id") ?? "";
+  const requestedInventoryItemId = searchParams.get("inventory_item_id") ?? "";
+  const requestedActionSuggestionId = searchParams.get("action_suggestion_id") ?? "";
+  const requestedQuickAction = searchParams.get("quick_action") ?? "";
+  const isCompleteItemCostQuickAction = requestedQuickAction === "complete_item_cost";
   const [selectedBusinessUnitId, setSelectedBusinessUnitId] = useState("");
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<IngredientSort>("abc");
@@ -311,6 +318,9 @@ export function CatalogIngredientsPage() {
   const [movementForm, setMovementForm] = useState<MovementFormState>(INITIAL_MOVEMENT_FORM);
   const [movementMessage, setMovementMessage] = useState("");
   const [movementErrorMessage, setMovementErrorMessage] = useState("");
+  const [quickFixSavedIngredientId, setQuickFixSavedIngredientId] = useState("");
+  const [quickFixMessage, setQuickFixMessage] = useState("");
+  const [quickFixErrorMessage, setQuickFixErrorMessage] = useState("");
 
   const businessUnitsQuery = useQuery({
     queryKey: ["business-units"],
@@ -319,10 +329,18 @@ export function CatalogIngredientsPage() {
   const businessUnits = businessUnitsQuery.data ?? [];
 
   useEffect(() => {
+    if (
+      requestedBusinessUnitId &&
+      requestedBusinessUnitId !== selectedBusinessUnitId &&
+      businessUnits.some((unit) => unit.id === requestedBusinessUnitId)
+    ) {
+      setSelectedBusinessUnitId(requestedBusinessUnitId);
+      return;
+    }
     if (!selectedBusinessUnitId && businessUnits.length > 0) {
       setSelectedBusinessUnitId(businessUnits[0].id);
     }
-  }, [businessUnits, selectedBusinessUnitId]);
+  }, [businessUnits, requestedBusinessUnitId, selectedBusinessUnitId]);
 
   const ingredientsQuery = useQuery({
     queryKey: ["catalog-ingredients", selectedBusinessUnitId],
@@ -373,6 +391,16 @@ export function CatalogIngredientsPage() {
   const vatRates = vatRatesQuery.data ?? [];
   const selectedIngredientMovements = selectedIngredientMovementsQuery.data ?? [];
   const selectedIngredientAuditRows = selectedIngredientAuditQuery.data ?? [];
+  const focusedIngredient = requestedInventoryItemId
+    ? ingredients.find((ingredient) => ingredient.id === requestedInventoryItemId)
+    : null;
+  const canCloseMissingCostQuickFix =
+    isCompleteItemCostQuickAction &&
+    Boolean(requestedActionSuggestionId) &&
+    Boolean(
+      focusedIngredient?.default_unit_cost ||
+        quickFixSavedIngredientId === requestedInventoryItemId,
+    );
   const stockLevelByItemId = useMemo(
     () =>
       new Map(
@@ -414,6 +442,74 @@ export function CatalogIngredientsPage() {
     });
   }, [ingredients, search, sort]);
 
+  useEffect(() => {
+    const ingredient = requestedInventoryItemId
+      ? ingredients.find((item) => item.id === requestedInventoryItemId)
+      : null;
+    if (ingredient) {
+      setExpandedIngredientId(requestedInventoryItemId);
+      setIsCreating(false);
+      if (isCompleteItemCostQuickAction) {
+        setForm(buildIngredientForm(ingredient));
+      }
+    }
+  }, [ingredients, isCompleteItemCostQuickAction, requestedInventoryItemId]);
+
+  useEffect(() => {
+    setQuickFixSavedIngredientId("");
+    setQuickFixMessage("");
+    setQuickFixErrorMessage("");
+  }, [requestedActionSuggestionId, requestedInventoryItemId, requestedQuickAction]);
+
+  function buildActionSuggestionsPath() {
+    const params = new URLSearchParams();
+    const businessUnitId = selectedBusinessUnitId || requestedBusinessUnitId;
+    if (businessUnitId) {
+      params.set("business_unit_id", businessUnitId);
+    }
+    if (requestedActionSuggestionId) {
+      params.set("action_suggestion_id", requestedActionSuggestionId);
+    }
+    const queryString = params.toString();
+    return queryString
+      ? `${routes.inventoryTheoreticalStock}?${queryString}`
+      : routes.inventoryTheoreticalStock;
+  }
+
+  function clearActionTargetFocus() {
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        next.delete("inventory_item_id");
+        next.delete("action_suggestion_id");
+        next.delete("quick_action");
+        return next;
+      },
+      { replace: true },
+    );
+  }
+
+  function selectBusinessUnit(value: string) {
+    setSelectedBusinessUnitId(value);
+    setExpandedIngredientId(null);
+    setIsCreating(false);
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        if (value) {
+          next.set("business_unit_id", value);
+        } else {
+          next.delete("business_unit_id");
+        }
+        next.delete("inventory_item_id");
+        next.delete("action_suggestion_id");
+        next.delete("quick_action");
+        return next;
+      },
+      { replace: true },
+    );
+  }
+
   const saveMutation = useMutation({
     mutationFn: (payload: CatalogIngredientPayload & { id?: string }) => {
       if (payload.id) {
@@ -426,9 +522,36 @@ export function CatalogIngredientsPage() {
       setExpandedIngredientId(ingredient.id);
       setIsCreating(false);
       setForm(buildIngredientForm(ingredient));
+      if (
+        isCompleteItemCostQuickAction &&
+        requestedInventoryItemId === ingredient.id &&
+        ingredient.default_unit_cost
+      ) {
+        setQuickFixSavedIngredientId(ingredient.id);
+        setQuickFixMessage(
+          "Beszerzesi ar mentve. A javaslat most lezarhato vagy visszanezheto az akciojavaslatoknal.",
+        );
+        setQuickFixErrorMessage("");
+      }
       void queryClient.invalidateQueries({ queryKey: ["catalog-ingredients", selectedBusinessUnitId] });
       void queryClient.invalidateQueries({ queryKey: ["catalog-products", selectedBusinessUnitId] });
+      void queryClient.invalidateQueries({ queryKey: ["inventory-variance-action-suggestions"] });
       void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+    },
+  });
+  const actionReviewMutation = useMutation({
+    mutationFn: () =>
+      updateInventoryVarianceActionReview(requestedActionSuggestionId, {
+        business_unit_id: selectedBusinessUnitId,
+        status: "resolved",
+        note: "Beszerzesi ar potolva a katalogus gyorsjavitasbol.",
+      }),
+    onSuccess: async () => {
+      setQuickFixMessage("Akciojavaslat lezarva. A hianyzo ar javitasa rogzult.");
+      setQuickFixErrorMessage("");
+      await queryClient.invalidateQueries({
+        queryKey: ["inventory-variance-action-suggestions"],
+      });
     },
   });
   const deleteMutation = useMutation({
@@ -474,11 +597,7 @@ export function CatalogIngredientsPage() {
       <CatalogIngredientsHeaderControls
         businessUnits={businessUnits}
         selectedBusinessUnitId={selectedBusinessUnitId}
-        setSelectedBusinessUnitId={(value) => {
-          setSelectedBusinessUnitId(value);
-          setExpandedIngredientId(null);
-          setIsCreating(false);
-        }}
+        setSelectedBusinessUnitId={selectBusinessUnit}
         search={search}
         setSearch={setSearch}
         sort={sort}
@@ -494,6 +613,29 @@ export function CatalogIngredientsPage() {
     setForm(buildIngredientForm(ingredient));
     setIsCreating(false);
     setExpandedIngredientId(ingredient.id);
+  }
+
+  async function closeMissingCostQuickFix() {
+    setQuickFixErrorMessage("");
+    if (!selectedBusinessUnitId) {
+      setQuickFixErrorMessage("Valassz vallalkozast a javaslat lezarasahoz.");
+      return;
+    }
+    if (!requestedActionSuggestionId) {
+      setQuickFixErrorMessage("Hianyzik az akciojavaslat azonositoja.");
+      return;
+    }
+    if (!canCloseMissingCostQuickFix) {
+      setQuickFixErrorMessage("Elobb ments beszerzesi arat az alapanyaghoz.");
+      return;
+    }
+    try {
+      await actionReviewMutation.mutateAsync();
+    } catch (error) {
+      setQuickFixErrorMessage(
+        error instanceof Error ? error.message : "Nem sikerult lezarni az akciojavaslatot.",
+      );
+    }
   }
 
   function submitIngredientForm(event: FormEvent) {
@@ -599,7 +741,7 @@ export function CatalogIngredientsPage() {
           </label>
           <label className="field">
             <span>Egységköltség</span>
-            <input className="field-input" type="number" min="0" step="0.01" value={form.default_unit_cost} onChange={(event) => setForm({ ...form, default_unit_cost: event.target.value })} />
+            <input className={isCompleteItemCostQuickAction && form.id === requestedInventoryItemId ? "field-input action-target-focused-input" : "field-input"} type="number" min="0" step="0.01" value={form.default_unit_cost} onChange={(event) => setForm({ ...form, default_unit_cost: event.target.value })} autoFocus={isCompleteItemCostQuickAction && form.id === requestedInventoryItemId} />
           </label>
           <label className="field">
             <span>ÁFA kulcs</span>
@@ -671,6 +813,55 @@ export function CatalogIngredientsPage() {
       {theoreticalStockQuery.isLoading ? <p className="info-message">Becsült készlet eltérések betöltése...</p> : null}
       {ingredientsQuery.error ? <p className="error-message">{ingredientsQuery.error.message}</p> : null}
 
+      {requestedInventoryItemId ? (
+        <div className="action-target-focus-banner">
+          <div>
+            <strong>Akciojavaslat fokusz</strong>
+            <span>
+              {focusedIngredient
+                ? isCompleteItemCostQuickAction
+                  ? `${focusedIngredient.name} hianyzo beszerzesi ara potolhato.`
+                  : `${focusedIngredient.name} alapanyag megnyitva.`
+                : "A keresett alapanyag betoltese folyamatban vagy mar nem talalhato."}
+              {requestedActionSuggestionId
+                ? ` Javaslat: ${requestedActionSuggestionId}.`
+                : ""}
+            </span>
+          </div>
+          {focusedIngredient ? (
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => startEdit(focusedIngredient)}
+            >
+              {isCompleteItemCostQuickAction
+                ? "Ar potlasa"
+                : "Ar / keszlet szerkesztese"}
+            </Button>
+          ) : null}
+          {isCompleteItemCostQuickAction ? (
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={!canCloseMissingCostQuickFix || actionReviewMutation.isPending}
+              onClick={() => void closeMissingCostQuickFix()}
+            >
+              {actionReviewMutation.isPending ? "Lezaras..." : "Javaslat lezarasa"}
+            </Button>
+          ) : null}
+          <Link className="secondary-button" to={buildActionSuggestionsPath()}>
+            Akciojavaslatokhoz
+          </Link>
+          <Button type="button" variant="secondary" onClick={clearActionTargetFocus}>
+            Fokusz torlese
+          </Button>
+        </div>
+      ) : null}
+      {quickFixMessage ? <p className="success-message">{quickFixMessage}</p> : null}
+      {quickFixErrorMessage ? (
+        <p className="error-message">{quickFixErrorMessage}</p>
+      ) : null}
+
       <div className="catalog-card-grid">
         {visibleIngredients.map((ingredient) => {
           const stockQuantity = toNumber(ingredient.estimated_stock_quantity);
@@ -695,6 +886,9 @@ export function CatalogIngredientsPage() {
                   "catalog-card",
                   stockQuantity <= 0 ? "catalog-card-low-stock" : "",
                   expanded ? "catalog-card-open" : "",
+                  requestedInventoryItemId === ingredient.id
+                    ? "action-target-focused-card"
+                    : "",
                 ]
                   .filter(Boolean)
                   .join(" ")

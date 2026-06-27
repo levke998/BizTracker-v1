@@ -82,10 +82,10 @@ Kesz es hasznalhato:
 
 Felkesz:
 - recipe UX, production read-side, production readiness frontend, onallo recept write endpoint, recept save command es elso gyorsjavito work queue szelet kesz, de a teljes tomeges hianykezeles es fejlettebb verzio/publikacio workflow meg nincs kesz
-- theoretical stock es inventory controlling alap kesz, periodus-osszehasonlitas, elso HUF alapu dontesi javaslat es uzletenkent mentheto anomalia kuszobok keszek
+- theoretical stock es inventory controlling alap kesz, periodus-osszehasonlitas, HUF alapu periodus-, ok- es item-szintu akciojavaslatok es uzletenkent mentheto anomalia kuszobok keszek
 - FIFO/valuation nem fo MVP irany; Gourmandnal az aktualis, legfrissebb beszerzesi ar alapu teoretikus keszlet ertek a controlling szemlelet
 - procurement szamla rogzites es PDF draft upload/list/review/vegleges szamla letrehozas alap van, supplier item alias tanulas elso szeletevel; OCR/adatkinyeres meg nincs
-- Flow event settlement lite van, teljes elszamolasi motor nincs
+- Flow event settlement lite van, teljes elszamolasi motor nincs; ticket import adapter jegelve, amig nincs dontes a ticket rendszer export/API formatumarol
 - dashboard eros MVP, de a Gourmand es Flow specifikus dashboardokat melyiteni kell
 
 Kritikus hianyok:
@@ -95,7 +95,7 @@ Kritikus hianyok:
 - kontrollalt finance/inventory posting teljes brutto/netto/AFA riportolhatosaggal
 - beveteli es kiadasi dashboard netto/brutto/AFA jelolese es szamolasi modjai
 - receptkezeles teljes workflow: fejlettebb verzio/publikacio szemlelet, recept hiany tomeges muveletek, duplikalt/missing cost munkalistabol inditott gyors javitasok
-- inventory controlling tovabbi dontesi javaslatok ok- es item-szintu melyitese
+- inventory controlling kovetkezo melyitese mar nem az elso akciojavaslat panel vagy lezart/nyitott allapot, hanem a konkret javitasi workflow-k: recept/mapping/procurement gyorslinkek es feladatok ok szerinti melyitese
 - stabil teszt- es dokumentaciofrissitesi fegyelem minden feature utan
 
 ## Prioritasok
@@ -202,12 +202,13 @@ Ez a lista csak a nyitott, soron kovetkezo fejleszteseket tartalmazza. A mar lez
    tenyleges bruttoforgalom-sulyozasa es a receptsablon-javaslatok finomitasa.
 3. PDF beszerzesi szamla kinyeres kovetkezo szelet: valodi PDF text/OCR adapter valasztas es beszallitoi szamla mintak validalasa, ha a konkret szamlak megerkeznek.
 4. Recept/production workflow kovetkezo szelet: recept hiany/missing cost/missing vat tomeges muveletek es import/segedlet, ha a konkret receptlista megerkezik.
-5. Flow event elszamolasi melyites kovetkezo szelet: event koltsegsorok vagy ticket import adapter, performer settlement szabalyok es event profit osszehasonlitas.
-6. Gourmand specifikus dashboard melyites: termek/recept/keszlet/weather osszefuggesek, elokeszitesi es keszlethiany dontestamogatas.
-7. Inventory controlling ok- es item-szintu dontesi javaslatok melyitese a mar mentett kuszobok es periodus-osszehasonlitas alapjan.
-8. Netto/brutto/AFA reporting kovetkezo melyitese: termek margin utan kategoriak/uzletagak osszesitett netto margin es AFA visszaigenylesi nezet.
-9. Statisztikai alapok v1: adatminosegi kapuk, median/percentilisek, rolling trendek es elso anomalia modul valos dashboard kontextusban.
-10. Predikcios alapok: pesszimista/realista/optimista savok, forecast readiness, majd regression/Bayes/scenario planning elokeszitese.
+5. Flow event elszamolasi melyites kovetkezo szelet: event profit osszehasonlitas es settlement riportok. A ticket import adapter jegelve, amig nincs dontes a ticket adatok importformatumarol.
+6. Inventory controlling javitasi workflow-k kovetkezo szelet: a recept hiba, mapping, kimaradt beszerzesi szamla es fizikai kontroll okok gyorslink + lezaro workflow kesz; kovetkezhet a statisztikai alapok elokeszitese.
+7. Netto/brutto/AFA reporting kovetkezo melyitese: termek margin utan kategoriak/uzletagak osszesitett netto margin es AFA visszaigenylesi nezet.
+8. Dashboard 2.0 statisztikai alapok kovetkezo szelet: `statistics_quality` kesz; kovetkezhet rolling average/mozgomedian, outlier/import hiba jelzes, termek- es kategoriakereslet percentilisek.
+9. Forecast readiness es predikcios alapok: pesszimista/realista/optimista savok, baseline forecast, szezonalis es esemeny-alapu magyarazatok, majd regression/Bayes/scenario planning elokeszitese.
+10. Weather-alapu dontestamogatas: csak stabil weather cache, adatminosegi lefedettseg es baseline utan; rovid tavon konkret forecast, 17-30 napra szezonalis/weather-normal becsles bizonytalansagi jelolessel.
+11. ML/data science reteg: csak stabil historikus adat, mapping lineage, feature store-szeru read model es visszameresi metrika utan.
 
 ## Legutobb lezart merfoldkovek
 
@@ -229,6 +230,16 @@ A reszletes kesz allapot az `Allapot roviden` blokkban van. A fejlesztesi sorren
 - Recept/production AFA costing szelet: inventory item AFA kulcsbol soronkenti 5/18/27% derived AFA/brutto koltseg, recept total/unit brutto koltseg es `missing_vat_rate` jelzes.
 - Inventory variance periodus-osszehasonlitas elso szelet: aktualis 30 nap vs elozo 30 nap HUF veszteseg, mennyiseg, esemenyszam, hianyzo ar jelzes, statusz es kezelesi javaslat a Becsult/Teoretikus keszlet oldalon.
 - Inventory variance threshold konfiguracio: `inventory_variance_threshold` tabla, get/update API, uzletenkent mentheto magas veszteseg es romlas szazalek kuszob, frontend szerkesztes a Becsult/Teoretikus keszlet oldalon.
+- Inventory akciojavaslatok v1: `GET /api/v1/inventory/variance-action-suggestions` periodus-, item- es ok-szintu javaslatot ad; a Becsult/Teoretikus keszlet oldalon kulon panel mutatja a prioritasokat, indoklast, kovetkezo lepest es erintett HUF hatast.
+- Inventory akciojavaslat review v1: `core.inventory_variance_action_review` tarolja business-unit + suggestion ID alapon a `open/resolved` allapotot; a Becsult/Teoretikus keszlet oldalon az akciok lezarhatok es ujranyithatok.
+- Inventory akciojavaslat gyors celpont v1: a suggestion read-model `action_target_type`, `action_target_label` es `action_target_params` mezot ad; a frontend ezekbol mutat Megnyitas gombot recept, mapping, beszerzes vagy keszlet kontroll munkafeluletekre, business-unit es inventory-item fokusz atadasaval.
+- Inventory akciojavaslat fokusz banner v1: a Katalogus/Alapanyagok es Becsult keszlet oldalak lathato fokusz bannert es sor/kartya kiemelest mutatnak, ha akciojavaslatbol `inventory_item_id` parameterekkel erkezik a felhasznalo.
+- Inventory akciojavaslat visszaut v1: a deep link `action_suggestion_id` parametert is visz, a Becsult keszlet panel visszajeloli az eredeti javaslatot, a celoldali bannerbol pedig torolheto a fokusz vagy vissza lehet lepni az akciojavaslatokhoz.
+- Inventory hianyzo ar gyorsjavitas v1: a `complete_item_cost` akciojavaslat `quick_action=complete_item_cost` parametert ad; a Katalogus/Alapanyagok oldal automatikusan az erintett alapanyag arszerkesztesere nyit, kiemeli az armezot, mentes utan pedig lezarhato a javaslat.
+- Inventory recept hiba kontroll v1: a `recipe_error` ok-szintu akciojavaslat `quick_action=review_recipe_variance` parametert ad, a Receptek munkanezet fokusz bannert, visszautat es explicit `Javaslat lezarasa` muveletet kapott. Mivel az ok-szintu jelzes nem hordoz konkret `product_id`-t, ez munkalista-szintu receptkontroll, nem automatikus receptjavitas.
+- Inventory mapping hiba kontroll v1: a `mapping_error` ok-szintu akciojavaslat `quick_action=review_mapping_variance` es `mapping_status=pending` parameterekkel az Import kozpont POS mapping review listajara nyit, lathato kontroll bannerrel, visszauttal, fokusz torlessel es explicit `Javaslat lezarasa` muvelettel. A POS alias jovahagyast tovabbra is a pos-ingestion mapping workflow menti.
+- Inventory kimaradt beszerzesi szamla kontroll v1: a `missing_purchase_invoice` ok-szintu akciojavaslat `quick_action=review_missing_purchase_invoice` parameterekkel a Procurement/Beszerzesi szamlak oldalra nyit, lathato kontroll bannerrel, visszauttal, fokusz torlessel es explicit `Javaslat lezarasa` muvelettel. A PDF draft, manualis szamlarogzites, supplier alias mapping es posting tovabbra is a procurement workflow felelossege.
+- Inventory fizikai kontroll okok v1: a `waste`, `breakage`, `spoilage` es `theft_suspected` ok-szintu akciojavaslatok sajat `quick_action` parametert kapnak, a Becsult/Teoretikus keszlet oldalon okkod-fokuszos kontroll bannert es szurt Eltérés okok nezetet nyitnak, majd explicit `Javaslat lezarasa` muvelettel zarhatok. A lezaras review allapot, nem bizonyitek arra, hogy a fizikai ok megszunt.
 - Recept/production clean architecture elso szelet: a production modul mar nem placeholder; a `/api/v1/production/recipes` termekenkent ad recept, costing es readiness allapotot, a catalog read oldal pedig ezt a kozos modellt hasznalja.
 - Production/Recept readiness frontend elso szelet: a Katalogus csoportbol elerheto munkanezet szuri es reszletezi a `missing_recipe`, `missing_cost`, `missing_stock`, `empty_recipe` es `ready` allapotokat.
 - Recept save command refaktor: a catalog routerbol kikerult az aktiv receptverzio inaktivalasi/letrehozasi logika; production application command validal es repository ment.
@@ -254,6 +265,23 @@ A reszletes kesz allapot az `Allapot roviden` blokkban van. A fejlesztesi sorren
 - Flow POS-ticket korrekcio: az event performance es a Flow dashboard nem kovetkeztet jegyet POS termek/kategoria nevbol; minden POS sor bar/fogyasztasi bevetel, a jegy kizarolag ticket actual/import retegbol johet.
 - Flow POS fogyasztasi kontrollkartya: a Flow uzleti dashboard mar kulon mutatja a POS-only bar/fogyasztasi koncentraciot, top 3 kategoriaranyt, csucsterhelest, kosarprofilt, kategoriamozgast es AFA readiness jelzest event rangsor nelkul.
 - Event ticket actual lefedettseg szelet: az Event elemzo mar kulon jelzi a ticket actual coverage aranyt, a hianyzo ticket actual eventeket munkalistaban nyitja, es a szovegek ticket actual + POS bar alapon kezelik az event performance-t.
+- Dashboard 2.0 Statistics Quality v1: a dashboard payload `statistics_quality` blokkot ad POS sor-, kosar-, aktiv nap- es lefedettsegi mintamerettel, napi bevetel es kosarertek atlag/median/P25/P75/P90/P95 mutatokkal, `quality_level` dontesi jelzessel es frontend minosegi kartyaval. Ez a forecast/weather/ML reteg adatminosegi alapja, nem kulon statisztika oldal.
+- Event analytics summary backend read-model: az Event elemzo osszesito metrikai,
+  highlightjai, fellepo rangsora es dontesi insightjai mar
+  `/api/v1/events/analytics-summary` endpointbol jonnek. A frontend nem
+  szamolja ujra a ticket coverage/profit/koltseg/mix uzleti igazsagot, csak
+  megjeleniti a backend read-modelt.
+- Flow event koltsegsorok v1: `core.event_cost_line` migration,
+  `GET/PUT /api/v1/events/{event_id}/cost-lines`, performance
+  `event_cost_lines_gross` es operating cost/profit integracio, valamint az
+  Events reszletpanel `Event koltsegsorok` szerkesztoje kesz. A blokk backend,
+  frontend es dokumentacio oldalon is lezart.
+- Flow performer settlement szabalyok v1: az eventek explicit
+  `performer_settlement_type` mezot kaptak (`revenue_share`, `fixed_fee`,
+  `hybrid`), a performance read-model kulon ad share, fix fee es teljes
+  performer compensation mezoket, az Event szerkeszto frontend pedig
+  valaszthato elszamolasi modot mutat. A blokk backend, frontend es
+  dokumentacio oldalon is lezart.
 - POS alias tomeges review: az Import kozpontban az ellenorzendo aliasok
   kijelolhetok es egy tranzakcioban jovahagyhatok; hibas termekkapcsolatnal
   nincs reszleges mentes. Az application service mar repository porton
@@ -278,8 +306,17 @@ A reszletes kesz allapot az `Allapot roviden` blokkban van. A fejlesztesi sorren
   baseline epites es a negy read-model orchestration szinten onallo builderben
   van. A production preparation readiness es Flow event forecast szinten
   onallo operativ reader komponensben van; a forecast repository-refaktor
-  lezart. A kovetkezo backend szelet a traffic/category trend es product/stock
-  risk felelossegek rendezese.
+  lezart. A traffic/category trend es a kozos catalog/inventory costing-risk
+  felelossegek szinten kulon komponensekben vannak; az analytics backend
+  repository refaktor lezart.
+- Dashboard frontend komponensbontas lezart: az 5182 soros oldal 252 soros
+  orchestration-kontener, a trend, uzleti/readiness, Flow, sales/heatmap,
+  category mix, weather/forecast, risk, basket, expense, topbar es KPI
+  felelossegek kulon komponensekben vannak.
+- A refaktor feature-kapuja nyitott. A kovetkezo fejlesztesi korben mar uj
+  uzleti resz vagy felbemaradt feature fejezheto be; a preferalt sorrend a
+  Flow Business Dashboard scope pontositas, majd az Event elemzo kovetkezo
+  szelete.
 
 ## Feature kesz definicio
 
@@ -289,9 +326,15 @@ Egy feature csak akkor tekintheto kesznek, ha:
 - adatbazis/migration allapota tiszta
 - integration teszt van a kritikus viselkedesre
 - frontend flow hasznalja, ha user-facing feature
+- nincs csonka blokk: ha egy backend kepesseg user-facing vagy kesobbi UI
+  szerepet kap, akkor ugyanabban a szeletben frontend hasznalatot vagy
+  explicit roadmap/dokumentacio nyomot kap
 - dashboard vagy drill-down kapcsolat tiszta, ha elemzesi adatot termel
 - actual/estimated/derived cimke nem keveredik
 - hiba, hiany vagy nem teljes mapping nem okoz adatvesztest vagy alkalmazashibat
+- egy blokk csak akkor zarhato le, ha backend, frontend es dokumentacio is
+  lezartnak tekinti; a roadmap nem feladattemeto, hanem valos vegpont fele
+  vezeto utemezo
 
 ## Dontesi elvek
 

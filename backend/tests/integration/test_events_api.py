@@ -15,6 +15,7 @@ from app.main import app
 from app.modules.events.infrastructure.orm.event_ticket_actual_model import (
     EventTicketActualModel,
 )
+from app.modules.events.infrastructure.orm.event_cost_model import EventCostLineModel
 from app.modules.imports.infrastructure.orm.import_batch_model import ImportBatchModel
 from app.modules.imports.infrastructure.orm.import_file_model import ImportFileModel
 from app.modules.imports.infrastructure.orm.import_row_model import ImportRowModel
@@ -500,6 +501,277 @@ def test_event_ticket_actual_overrides_ticket_layer_in_performance(
             )
         )
         db_session.execute(delete(ImportRowModel).where(ImportRowModel.id == row.id))
+        db_session.commit()
+
+
+def test_event_cost_lines_are_listed_and_included_in_performance_cost(
+    client: TestClient,
+    db_session: Session,
+    test_business_unit: BusinessUnitModel,
+) -> None:
+    create_response = client.post(
+        API_PREFIX,
+        json={
+            "business_unit_id": str(test_business_unit.id),
+            "title": "Költségsoros event",
+            "status": "completed",
+            "starts_at": datetime(2026, 7, 8, 18, 0, tzinfo=timezone.utc).isoformat(),
+            "ends_at": datetime(2026, 7, 8, 23, 0, tzinfo=timezone.utc).isoformat(),
+            "performer_share_percent": "50",
+            "performer_fixed_fee": "10000",
+            "event_cost_amount": "5000",
+        },
+    )
+    assert create_response.status_code == 201
+    event_id = create_response.json()["id"]
+
+    row = _create_event_pos_row(
+        db_session,
+        business_unit_id=test_business_unit.id,
+        row_number=151,
+        occurred_at=datetime(2026, 7, 8, 20, 0, tzinfo=timezone.utc),
+        receipt_no="COST-LINES-BAR",
+        category_name="Ital",
+        product_name="Koktél",
+        quantity=Decimal("10"),
+        gross_amount=Decimal("100000"),
+    )
+
+    try:
+        replace_response = client.put(
+            f"{API_PREFIX}/{event_id}/cost-lines",
+            json={
+                "cost_lines": [
+                    {
+                        "category": "security",
+                        "description": "Biztonsági szolgálat",
+                        "amount_gross": "20000",
+                        "source_type": "manual",
+                        "source_reference": "SEC-2026-07-08",
+                    },
+                    {
+                        "category": "marketing",
+                        "description": "Hirdetés",
+                        "amount_gross": "15000",
+                    },
+                ]
+            },
+        )
+        assert replace_response.status_code == 200
+        cost_payload = replace_response.json()
+        assert len(cost_payload) == 2
+        assert cost_payload[0]["description"] == "Biztonsági szolgálat"
+        assert cost_payload[0]["amount_gross"] == "20000.00"
+
+        list_response = client.get(f"{API_PREFIX}/{event_id}/cost-lines")
+        assert list_response.status_code == 200
+        assert len(list_response.json()) == 2
+
+        performance_response = client.get(f"{API_PREFIX}/{event_id}/performance")
+        assert performance_response.status_code == 200
+        performance = performance_response.json()
+        assert performance["bar_revenue_gross"] == "100000.00"
+        assert performance["event_cost_lines_gross"] == "35000.00"
+        assert performance["operating_cost_gross"] == "50000.00"
+        assert performance["event_profit_lite"] == "50000.00"
+    finally:
+        db_session.execute(
+            delete(EventCostLineModel).where(EventCostLineModel.event_id == event_id)
+        )
+        db_session.execute(delete(ImportRowModel).where(ImportRowModel.id == row.id))
+        db_session.commit()
+
+
+def test_performer_fixed_fee_settlement_ignores_ticket_revenue_share(
+    client: TestClient,
+    db_session: Session,
+    test_business_unit: BusinessUnitModel,
+) -> None:
+    create_response = client.post(
+        API_PREFIX,
+        json={
+            "business_unit_id": str(test_business_unit.id),
+            "title": "Fix díjas performer event",
+            "status": "completed",
+            "starts_at": datetime(2026, 7, 9, 18, 0, tzinfo=timezone.utc).isoformat(),
+            "ends_at": datetime(2026, 7, 9, 23, 0, tzinfo=timezone.utc).isoformat(),
+            "performer_settlement_type": "fixed_fee",
+            "performer_share_percent": "80",
+            "performer_fixed_fee": "40000",
+        },
+    )
+    assert create_response.status_code == 201
+    event_id = create_response.json()["id"]
+
+    row = _create_event_pos_row(
+        db_session,
+        business_unit_id=test_business_unit.id,
+        row_number=181,
+        occurred_at=datetime(2026, 7, 9, 20, 0, tzinfo=timezone.utc),
+        receipt_no="FIXED-FEE-BAR",
+        category_name="Ital",
+        product_name="Sör",
+        quantity=Decimal("10"),
+        gross_amount=Decimal("50000"),
+    )
+
+    try:
+        ticket_response = client.put(
+            f"{API_PREFIX}/{event_id}/ticket-actual",
+            json={
+                "sold_quantity": "100",
+                "gross_revenue": "100000",
+            },
+        )
+        assert ticket_response.status_code == 200
+
+        performance_response = client.get(f"{API_PREFIX}/{event_id}/performance")
+        assert performance_response.status_code == 200
+        performance = performance_response.json()
+        assert performance["performer_settlement_type"] == "fixed_fee"
+        assert performance["performer_share_amount"] == "0.00"
+        assert performance["performer_fixed_fee_amount"] == "40000.00"
+        assert performance["performer_total_compensation_gross"] == "40000.00"
+        assert performance["retained_ticket_revenue"] == "100000.00"
+        assert performance["own_revenue"] == "150000.00"
+        assert performance["operating_cost_gross"] == "40000.00"
+        assert performance["event_profit_lite"] == "110000.00"
+    finally:
+        db_session.execute(
+            delete(EventTicketActualModel).where(
+                EventTicketActualModel.event_id == event_id
+            )
+        )
+        db_session.execute(delete(ImportRowModel).where(ImportRowModel.id == row.id))
+        db_session.commit()
+
+
+def test_event_analytics_summary_returns_backend_decision_read_model(
+    client: TestClient,
+    db_session: Session,
+    test_business_unit: BusinessUnitModel,
+) -> None:
+    profitable_response = client.post(
+        API_PREFIX,
+        json={
+            "business_unit_id": str(test_business_unit.id),
+            "title": "Profit summary event",
+            "status": "completed",
+            "starts_at": datetime(2026, 7, 10, 18, 0, tzinfo=timezone.utc).isoformat(),
+            "ends_at": datetime(2026, 7, 10, 23, 0, tzinfo=timezone.utc).isoformat(),
+            "performer_name": "Summary Headliner",
+            "performer_share_percent": "50",
+            "performer_fixed_fee": "10000",
+        },
+    )
+    assert profitable_response.status_code == 201
+    profitable_event_id = profitable_response.json()["id"]
+
+    loss_response = client.post(
+        API_PREFIX,
+        json={
+            "business_unit_id": str(test_business_unit.id),
+            "title": "Cost risk event",
+            "status": "completed",
+            "starts_at": datetime(2026, 7, 11, 18, 0, tzinfo=timezone.utc).isoformat(),
+            "ends_at": datetime(2026, 7, 11, 23, 0, tzinfo=timezone.utc).isoformat(),
+            "performer_name": "Expensive DJ",
+            "performer_share_percent": "80",
+            "performer_fixed_fee": "60000",
+        },
+    )
+    assert loss_response.status_code == 201
+    loss_event_id = loss_response.json()["id"]
+
+    rows = [
+        _create_event_pos_row(
+            db_session,
+            business_unit_id=test_business_unit.id,
+            row_number=201,
+            occurred_at=datetime(2026, 7, 10, 20, 0, tzinfo=timezone.utc),
+            receipt_no="SUMMARY-PROFIT-1",
+            category_name="Ital",
+            product_name="Sör",
+            quantity=Decimal("4"),
+            gross_amount=Decimal("20000"),
+        ),
+        _create_event_pos_row(
+            db_session,
+            business_unit_id=test_business_unit.id,
+            row_number=202,
+            occurred_at=datetime(2026, 7, 11, 20, 0, tzinfo=timezone.utc),
+            receipt_no="SUMMARY-LOSS-1",
+            category_name="Ital",
+            product_name="Koktél",
+            quantity=Decimal("5"),
+            gross_amount=Decimal("25000"),
+        ),
+        _create_event_pos_row(
+            db_session,
+            business_unit_id=test_business_unit.id,
+            row_number=203,
+            occurred_at=datetime(2026, 7, 11, 21, 0, tzinfo=timezone.utc),
+            receipt_no="SUMMARY-LOSS-2",
+            category_name="Ital",
+            product_name="Fröccs",
+            quantity=Decimal("5"),
+            gross_amount=Decimal("25000"),
+        ),
+    ]
+
+    try:
+        upsert_response = client.put(
+            f"{API_PREFIX}/{profitable_event_id}/ticket-actual",
+            json={
+                "source_name": "Ticket platform",
+                "sold_quantity": "20",
+                "gross_revenue": "100000",
+            },
+        )
+        assert upsert_response.status_code == 200
+
+        response = client.get(
+            f"{API_PREFIX}/analytics-summary",
+            params={
+                "business_unit_id": str(test_business_unit.id),
+                "status": "completed",
+                "starts_from": datetime(2026, 7, 1, tzinfo=timezone.utc).isoformat(),
+                "starts_to": datetime(2026, 7, 31, tzinfo=timezone.utc).isoformat(),
+            },
+        )
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["metrics"]["event_count"] == 2
+        assert payload["metrics"]["ticket_revenue_gross"] == "100000.00"
+        assert payload["metrics"]["bar_revenue_gross"] == "70000.00"
+        assert payload["metrics"]["event_profit_lite"] == "50000.00"
+        assert payload["metrics"]["receipt_count"] == 3
+        assert payload["metrics"]["ticket_actual_count"] == 1
+        assert payload["metrics"]["missing_ticket_actual_count"] == 1
+        assert payload["metrics"]["ticket_actual_coverage_percent"] == "50.00"
+        assert payload["metrics"]["profitable_count"] == 1
+        assert payload["metrics"]["loss_count"] == 1
+        assert payload["highlights"]["top_profit"]["title"] == "Profit summary event"
+        assert payload["highlights"]["highest_cost_ratio"]["title"] == "Cost risk event"
+        assert payload["performer_rows"][0]["performer"] == "Summary Headliner"
+        assert payload["performer_rows"][0]["event_profit_lite"] == "60000.00"
+        assert {insight["key"] for insight in payload["insights"]} >= {
+            "ticket-actual-missing",
+            "top-profit",
+            "cost-risk",
+        }
+    finally:
+        db_session.execute(
+            delete(EventTicketActualModel).where(
+                EventTicketActualModel.event_id == profitable_event_id
+            )
+        )
+        db_session.execute(
+            delete(ImportRowModel).where(
+                ImportRowModel.id.in_([row.id for row in rows])
+            )
+        )
         db_session.commit()
 
 

@@ -12,6 +12,7 @@ from app.modules.inventory.domain.entities.inventory_item import (
     InventoryMovement,
     InventoryStockLevel,
     InventoryVarianceItemSummary,
+    InventoryVarianceActionReview,
     InventoryVariancePeriodComparison,
     InventoryVarianceReasonSummary,
     InventoryVarianceThreshold,
@@ -89,6 +90,24 @@ class InventoryItemRepository(Protocol):
         limit: int = 20,
     ) -> list[InventoryVarianceItemSummary]:
         """Return correction totals grouped by inventory item."""
+
+    def list_variance_action_reviews(
+        self,
+        *,
+        business_unit_id: uuid.UUID,
+        suggestion_ids: list[str],
+    ) -> list[InventoryVarianceActionReview]:
+        """Return persisted review states for generated action suggestions."""
+
+    def upsert_variance_action_review(
+        self,
+        *,
+        business_unit_id: uuid.UUID,
+        suggestion_id: str,
+        status: str,
+        note: str | None = None,
+    ) -> InventoryVarianceActionReview:
+        """Create or update one generated suggestion review state."""
 
     def get_variance_period_comparison(
         self,

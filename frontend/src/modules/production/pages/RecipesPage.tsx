@@ -12,6 +12,7 @@ import {
 import type {
   CatalogIngredientPayload,
 } from "../../catalog/types/catalog";
+import { updateInventoryVarianceActionReview } from "../../inventory/api/inventoryApi";
 import { listUnitsOfMeasure, listVatRates } from "../../masterData/api/masterDataApi";
 import { saveProductRecipe } from "../api/productionApi";
 import { RecipeDetailPanel } from "../components/RecipeDetailPanel";
@@ -39,7 +40,11 @@ export function RecipesPage() {
   const requestedBusinessUnitId = searchParams.get("business_unit_id") ?? "";
   const requestedProductId = searchParams.get("product_id") ?? "";
   const requestedEdit = searchParams.get("edit") === "1";
+  const requestedActionSuggestionId = searchParams.get("action_suggestion_id") ?? "";
+  const requestedQuickAction = searchParams.get("quick_action") ?? "";
+  const requestedReasonCode = searchParams.get("reason_code") ?? "";
   const openedFromImports = searchParams.get("from") === "imports";
+  const isRecipeVarianceQuickAction = requestedQuickAction === "review_recipe_variance";
   const {
     businessUnits,
     recipes,
@@ -66,6 +71,8 @@ export function RecipesPage() {
   const [selectedTemplateProductId, setSelectedTemplateProductId] = useState("");
   const [quickMessage, setQuickMessage] = useState("");
   const [quickError, setQuickError] = useState("");
+  const [actionReviewMessage, setActionReviewMessage] = useState("");
+  const [actionReviewError, setActionReviewError] = useState("");
 
   const unitsQuery = useQuery({
     queryKey: ["units-of-measure"],
@@ -157,6 +164,22 @@ export function RecipesPage() {
       setQuickError(
         error instanceof Error ? error.message : "Az alapanyag gyors javitasa sikertelen.",
       );
+    },
+  });
+
+  const actionReviewMutation = useMutation({
+    mutationFn: () =>
+      updateInventoryVarianceActionReview(requestedActionSuggestionId, {
+        business_unit_id: selectedBusinessUnitId,
+        status: "resolved",
+        note: "Recept hiba kontroll elvegezve a recept munkalistabol.",
+      }),
+    onSuccess: async () => {
+      setActionReviewMessage("Akciojavaslat lezarva. A recept kontroll rogzult.");
+      setActionReviewError("");
+      await queryClient.invalidateQueries({
+        queryKey: ["inventory-variance-action-suggestions"],
+      });
     },
   });
 
@@ -252,6 +275,9 @@ export function RecipesPage() {
               next.set("business_unit_id", value);
               next.delete("product_id");
               next.delete("edit");
+              next.delete("action_suggestion_id");
+              next.delete("quick_action");
+              next.delete("reason_code");
               return next;
             },
             { replace: true },
@@ -293,6 +319,55 @@ export function RecipesPage() {
     setForm(buildRecipeForm(row, fallbackUnitId));
     setFormMessage("");
     setFormError("");
+  }
+
+  function buildInventoryActionSuggestionsPath() {
+    const params = new URLSearchParams();
+    if (selectedBusinessUnitId) {
+      params.set("business_unit_id", selectedBusinessUnitId);
+    }
+    if (requestedActionSuggestionId) {
+      params.set("action_suggestion_id", requestedActionSuggestionId);
+    }
+    const queryString = params.toString();
+    return queryString
+      ? `${routes.inventoryTheoreticalStock}?${queryString}`
+      : routes.inventoryTheoreticalStock;
+  }
+
+  function clearActionTargetFocus() {
+    setActionReviewMessage("");
+    setActionReviewError("");
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        next.delete("action_suggestion_id");
+        next.delete("quick_action");
+        next.delete("reason_code");
+        return next;
+      },
+      { replace: true },
+    );
+  }
+
+  async function closeRecipeVarianceActionSuggestion() {
+    setActionReviewMessage("");
+    setActionReviewError("");
+    if (!selectedBusinessUnitId) {
+      setActionReviewError("Valassz vallalkozast az akcio lezarasahoz.");
+      return;
+    }
+    if (!requestedActionSuggestionId) {
+      setActionReviewError("Hianyzik az akciojavaslat azonositoja.");
+      return;
+    }
+    try {
+      await actionReviewMutation.mutateAsync();
+    } catch (error) {
+      setActionReviewError(
+        error instanceof Error ? error.message : "Nem sikerult lezarni az akciojavaslatot.",
+      );
+    }
   }
 
   useEffect(() => {
@@ -501,6 +576,43 @@ export function RecipesPage() {
       {isLoading ? <div className="loading-state">Receptek betoltese...</div> : null}
       {quickMessage ? <div className="success-banner">{quickMessage}</div> : null}
       {quickError ? <div className="error-banner">{quickError}</div> : null}
+      {isRecipeVarianceQuickAction ? (
+        <div className="action-target-focus-banner">
+          <div>
+            <strong>Inventory akciojavaslat: recept kontroll</strong>
+            <span>
+              Recept hiba okkoddal rogzitett keszletelteres erkezett. Nezd at a
+              recept hozamot, osszetevoket, hianyzo arakat es keszletjelzeseket.
+              {requestedReasonCode ? ` Ok: ${requestedReasonCode}.` : ""}
+              {requestedActionSuggestionId
+                ? ` Javaslat: ${requestedActionSuggestionId}.`
+                : ""}
+            </span>
+          </div>
+          <button
+            type="button"
+            className="secondary-button"
+            disabled={actionReviewMutation.isPending}
+            onClick={() => void closeRecipeVarianceActionSuggestion()}
+          >
+            {actionReviewMutation.isPending ? "Lezaras..." : "Javaslat lezarasa"}
+          </button>
+          <Link className="secondary-button" to={buildInventoryActionSuggestionsPath()}>
+            Akciojavaslatokhoz
+          </Link>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={clearActionTargetFocus}
+          >
+            Fokusz torlese
+          </button>
+        </div>
+      ) : null}
+      {actionReviewMessage ? (
+        <div className="success-banner">{actionReviewMessage}</div>
+      ) : null}
+      {actionReviewError ? <div className="error-banner">{actionReviewError}</div> : null}
       {openedFromImports ? (
         <div className="production-return-banner">
           <span>Az Import kozpont recepthiany-munkalistajarol erkeztel.</span>

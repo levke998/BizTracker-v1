@@ -18,6 +18,7 @@ from app.modules.finance.infrastructure.orm.transaction_model import (
     FinancialTransactionModel,
 )
 from app.modules.events.infrastructure.orm.event_model import EventModel
+from app.modules.events.infrastructure.orm.event_cost_model import EventCostLineModel
 from app.modules.events.infrastructure.orm.event_ticket_actual_model import (
     EventTicketActualModel,
 )
@@ -36,6 +37,9 @@ from app.modules.inventory.infrastructure.orm.estimated_consumption_model import
 )
 from app.modules.inventory.infrastructure.orm.inventory_movement_model import (
     InventoryMovementModel,
+)
+from app.modules.inventory.infrastructure.orm.inventory_variance_action_review_model import (
+    InventoryVarianceActionReviewModel,
 )
 from app.modules.master_data.infrastructure.orm.business_unit_model import (
     BusinessUnitModel,
@@ -156,6 +160,11 @@ def _cleanup_business_unit_data(
         )
     )
     db_session.execute(
+        delete(InventoryVarianceActionReviewModel).where(
+            InventoryVarianceActionReviewModel.business_unit_id.in_(business_unit_ids)
+        )
+    )
+    db_session.execute(
         delete(PosProductAliasModel).where(
             PosProductAliasModel.business_unit_id.in_(business_unit_ids)
         )
@@ -168,10 +177,15 @@ def _cleanup_business_unit_data(
     event_ids = [
         event_id
         for event_id, in db_session.execute(
-            select(EventModel.id).where(EventModel.business_unit_id.in_(business_unit_ids))
+            select(EventModel.id).where(
+                EventModel.business_unit_id.in_(business_unit_ids)
+            )
         ).all()
     ]
     if event_ids:
+        db_session.execute(
+            delete(EventCostLineModel).where(EventCostLineModel.event_id.in_(event_ids))
+        )
         db_session.execute(
             delete(EventTicketActualModel).where(
                 EventTicketActualModel.event_id.in_(event_ids)
@@ -189,7 +203,9 @@ def _cleanup_business_unit_data(
     if weather_location_ids:
         db_session.execute(
             delete(WeatherObservationHourlyModel).where(
-                WeatherObservationHourlyModel.weather_location_id.in_(weather_location_ids)
+                WeatherObservationHourlyModel.weather_location_id.in_(
+                    weather_location_ids
+                )
             )
         )
         db_session.execute(
@@ -254,18 +270,24 @@ def _cleanup_business_unit_data(
                         RecipeVersionModel.id.in_(recipe_version_ids)
                     )
                 )
-            db_session.execute(delete(RecipeModel).where(RecipeModel.id.in_(recipe_ids)))
+            db_session.execute(
+                delete(RecipeModel).where(RecipeModel.id.in_(recipe_ids))
+            )
         db_session.execute(delete(ProductModel).where(ProductModel.id.in_(product_ids)))
     db_session.execute(
         delete(InventoryItemModel).where(InventoryItemModel.id.in_(inventory_item_ids))
     )
     db_session.execute(
-        delete(SupplierModel).where(SupplierModel.business_unit_id.in_(business_unit_ids))
+        delete(SupplierModel).where(
+            SupplierModel.business_unit_id.in_(business_unit_ids)
+        )
     )
 
     if batch_ids:
         db_session.execute(
-            delete(ImportRowErrorModel).where(ImportRowErrorModel.batch_id.in_(batch_ids))
+            delete(ImportRowErrorModel).where(
+                ImportRowErrorModel.batch_id.in_(batch_ids)
+            )
         )
         db_session.execute(
             delete(ImportRowModel).where(ImportRowModel.batch_id.in_(batch_ids))
@@ -273,7 +295,9 @@ def _cleanup_business_unit_data(
         db_session.execute(
             delete(ImportFileModel).where(ImportFileModel.batch_id.in_(batch_ids))
         )
-        db_session.execute(delete(ImportBatchModel).where(ImportBatchModel.id.in_(batch_ids)))
+        db_session.execute(
+            delete(ImportBatchModel).where(ImportBatchModel.id.in_(batch_ids))
+        )
 
     db_session.commit()
     return file_paths
@@ -289,7 +313,9 @@ def _delete_business_units(
     if not business_unit_ids:
         return
 
-    db_session.execute(delete(BusinessUnitModel).where(BusinessUnitModel.id.in_(business_unit_ids)))
+    db_session.execute(
+        delete(BusinessUnitModel).where(BusinessUnitModel.id.in_(business_unit_ids))
+    )
     db_session.commit()
 
 
@@ -382,7 +408,9 @@ def create_financial_transaction(db_session: Session):
 
 
 @pytest.fixture
-def test_unit_of_measure(db_session: Session) -> Generator[UnitOfMeasureModel, None, None]:
+def test_unit_of_measure(
+    db_session: Session,
+) -> Generator[UnitOfMeasureModel, None, None]:
     """Create one temporary unit of measure for inventory tests."""
 
     unit = UnitOfMeasureModel(
@@ -421,7 +449,9 @@ def test_unit_of_measure(db_session: Session) -> Generator[UnitOfMeasureModel, N
     invoice_ids = [
         invoice_id
         for invoice_id, in db_session.execute(
-            select(PurchaseInvoiceLineModel.invoice_id).where(*purchase_invoice_line_filters)
+            select(PurchaseInvoiceLineModel.invoice_id).where(
+                *purchase_invoice_line_filters
+            )
         ).all()
     ]
     if invoice_ids:
@@ -433,8 +463,12 @@ def test_unit_of_measure(db_session: Session) -> Generator[UnitOfMeasureModel, N
         db_session.execute(
             delete(PurchaseInvoiceModel).where(PurchaseInvoiceModel.id.in_(invoice_ids))
         )
-    db_session.execute(delete(InventoryItemModel).where(InventoryItemModel.uom_id == unit.id))
-    db_session.execute(delete(UnitOfMeasureModel).where(UnitOfMeasureModel.id == unit.id))
+    db_session.execute(
+        delete(InventoryItemModel).where(InventoryItemModel.uom_id == unit.id)
+    )
+    db_session.execute(
+        delete(UnitOfMeasureModel).where(UnitOfMeasureModel.id == unit.id)
+    )
     db_session.commit()
 
 
@@ -608,7 +642,9 @@ def test_business_unit(db_session: Session) -> Generator[BusinessUnitModel, None
     """Return one stable shared test business unit and clean only its test data."""
 
     business_unit = db_session.scalar(
-        select(BusinessUnitModel).where(BusinessUnitModel.code == TEST_BUSINESS_UNIT_CODE)
+        select(BusinessUnitModel).where(
+            BusinessUnitModel.code == TEST_BUSINESS_UNIT_CODE
+        )
     )
     if business_unit is None:
         business_unit = BusinessUnitModel(

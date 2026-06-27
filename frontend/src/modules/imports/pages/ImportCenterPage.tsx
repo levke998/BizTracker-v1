@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
 import { useTopbarControls } from "../../../shared/components/layout/TopbarControlsContext";
 import { createCatalogProduct } from "../../catalog/api/catalogApi";
+import { updateInventoryVarianceActionReview } from "../../inventory/api/inventoryApi";
 import {
   listCategories,
   listProducts,
@@ -107,10 +108,17 @@ export function ImportCenterPage() {
       : "pending";
   const mappingSearchTerm = searchParams.get("mapping_search") ?? "";
   const focusedProductId = searchParams.get("product_id") ?? "";
+  const requestedActionSuggestionId = searchParams.get("action_suggestion_id") ?? "";
+  const requestedQuickAction = searchParams.get("quick_action") ?? "";
+  const requestedReasonCode = searchParams.get("reason_code") ?? "";
+  const isMappingVarianceQuickAction = requestedQuickAction === "review_mapping_variance";
   const summary = summarizeBatches(batches);
   const isGourmandImport = ["gourmand_pos_sales", "flow_pos_sales"].includes(selectedImportType);
   const isGourmandPackageReady = !isGourmandImport || hasReadyGourmandPackage(selectedFiles);
   const hasSelectedFiles = selectedFiles.length > 0;
+  const [actionReviewMessage, setActionReviewMessage] = useState("");
+  const [actionReviewError, setActionReviewError] = useState("");
+  const [isClosingActionReview, setIsClosingActionReview] = useState(false);
 
   function updateRouteParameter(name: string, value: string) {
     setSearchParams(
@@ -129,7 +137,79 @@ export function ImportCenterPage() {
 
   function selectBusinessUnit(value: string) {
     setSelectedBusinessUnitId(value);
-    updateRouteParameter("business_unit_id", value);
+    setActionReviewMessage("");
+    setActionReviewError("");
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        next.set("business_unit_id", value);
+        next.delete("product_id");
+        next.delete("action_suggestion_id");
+        next.delete("quick_action");
+        next.delete("reason_code");
+        return next;
+      },
+      { replace: true },
+    );
+  }
+
+  function buildInventoryActionSuggestionsPath() {
+    const params = new URLSearchParams();
+    if (selectedBusinessUnitId) {
+      params.set("business_unit_id", selectedBusinessUnitId);
+    }
+    if (requestedActionSuggestionId) {
+      params.set("action_suggestion_id", requestedActionSuggestionId);
+    }
+    const queryString = params.toString();
+    return queryString
+      ? `${routes.inventoryTheoreticalStock}?${queryString}`
+      : routes.inventoryTheoreticalStock;
+  }
+
+  function clearActionTargetFocus() {
+    setActionReviewMessage("");
+    setActionReviewError("");
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        next.delete("action_suggestion_id");
+        next.delete("quick_action");
+        next.delete("reason_code");
+        return next;
+      },
+      { replace: true },
+    );
+  }
+
+  async function closeMappingVarianceActionSuggestion() {
+    setActionReviewMessage("");
+    setActionReviewError("");
+    if (!selectedBusinessUnitId) {
+      setActionReviewError("Valassz vallalkozast az akcio lezarasahoz.");
+      return;
+    }
+    if (!requestedActionSuggestionId) {
+      setActionReviewError("Hianyzik az akciojavaslat azonositoja.");
+      return;
+    }
+
+    setIsClosingActionReview(true);
+    try {
+      await updateInventoryVarianceActionReview(requestedActionSuggestionId, {
+        business_unit_id: selectedBusinessUnitId,
+        status: "resolved",
+        note: "POS/katalogus mapping kontroll elvegezve az Import kozpontbol.",
+      });
+      setActionReviewMessage("Akciojavaslat lezarva. A mapping kontroll rogzult.");
+      setActionReviewError("");
+    } catch (error) {
+      setActionReviewError(
+        error instanceof Error ? error.message : "Nem sikerult lezarni az akciojavaslatot.",
+      );
+    } finally {
+      setIsClosingActionReview(false);
+    }
   }
 
   useEffect(() => {
@@ -543,6 +623,42 @@ export function ImportCenterPage() {
 
       {posAliasError ? <p className="error-message">{posAliasError}</p> : null}
       {posAliasSuccess ? <p className="success-message">{posAliasSuccess}</p> : null}
+      {isMappingVarianceQuickAction ? (
+        <div className="action-target-focus-banner">
+          <div>
+            <strong>Inventory akciojavaslat: mapping kontroll</strong>
+            <span>
+              Mapping hiba okkoddal rogzitett keszletelteres erkezett. Az Import
+              kozpont most az ellenorzendo POS aliasokra fokuszal; hagyd jova a
+              biztos kapcsolatokat, vagy hozz letre belso termeket, ha hianyzik.
+              {requestedReasonCode ? ` Ok: ${requestedReasonCode}.` : ""}
+              {requestedActionSuggestionId
+                ? ` Javaslat: ${requestedActionSuggestionId}.`
+                : ""}
+            </span>
+          </div>
+          <button
+            type="button"
+            className="secondary-button"
+            disabled={isClosingActionReview}
+            onClick={() => void closeMappingVarianceActionSuggestion()}
+          >
+            {isClosingActionReview ? "Lezaras..." : "Javaslat lezarasa"}
+          </button>
+          <Link className="secondary-button" to={buildInventoryActionSuggestionsPath()}>
+            Akciojavaslatokhoz
+          </Link>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={clearActionTargetFocus}
+          >
+            Fokusz torlese
+          </button>
+        </div>
+      ) : null}
+      {actionReviewMessage ? <p className="success-message">{actionReviewMessage}</p> : null}
+      {actionReviewError ? <p className="error-message">{actionReviewError}</p> : null}
 
       <PosMappingReadinessPanel readiness={posMappingReadiness} isLoading={isLoadingPosAliases} />
 

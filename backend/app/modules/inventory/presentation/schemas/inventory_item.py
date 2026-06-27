@@ -237,6 +237,54 @@ class InventoryVariancePeriodComparisonResponse(BaseModel):
     recommendation: str
 
 
+class InventoryVarianceActionSuggestionResponse(BaseModel):
+    """Business-facing inventory variance action recommendation."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    scope: str
+    action_type: str
+    severity: str
+    priority_score: int
+    title: str
+    rationale: str
+    recommended_action: str
+    inventory_item_id: uuid.UUID | None
+    inventory_item_name: str | None
+    reason_code: str | None
+    estimated_impact_value: Decimal | None
+    action_target_type: str | None
+    action_target_label: str | None
+    action_target_params: dict[str, str]
+    review_status: str
+    review_note: str | None
+    reviewed_at: datetime | None
+
+
+class InventoryVarianceActionReviewUpdateRequest(BaseModel):
+    """Update request for one generated inventory action suggestion review."""
+
+    business_unit_id: uuid.UUID
+    status: Literal["open", "resolved"]
+    note: str | None = Field(default=None, max_length=500)
+
+
+class InventoryVarianceActionReviewResponse(BaseModel):
+    """Persisted review state for one inventory action suggestion."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    business_unit_id: uuid.UUID
+    suggestion_id: str
+    status: str
+    note: str | None
+    resolved_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+
 class InventoryVarianceThresholdUpdateRequest(BaseModel):
     """Update request for business-unit inventory variance thresholds."""
 

@@ -22,6 +22,7 @@ class EventCreateRequest(BaseModel):
     expected_attendance: int | None = Field(default=None, ge=0)
     ticket_revenue_gross: Decimal = Field(default=Decimal("0"), ge=0)
     bar_revenue_gross: Decimal = Field(default=Decimal("0"), ge=0)
+    performer_settlement_type: str = Field(default="hybrid", max_length=40)
     performer_share_percent: Decimal = Field(default=Decimal("80"), ge=0, le=100)
     performer_fixed_fee: Decimal = Field(default=Decimal("0"), ge=0)
     event_cost_amount: Decimal = Field(default=Decimal("0"), ge=0)
@@ -45,12 +46,15 @@ class EventResponse(BaseModel):
     expected_attendance: int | None
     ticket_revenue_gross: Decimal
     bar_revenue_gross: Decimal
+    performer_settlement_type: str
     performer_share_percent: Decimal
     performer_fixed_fee: Decimal
     event_cost_amount: Decimal
     notes: str | None
     is_active: bool
     performer_share_amount: Decimal
+    performer_fixed_fee_amount: Decimal
+    performer_total_compensation_gross: Decimal
     retained_ticket_revenue: Decimal
     own_revenue: Decimal
     event_profit_lite: Decimal
@@ -148,6 +152,42 @@ class EventTicketActualResponse(BaseModel):
     updated_at: datetime
 
 
+class EventCostLineRequest(BaseModel):
+    """Manual event cost line payload."""
+
+    category: str = Field(default="egyeb", max_length=80)
+    description: str = Field(min_length=1, max_length=240)
+    amount_gross: Decimal = Field(ge=0)
+    source_type: str = Field(default="manual", max_length=40)
+    source_reference: str | None = Field(default=None, max_length=180)
+    incurred_at: datetime | None = None
+    notes: str | None = Field(default=None, max_length=1000)
+
+
+class ReplaceEventCostLinesRequest(BaseModel):
+    """Replace all cost lines attached to one event."""
+
+    cost_lines: list[EventCostLineRequest] = Field(default_factory=list, max_length=100)
+
+
+class EventCostLineResponse(BaseModel):
+    """Read model for one event cost line."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    event_id: uuid.UUID
+    category: str
+    description: str
+    amount_gross: Decimal
+    source_type: str
+    source_reference: str | None
+    incurred_at: datetime | None
+    notes: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
 class EventPerformanceResponse(BaseModel):
     """POS and weather performance attached to an event time window."""
 
@@ -164,10 +204,14 @@ class EventPerformanceResponse(BaseModel):
     total_revenue_gross: Decimal
     ticket_quantity: Decimal
     bar_quantity: Decimal
+    performer_settlement_type: str
     performer_share_percent: Decimal
     performer_share_amount: Decimal
+    performer_fixed_fee_amount: Decimal
+    performer_total_compensation_gross: Decimal
     retained_ticket_revenue: Decimal
     platform_fee_gross: Decimal
+    event_cost_lines_gross: Decimal
     own_revenue: Decimal
     operating_cost_gross: Decimal
     event_profit_lite: Decimal
@@ -181,3 +225,83 @@ class EventPerformanceResponse(BaseModel):
     categories: tuple[EventPerformanceCategoryResponse, ...]
     top_products: tuple[EventPerformanceProductResponse, ...]
     weather: EventWeatherSummaryResponse
+
+
+class EventAnalyticsMetricsResponse(BaseModel):
+    """Aggregated event analytics metrics for one filtered period."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    event_count: int
+    ticket_revenue_gross: Decimal
+    bar_revenue_gross: Decimal
+    own_revenue: Decimal
+    event_profit_lite: Decimal
+    receipt_count: int
+    ticket_actual_count: int
+    missing_ticket_actual_count: int
+    ticket_actual_coverage_percent: Decimal
+    profitable_count: int
+    loss_count: int
+
+
+class EventAnalyticsHighlightResponse(BaseModel):
+    """One highlighted event selected by a business metric."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    event_id: uuid.UUID | None
+    title: str | None
+    performer_name: str | None
+    starts_at: datetime | None
+    metric_value: Decimal | None
+
+
+class EventAnalyticsHighlightsResponse(BaseModel):
+    """Selected top events for the analyzer summary cards."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    top_profit: EventAnalyticsHighlightResponse
+    most_popular: EventAnalyticsHighlightResponse
+    highest_revenue: EventAnalyticsHighlightResponse
+    top_margin: EventAnalyticsHighlightResponse
+    highest_cost_ratio: EventAnalyticsHighlightResponse
+
+
+class EventPerformerAnalyticsRowResponse(BaseModel):
+    """Aggregated performance row for one performer."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    performer: str
+    event_count: int
+    ticket_revenue_gross: Decimal
+    bar_revenue_gross: Decimal
+    own_revenue: Decimal
+    event_profit_lite: Decimal
+
+
+class EventAnalyticsInsightResponse(BaseModel):
+    """Business-facing decision signal for the event analyzer."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    key: str
+    tone: str
+    title: str
+    event_id: uuid.UUID
+    event_title: str
+    metric: str
+    detail: str
+
+
+class EventAnalyticsSummaryResponse(BaseModel):
+    """Complete event analyzer read model."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    metrics: EventAnalyticsMetricsResponse
+    highlights: EventAnalyticsHighlightsResponse
+    performer_rows: tuple[EventPerformerAnalyticsRowResponse, ...]
+    insights: tuple[EventAnalyticsInsightResponse, ...]

@@ -15,6 +15,7 @@ from app.modules.finance.infrastructure.orm.transaction_model import (
     FinancialTransactionModel,
 )
 from app.modules.events.infrastructure.orm.event_model import EventModel
+from app.modules.events.infrastructure.orm.event_cost_model import EventCostLineModel
 from app.modules.events.infrastructure.orm.event_ticket_actual_model import (
     EventTicketActualModel,
 )
@@ -33,6 +34,9 @@ from app.modules.inventory.infrastructure.orm.estimated_consumption_model import
 from app.modules.inventory.infrastructure.orm.inventory_item_model import InventoryItemModel
 from app.modules.inventory.infrastructure.orm.inventory_variance_threshold_model import (
     InventoryVarianceThresholdModel,
+)
+from app.modules.inventory.infrastructure.orm.inventory_variance_action_review_model import (
+    InventoryVarianceActionReviewModel,
 )
 from app.modules.master_data.infrastructure.orm.business_unit_model import (
     BusinessUnitModel,
@@ -74,6 +78,7 @@ from app.modules.weather.infrastructure.orm.weather_model import (
 __all__ = [
     "BusinessUnitModel",
     "CategoryModel",
+    "EventCostLineModel",
     "EventModel",
     "EventTicketActualModel",
     "FinancialTransactionModel",
@@ -83,6 +88,7 @@ __all__ = [
     "ImportRowErrorModel",
     "ImportRowModel",
     "InventoryItemModel",
+    "InventoryVarianceActionReviewModel",
     "InventoryVarianceThresholdModel",
     "InventoryMovementModel",
     "LocationModel",

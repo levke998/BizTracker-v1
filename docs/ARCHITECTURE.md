@@ -59,7 +59,7 @@ Aktualis modulok:
 - `pos_ingestion`: normalizalt receipt boundary, demo/API adapter szerep, POS product alias/read API
 - `finance`: financial transaction read es source mapping
 - `catalog`: product es ingredient catalog, recipe/costing read-write szeletek
-- `inventory`: item, movement, stock level, estimated consumption audit
+- `inventory`: item, movement, stock level, estimated consumption audit, variance periodus-osszehasonlitas, akciojavaslat read-model es business-unit szintu action review state
 - `procurement`: supplier, purchase invoice, invoice posting
 - `production`: recipe costing/readiness read-side es kesobbi production/batch folyamatok
 - `events`: Flow event planner, event performance, weather coverage
@@ -256,9 +256,33 @@ Az analytics refaktor elso, viselkedestarto szelete is elindult:
 - a production preparation readiness es a Flow event forecast lekerdezes,
   idosav-lefedettseg, kockazati szint, fokusz es ajanlas kulon
   `ForecastOperationsAnalyticsReader` komponensben van;
-- a nagy repository a scope/idoszak feloldast es a komponensek osszehangolasat
-  tartja meg. A forecast felelosseg levallasztasa lezart; a kovetkezo backend
-  szelet a traffic/category trend es product/stock risk komponensek rendezese.
+- a traffic heatmap es category trend session-fuggetlen
+  `TrafficTrendAnalyticsBuilder`, a receptkoltseg/keszletszint/product-stock
+  risk kozos `CatalogInventoryRiskReader` komponensbe kerult;
+- a nagy repository mar csak scope-feloldast, alap finance/POS lekerdezest,
+  VAT readiness osszeallitast es komponens-orchestrationt tart. Az analytics
+  backend refaktor lezart.
+- a Dashboard frontend refaktor lezart: az eredeti 5182 soros
+  `DashboardPage.tsx` 252 soros orchestration-kontener lett. Kulon komponensben
+  van a trend, uzleti/readiness, Flow, sales/heatmap, category mix,
+  weather/forecast, risk, basket, expense, topbar es KPI felelosseg; a kozos
+  format/label/export logika a `dashboardView` modulban van.
+- az analytics refaktor utani feature-kapu nyitott: uj uzleti szelet csak a
+  fenti komponens- es repository-hatarokat megtartva kerulhet be.
+- az Event elemzo summary szelete backend read-modelbe kerult: az
+  `GetEventAnalyticsSummaryQuery` adja az osszesito metrikakat, kiemelt
+  eventeket, fellepo rangsort es dontesi insightokat, a frontend pedig csak
+  megjeleniti ezeket. Igy a ticket actual coverage, profit, koltsegarany es
+  jegy/bar mix szabalyok nem duplikalodnak kliens oldalon.
+- a Flow event koltsegsorok kulon `EventCostRepository` porton,
+  `ReplaceEventCostLinesCommand` application use case-en es
+  `SqlAlchemyEventCostRepository` adapteren keresztul mennek; a performance
+  read-model csak az osszesitett `event_cost_lines_gross` erteket hasznalja az
+  operating cost/profit kalkulaciohoz.
+- a Flow performer settlement v1 explicit `performer_settlement_type`
+  mezovel mukodik. A domain helper donti el, hogy a performance
+  jegybevetel-szazalekot, fix dijat vagy mindkettot szamolja, igy ez a
+  szabaly nem frontend feltetellogikakban el.
 
 ## Migration es DB
 

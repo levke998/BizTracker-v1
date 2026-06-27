@@ -10,9 +10,12 @@ import {
   archiveEvent,
   createEvent,
   ensureEventWeatherCoverage,
+  getEventAnalyticsSummary,
   getEventPerformance,
   getEventTicketActual,
+  listEventCostLines,
   listEventPerformances,
+  replaceEventCostLines,
   upsertEventTicketActual,
   updateEvent,
 } from "../api/eventsApi";
@@ -21,6 +24,7 @@ import type {
   EventPayload,
   EventPerformance,
   EventRecord,
+  EventCostLinePayload,
   EventStatus,
   EventTicketActualPayload,
   EventWeatherCoverage,
@@ -37,6 +41,7 @@ type EventFormState = {
   expected_attendance: string;
   ticket_revenue_gross: string;
   bar_revenue_gross: string;
+  performer_settlement_type: string;
   performer_share_percent: string;
   performer_fixed_fee: string;
   event_cost_amount: string;
@@ -55,9 +60,17 @@ type TicketActualFormState = {
   reported_at: string;
   notes: string;
 };
+type EventCostLineFormState = {
+  category: string;
+  description: string;
+  amount_gross: string;
+  source_type: string;
+  source_reference: string;
+  incurred_at: string;
+  notes: string;
+};
 type EventPeriod = "alltime" | "last_30_days" | "last_90_days" | "year";
 type EventsPageMode = "planner" | "analytics";
-type EventInsightTone = "success" | "warning" | "danger" | "neutral";
 type CalendarDay = {
   key: string;
   dayNumber: number;
@@ -65,14 +78,19 @@ type CalendarDay = {
   isToday: boolean;
   events: EventRecord[];
 };
-type EventInsight = {
-  key: string;
-  tone: EventInsightTone;
-  title: string;
-  eventId: string;
-  eventTitle: string;
-  metric: string;
-  detail: string;
+
+const emptyAnalyticsMetrics = {
+  event_count: 0,
+  ticket_revenue_gross: "0",
+  bar_revenue_gross: "0",
+  own_revenue: "0",
+  event_profit_lite: "0",
+  receipt_count: 0,
+  ticket_actual_count: 0,
+  missing_ticket_actual_count: 0,
+  ticket_actual_coverage_percent: "0",
+  profitable_count: 0,
+  loss_count: 0,
 };
 
 const statusOptions: Array<{ value: EventStatus | "all"; label: string }> = [
@@ -87,6 +105,11 @@ const periodOptions: Array<{ value: EventPeriod; label: string }> = [
   { value: "last_30_days", label: "Elmúlt 30 nap" },
   { value: "last_90_days", label: "Elmúlt 90 nap" },
   { value: "year", label: "Aktuális év" },
+];
+const performerSettlementOptions = [
+  { value: "hybrid", label: "Százalék + fix díj" },
+  { value: "revenue_share", label: "Csak jegybevétel %" },
+  { value: "fixed_fee", label: "Csak fix díj" },
 ];
 
 function toNumber(value: string | number | null | undefined) {
@@ -233,6 +256,10 @@ function formatSettlementStatus(value: string) {
   return labels[value] ?? value;
 }
 
+function formatPerformerSettlementType(value: string) {
+  return performerSettlementOptions.find((option) => option.value === value)?.label ?? value;
+}
+
 function formatWeatherCoverageLabel(
   performance: EventPerformance | null,
   coverage: EventWeatherCoverage | undefined,
@@ -291,6 +318,7 @@ function buildForm(event?: EventRecord): EventFormState {
     expected_attendance: event?.expected_attendance?.toString() ?? "",
     ticket_revenue_gross: event?.ticket_revenue_gross ?? "0",
     bar_revenue_gross: event?.bar_revenue_gross ?? "0",
+    performer_settlement_type: event?.performer_settlement_type ?? "hybrid",
     performer_share_percent: event?.performer_share_percent ?? "80",
     performer_fixed_fee: event?.performer_fixed_fee ?? "0",
     event_cost_amount: event?.event_cost_amount ?? "0",
@@ -311,6 +339,21 @@ function buildTicketActualForm(): TicketActualFormState {
     platform_fee_gross: "",
     reported_at: "",
     notes: "",
+  };
+}
+
+function buildEventCostLineForm(
+  overrides: Partial<EventCostLineFormState> = {},
+): EventCostLineFormState {
+  return {
+    category: "egyeb",
+    description: "",
+    amount_gross: "0",
+    source_type: "manual",
+    source_reference: "",
+    incurred_at: "",
+    notes: "",
+    ...overrides,
   };
 }
 
@@ -488,6 +531,7 @@ export function EventsPage({ mode = "planner" }: { mode?: EventsPageMode }) {
   const [ticketActualForm, setTicketActualForm] = useState<TicketActualFormState>(() =>
     buildTicketActualForm(),
   );
+  const [costLineForms, setCostLineForms] = useState<EventCostLineFormState[]>([]);
   const [weatherCoverageByEventId, setWeatherCoverageByEventId] = useState<
     Record<string, EventWeatherCoverage | undefined>
   >({});
@@ -536,6 +580,23 @@ export function EventsPage({ mode = "planner" }: { mode?: EventsPageMode }) {
       }),
     enabled: Boolean(selectedBusinessUnitId) && mode === "analytics",
   });
+  const eventAnalyticsSummaryQuery = useQuery({
+    queryKey: [
+      "event-analytics-summary",
+      selectedBusinessUnitId,
+      selectedStatus,
+      eventPeriodRange.starts_from,
+      eventPeriodRange.starts_to,
+    ],
+    queryFn: () =>
+      getEventAnalyticsSummary({
+        business_unit_id: selectedBusinessUnitId,
+        status: selectedStatus === "all" ? undefined : selectedStatus,
+        ...eventPeriodRange,
+        limit: 200,
+      }),
+    enabled: Boolean(selectedBusinessUnitId) && mode === "analytics",
+  });
   const eventPerformanceQuery = useQuery({
     queryKey: ["event-performance", expandedEventId],
     queryFn: () => getEventPerformance(expandedEventId as string),
@@ -544,6 +605,11 @@ export function EventsPage({ mode = "planner" }: { mode?: EventsPageMode }) {
   const ticketActualQuery = useQuery({
     queryKey: ["event-ticket-actual", expandedEventId],
     queryFn: () => getEventTicketActual(expandedEventId as string),
+    enabled: Boolean(expandedEventId),
+  });
+  const eventCostLinesQuery = useQuery({
+    queryKey: ["event-cost-lines", expandedEventId],
+    queryFn: () => listEventCostLines(expandedEventId as string),
     enabled: Boolean(expandedEventId),
   });
   const events = eventsQuery.data ?? [];
@@ -573,6 +639,7 @@ export function EventsPage({ mode = "planner" }: { mode?: EventsPageMode }) {
       setExpandedEventId(event.id);
       setForm(buildForm(event));
       void queryClient.invalidateQueries({ queryKey: ["events"] });
+      void queryClient.invalidateQueries({ queryKey: ["event-analytics-summary"] });
     },
   });
 
@@ -583,6 +650,7 @@ export function EventsPage({ mode = "planner" }: { mode?: EventsPageMode }) {
       setIsCreating(false);
       setForm(buildForm());
       void queryClient.invalidateQueries({ queryKey: ["events"] });
+      void queryClient.invalidateQueries({ queryKey: ["event-analytics-summary"] });
     },
   });
 
@@ -595,6 +663,7 @@ export function EventsPage({ mode = "planner" }: { mode?: EventsPageMode }) {
       }));
       void queryClient.invalidateQueries({ queryKey: ["event-performance", eventId] });
       void queryClient.invalidateQueries({ queryKey: ["event-performances"] });
+      void queryClient.invalidateQueries({ queryKey: ["event-analytics-summary"] });
     },
   });
   const ticketActualMutation = useMutation({
@@ -609,6 +678,22 @@ export function EventsPage({ mode = "planner" }: { mode?: EventsPageMode }) {
       void queryClient.invalidateQueries({ queryKey: ["event-ticket-actual", actual.event_id] });
       void queryClient.invalidateQueries({ queryKey: ["event-performance", actual.event_id] });
       void queryClient.invalidateQueries({ queryKey: ["event-performances"] });
+      void queryClient.invalidateQueries({ queryKey: ["event-analytics-summary"] });
+    },
+  });
+  const costLinesMutation = useMutation({
+    mutationFn: ({
+      eventId,
+      payload,
+    }: {
+      eventId: string;
+      payload: EventCostLinePayload[];
+    }) => replaceEventCostLines(eventId, payload),
+    onSuccess: (_costLines, variables) => {
+      void queryClient.invalidateQueries({ queryKey: ["event-cost-lines", variables.eventId] });
+      void queryClient.invalidateQueries({ queryKey: ["event-performance", variables.eventId] });
+      void queryClient.invalidateQueries({ queryKey: ["event-performances"] });
+      void queryClient.invalidateQueries({ queryKey: ["event-analytics-summary"] });
     },
   });
 
@@ -636,38 +721,36 @@ export function EventsPage({ mode = "planner" }: { mode?: EventsPageMode }) {
     });
   }, [expandedEventId, ticketActualQuery.data]);
 
-  const summary = useMemo(() => {
-    const sourceRows = isPlanner ? events : eventPerformances;
-    return sourceRows.reduce(
-      (acc, item) => ({
-        ticketRevenue: acc.ticketRevenue + toNumber(item.ticket_revenue_gross),
-        barRevenue: acc.barRevenue + toNumber(item.bar_revenue_gross),
-        ownRevenue: acc.ownRevenue + toNumber(item.own_revenue),
-        profit: acc.profit + toNumber(item.event_profit_lite),
-        profitableCount:
-          acc.profitableCount + ("profit_status" in item && item.profit_status === "profitable" ? 1 : 0),
-        lossCount:
-          acc.lossCount + ("profit_status" in item && item.profit_status === "loss" ? 1 : 0),
-        receiptCount:
-          acc.receiptCount + ("receipt_count" in item ? Number(item.receipt_count) : 0),
-        ticketActualCount:
-          acc.ticketActualCount + ("ticket_revenue_source" in item && item.ticket_revenue_source === "ticket_actual" ? 1 : 0),
-        missingTicketActualCount:
-          acc.missingTicketActualCount + ("ticket_revenue_source" in item && item.ticket_revenue_source !== "ticket_actual" ? 1 : 0),
-      }),
-      {
-        ticketRevenue: 0,
-        barRevenue: 0,
-        ownRevenue: 0,
-        profit: 0,
-        profitableCount: 0,
-        lossCount: 0,
-        receiptCount: 0,
-        ticketActualCount: 0,
-        missingTicketActualCount: 0,
-      },
+  useEffect(() => {
+    if (!expandedEventId) {
+      setCostLineForms([]);
+      return;
+    }
+    const costLines = eventCostLinesQuery.data;
+    if (!costLines) {
+      setCostLineForms([]);
+      return;
+    }
+    setCostLineForms(
+      costLines.map((costLine) =>
+        buildEventCostLineForm({
+          category: costLine.category,
+          description: costLine.description,
+          amount_gross: costLine.amount_gross,
+          source_type: costLine.source_type,
+          source_reference: costLine.source_reference ?? "",
+          incurred_at: costLine.incurred_at ? toDateTimeInput(costLine.incurred_at) : "",
+          notes: costLine.notes ?? "",
+        }),
+      ),
     );
-  }, [eventPerformances, events, isPlanner]);
+  }, [expandedEventId, eventCostLinesQuery.data]);
+
+  const analyticsSummary = eventAnalyticsSummaryQuery.data;
+  const summary = analyticsSummary?.metrics ?? emptyAnalyticsMetrics;
+  const highlights = analyticsSummary?.highlights;
+  const performerRows = analyticsSummary?.performer_rows ?? [];
+  const eventInsights = analyticsSummary?.insights ?? [];
   const missingTicketActualRows = useMemo(
     () =>
       eventPerformances
@@ -675,49 +758,6 @@ export function EventsPage({ mode = "planner" }: { mode?: EventsPageMode }) {
         .sort((left, right) => new Date(right.starts_at).getTime() - new Date(left.starts_at).getTime()),
     [eventPerformances],
   );
-  const ticketActualCoveragePercent =
-    eventPerformances.length > 0 ? (summary.ticketActualCount / eventPerformances.length) * 100 : 0;
-  const performerRows = useMemo(() => {
-    return Array.from(
-      (isPlanner ? events : eventPerformances)
-        .reduce(
-          (map, item) => {
-            const event = "event_id" in item ? eventById.get(item.event_id) : item;
-            if (event?.status === "cancelled") {
-              return map;
-            }
-            const performer = event?.performer_name ?? "Fellépő nélkül";
-            const current = map.get(performer) ?? {
-              performer,
-              eventCount: 0,
-              ticketRevenue: 0,
-              barRevenue: 0,
-              ownRevenue: 0,
-              profit: 0,
-            };
-            current.eventCount += 1;
-            current.ticketRevenue += toNumber(item.ticket_revenue_gross);
-            current.barRevenue += toNumber(item.bar_revenue_gross);
-            current.ownRevenue += toNumber(item.own_revenue);
-            current.profit += toNumber(item.event_profit_lite);
-            map.set(performer, current);
-            return map;
-          },
-          new Map<
-            string,
-            {
-              performer: string;
-              eventCount: number;
-              ticketRevenue: number;
-              barRevenue: number;
-              ownRevenue: number;
-              profit: number;
-            }
-          >(),
-        )
-        .values(),
-    ).sort((left, right) => right.profit - left.profit);
-  }, [eventById, eventPerformances, events, isPlanner]);
   const topPerformance = useMemo(
     () =>
       [...eventPerformances].sort(
@@ -725,131 +765,10 @@ export function EventsPage({ mode = "planner" }: { mode?: EventsPageMode }) {
       )[0],
     [eventPerformances],
   );
-  const mostPopularPerformance = useMemo(
-    () =>
-      [...eventPerformances].sort((left, right) => {
-        const receiptDiff = Number(right.receipt_count) - Number(left.receipt_count);
-        if (receiptDiff !== 0) {
-          return receiptDiff;
-        }
-        return Number(right.source_row_count) - Number(left.source_row_count);
-      })[0],
-    [eventPerformances],
+  const costLineDraftTotal = useMemo(
+    () => costLineForms.reduce((sum, line) => sum + toNumber(line.amount_gross), 0),
+    [costLineForms],
   );
-  const highestRevenuePerformance = useMemo(
-    () =>
-      [...eventPerformances].sort(
-        (left, right) => toNumber(right.total_revenue_gross) - toNumber(left.total_revenue_gross),
-      )[0],
-    [eventPerformances],
-  );
-  const topMarginPerformance = useMemo(
-    () =>
-      [...eventPerformances]
-        .filter((performance) => performance.event_profit_margin_percent !== null)
-        .sort(
-          (left, right) =>
-            toNumber(right.event_profit_margin_percent) - toNumber(left.event_profit_margin_percent),
-        )[0],
-    [eventPerformances],
-  );
-  const highestCostRatioPerformance = useMemo(
-    () =>
-      [...eventPerformances]
-        .filter((performance) => performance.operating_cost_ratio_percent !== null)
-        .sort(
-          (left, right) =>
-            toNumber(right.operating_cost_ratio_percent) - toNumber(left.operating_cost_ratio_percent),
-      )[0],
-    [eventPerformances],
-  );
-  const eventInsights = useMemo<EventInsight[]>(() => {
-    const eventTitle = (performance: EventPerformance) =>
-      eventById.get(performance.event_id)?.title ?? "Ismeretlen esemény";
-    const insights: EventInsight[] = [];
-
-    if (missingTicketActualRows.length > 0) {
-      const missingTicketActual = missingTicketActualRows[0];
-      insights.push({
-        key: "ticket-actual-missing",
-        tone: "warning",
-        title: "Ticket actual hiányzik",
-        eventId: missingTicketActual.event_id,
-        eventTitle: eventTitle(missingTicketActual),
-        metric: `${missingTicketActualRows.length} event`,
-        detail: "Jegybevétel csak külön ticket actualból számolódik, POS-ból nem.",
-      });
-    }
-
-    if (topPerformance) {
-      insights.push({
-        key: "top-profit",
-        tone: "success",
-        title: "Legjobb üzleti eredmény",
-        eventId: topPerformance.event_id,
-        eventTitle: eventTitle(topPerformance),
-        metric: formatMoney(topPerformance.event_profit_lite),
-        detail: `${formatProfitStatus(topPerformance.profit_status)} · margin ${formatNullablePercent(
-          topPerformance.event_profit_margin_percent,
-        )}`,
-      });
-    }
-
-    if (highestCostRatioPerformance) {
-      const costRatio = toNumber(highestCostRatioPerformance.operating_cost_ratio_percent);
-      const costTone: EventInsightTone = costRatio >= 50 ? "danger" : costRatio >= 30 ? "warning" : "neutral";
-      insights.push({
-        key: "cost-risk",
-        tone: costTone,
-        title: costRatio >= 50 ? "Magas költségarány" : "Költségfigyelő",
-        eventId: highestCostRatioPerformance.event_id,
-        eventTitle: eventTitle(highestCostRatioPerformance),
-        metric: formatNullablePercent(highestCostRatioPerformance.operating_cost_ratio_percent),
-        detail: `Profit ${formatMoney(highestCostRatioPerformance.event_profit_lite)} · margin ${formatNullablePercent(
-          highestCostRatioPerformance.event_profit_margin_percent,
-        )}`,
-      });
-    }
-
-    const popularWeakMargin = [...eventPerformances]
-      .filter((performance) => {
-        const margin = toPercentNumber(performance.event_profit_margin_percent);
-        return performance.receipt_count > 0 && (performance.profit_status === "loss" || (margin !== null && margin < 20));
-      })
-      .sort((left, right) => Number(right.receipt_count) - Number(left.receipt_count))[0];
-    if (popularWeakMargin) {
-      insights.push({
-        key: "popular-weak-margin",
-        tone: popularWeakMargin.profit_status === "loss" ? "danger" : "warning",
-        title: "Népszerű, de gyenge margin",
-        eventId: popularWeakMargin.event_id,
-        eventTitle: eventTitle(popularWeakMargin),
-        metric: `${popularWeakMargin.receipt_count} nyugta`,
-        detail: `Margin ${formatNullablePercent(popularWeakMargin.event_profit_margin_percent)} · profit ${formatMoney(
-          popularWeakMargin.event_profit_lite,
-        )}`,
-      });
-    }
-
-    const strongestBarMix = [...eventPerformances]
-      .filter((performance) => toPercentNumber(performance.bar_revenue_share_percent) !== null)
-      .sort((left, right) => toNumber(right.bar_revenue_share_percent) - toNumber(left.bar_revenue_share_percent))[0];
-    if (strongestBarMix && toNumber(strongestBarMix.bar_revenue_share_percent) >= 50) {
-      insights.push({
-        key: "bar-mix",
-        tone: "neutral",
-        title: "Bárvezérelt event",
-        eventId: strongestBarMix.event_id,
-        eventTitle: eventTitle(strongestBarMix),
-        metric: formatNullablePercent(strongestBarMix.bar_revenue_share_percent),
-        detail: `Bárbevétel ${formatMoney(strongestBarMix.bar_revenue_gross)} · jegy ${formatNullablePercent(
-          strongestBarMix.ticket_revenue_share_percent,
-        )}`,
-      });
-    }
-
-    return insights.slice(0, 4);
-  }, [eventById, eventPerformances, highestCostRatioPerformance, missingTicketActualRows, topPerformance]);
   const comparisonRows = useMemo(
     () =>
       [...eventPerformances]
@@ -899,6 +818,7 @@ export function EventsPage({ mode = "planner" }: { mode?: EventsPageMode }) {
       expected_attendance: form.expected_attendance ? Number(form.expected_attendance) : null,
       ticket_revenue_gross: form.ticket_revenue_gross || "0",
       bar_revenue_gross: form.bar_revenue_gross || "0",
+      performer_settlement_type: form.performer_settlement_type || "hybrid",
       performer_share_percent: form.performer_share_percent || "80",
       performer_fixed_fee: form.performer_fixed_fee || "0",
       event_cost_amount: form.event_cost_amount || "0",
@@ -922,10 +842,31 @@ export function EventsPage({ mode = "planner" }: { mode?: EventsPageMode }) {
     };
   }
 
+  function buildCostLinePayload(): EventCostLinePayload[] {
+    return costLineForms
+      .map((line) => ({
+        category: line.category.trim() || "egyeb",
+        description: line.description.trim(),
+        amount_gross: line.amount_gross || "0",
+        source_type: line.source_type.trim() || "manual",
+        source_reference: compactNullable(line.source_reference),
+        incurred_at: optionalIsoDateTime(line.incurred_at),
+        notes: compactNullable(line.notes),
+      }))
+      .filter((line) => line.description || Number(line.amount_gross) > 0);
+  }
+
   function saveTicketActual(eventId: string) {
     ticketActualMutation.mutate({
       eventId,
       payload: buildTicketActualPayload(),
+    });
+  }
+
+  function saveCostLines(eventId: string) {
+    costLinesMutation.mutate({
+      eventId,
+      payload: buildCostLinePayload(),
     });
   }
 
@@ -1002,6 +943,20 @@ export function EventsPage({ mode = "planner" }: { mode?: EventsPageMode }) {
             <input className="field-input" type="number" min="0" value={form.expected_attendance} onChange={(event) => setForm({ ...form, expected_attendance: event.target.value })} />
           </label>
           <label className="field">
+            <span>Fellépő elszámolás</span>
+            <select
+              className="field-input"
+              value={form.performer_settlement_type}
+              onChange={(event) => setForm({ ...form, performer_settlement_type: event.target.value })}
+            >
+              {performerSettlementOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field">
             <span>Fellépő részesedés %</span>
             <input className="field-input" type="number" min="0" max="100" step="0.01" value={form.performer_share_percent} onChange={(event) => setForm({ ...form, performer_share_percent: event.target.value })} />
           </label>
@@ -1057,63 +1012,55 @@ export function EventsPage({ mode = "planner" }: { mode?: EventsPageMode }) {
           </article>
           <article className="finance-summary-card">
             <span>Kapcsolt jegybevétel</span>
-            <strong>{formatMoney(summary.ticketRevenue)}</strong>
+            <strong>{formatMoney(summary.ticket_revenue_gross)}</strong>
           </article>
           <article className="finance-summary-card">
             <span>Flow saját eredmény</span>
-            <strong>{formatMoney(summary.profit)}</strong>
+            <strong>{formatMoney(summary.event_profit_lite)}</strong>
           </article>
           <article className="finance-summary-card">
             <span>Kapcsolt nyugták</span>
-            <strong>{formatNumber(summary.receiptCount)}</strong>
+            <strong>{formatNumber(summary.receipt_count)}</strong>
           </article>
-          <article className={summary.missingTicketActualCount > 0 ? "finance-summary-card warning" : "finance-summary-card success"}>
+          <article className={summary.missing_ticket_actual_count > 0 ? "finance-summary-card warning" : "finance-summary-card success"}>
             <span>Ticket actual lefedettség</span>
-            <strong>{formatNullablePercent(ticketActualCoveragePercent)}</strong>
+            <strong>{formatNullablePercent(summary.ticket_actual_coverage_percent)}</strong>
           </article>
-          <article className={summary.missingTicketActualCount > 0 ? "finance-summary-card warning" : "finance-summary-card success"}>
+          <article className={summary.missing_ticket_actual_count > 0 ? "finance-summary-card warning" : "finance-summary-card success"}>
             <span>Ticket actual hiányzik</span>
-            <strong>{summary.missingTicketActualCount}</strong>
+            <strong>{summary.missing_ticket_actual_count}</strong>
           </article>
           <article className="finance-summary-card compact-title">
             <span>Legfelkapottabb</span>
             <strong>
-              {mostPopularPerformance
-                ? eventById.get(mostPopularPerformance.event_id)?.title ?? "Ismeretlen"
-                : "-"}
+              {highlights?.most_popular.title ?? "-"}
             </strong>
           </article>
           <article className="finance-summary-card compact-title">
             <span>Legnagyobb forgalom</span>
             <strong>
-              {highestRevenuePerformance
-                ? eventById.get(highestRevenuePerformance.event_id)?.title ?? "Ismeretlen"
-                : "-"}
+              {highlights?.highest_revenue.title ?? "-"}
             </strong>
           </article>
           <article className="finance-summary-card compact-title">
             <span>Legjobb margin</span>
             <strong>
-              {topMarginPerformance
-                ? `${formatNullablePercent(topMarginPerformance.event_profit_margin_percent)} · ${
-                    eventById.get(topMarginPerformance.event_id)?.title ?? "Ismeretlen"
-                  }`
+              {highlights?.top_margin.metric_value
+                ? `${formatNullablePercent(highlights.top_margin.metric_value)} · ${highlights.top_margin.title ?? "Ismeretlen"}`
                 : "-"}
             </strong>
           </article>
           <article className="finance-summary-card compact-title">
             <span>Költség figyelő</span>
             <strong>
-              {highestCostRatioPerformance
-                ? `${formatNullablePercent(highestCostRatioPerformance.operating_cost_ratio_percent)} · ${
-                    eventById.get(highestCostRatioPerformance.event_id)?.title ?? "Ismeretlen"
-                  }`
+              {highlights?.highest_cost_ratio.metric_value
+                ? `${formatNullablePercent(highlights.highest_cost_ratio.metric_value)} · ${highlights.highest_cost_ratio.title ?? "Ismeretlen"}`
                 : "-"}
             </strong>
           </article>
           <article className="finance-summary-card compact-title">
             <span>Nyereséges / veszteséges</span>
-            <strong>{summary.profitableCount} / {summary.lossCount}</strong>
+            <strong>{summary.profitable_count} / {summary.loss_count}</strong>
           </article>
         </div>
       )}
@@ -1132,11 +1079,11 @@ export function EventsPage({ mode = "planner" }: { mode?: EventsPageMode }) {
                 className={`event-insight-row ${insight.tone}`}
                 key={insight.key}
                 type="button"
-                onClick={() => setExpandedEventId(insight.eventId)}
+                onClick={() => setExpandedEventId(insight.event_id)}
               >
                 <div>
                   <span>{insight.title}</span>
-                  <strong>{insight.eventTitle}</strong>
+                  <strong>{insight.event_title}</strong>
                 </div>
                 <div>
                   <strong>{insight.metric}</strong>
@@ -1154,19 +1101,19 @@ export function EventsPage({ mode = "planner" }: { mode?: EventsPageMode }) {
           eyebrow="Ticket actual kontroll"
           title="Jegyadat lefedettség"
           subtitle="A jegybevétel külön ticket rendszerből rögzített actual; a POS sorok kizárólag bár/fogyasztás oldalt adnak."
-          count={formatNullablePercent(ticketActualCoveragePercent)}
+          count={formatNullablePercent(summary.ticket_actual_coverage_percent)}
         >
           <div className="event-ticket-coverage-summary">
             <span>
-              <strong>{summary.ticketActualCount}</strong>
+              <strong>{summary.ticket_actual_count}</strong>
               Ticket actual rögzítve
             </span>
             <span>
-              <strong>{summary.missingTicketActualCount}</strong>
+              <strong>{summary.missing_ticket_actual_count}</strong>
               Hiányzó ticket actual
             </span>
             <span>
-              <strong>{formatMoney(summary.ticketRevenue)}</strong>
+              <strong>{formatMoney(summary.ticket_revenue_gross)}</strong>
               Kapcsolt jegybevétel
             </span>
           </div>
@@ -1264,10 +1211,10 @@ export function EventsPage({ mode = "planner" }: { mode?: EventsPageMode }) {
               {performerRows.slice(0, 8).map((row, index) => (
                 <article className="flow-performer-card" key={row.performer}>
                   <span>#{index + 1} {row.performer}</span>
-                  <strong>{formatMoney(row.profit)}</strong>
+                  <strong>{formatMoney(row.event_profit_lite)}</strong>
                   <small>
-                    {row.eventCount} event · saját bevétel {formatMoney(row.ownRevenue)} · jegy{" "}
-                    {formatMoney(row.ticketRevenue)} · bár {formatMoney(row.barRevenue)}
+                    {row.event_count} event · saját bevétel {formatMoney(row.own_revenue)} · jegy{" "}
+                    {formatMoney(row.ticket_revenue_gross)} · bár {formatMoney(row.bar_revenue_gross)}
                   </small>
                 </article>
               ))}
@@ -1448,8 +1395,12 @@ export function EventsPage({ mode = "planner" }: { mode?: EventsPageMode }) {
                     </article>
                     <article className="catalog-decision-card warning">
                       <span>Fellépő része</span>
-                      <strong>{formatMoney(performance?.performer_share_amount ?? event.performer_share_amount)}</strong>
-                      <small>{formatNumber(event.performer_share_percent)}% jegybevétel alapján, fix díj nélkül.</small>
+                      <strong>{formatMoney(performance?.performer_total_compensation_gross ?? event.performer_total_compensation_gross)}</strong>
+                      <small>
+                        {formatPerformerSettlementType(performance?.performer_settlement_type ?? event.performer_settlement_type)} ·
+                        share {formatMoney(performance?.performer_share_amount ?? event.performer_share_amount)} · fix{" "}
+                        {formatMoney(performance?.performer_fixed_fee_amount ?? event.performer_fixed_fee_amount)}
+                      </small>
                     </article>
                     <article className="catalog-decision-card success">
                       <span>Flow saját bevétel</span>
@@ -1611,6 +1562,123 @@ export function EventsPage({ mode = "planner" }: { mode?: EventsPageMode }) {
                       </Button>
                     </div>
                   </div>
+                  <div className="event-ticket-actual-panel">
+                    <div className="event-live-heading">
+                      <span>Event költségsorok</span>
+                      <strong>{formatMoney(costLineDraftTotal)} rögzített bruttó költség</strong>
+                    </div>
+                    {eventCostLinesQuery.isLoading ? (
+                      <p className="info-message">Költségsorok betöltése...</p>
+                    ) : null}
+                    <div className="event-ticket-worklist">
+                      {costLineForms.map((line, index) => (
+                        <article className="event-ticket-worklist-row" key={index}>
+                          <div className="form-grid">
+                            <label className="field">
+                              <span>Kategória</span>
+                              <input
+                                className="field-input"
+                                value={line.category}
+                                onChange={(inputEvent) =>
+                                  setCostLineForms((current) =>
+                                    current.map((item, itemIndex) =>
+                                      itemIndex === index ? { ...item, category: inputEvent.target.value } : item,
+                                    ),
+                                  )
+                                }
+                              />
+                            </label>
+                            <label className="field">
+                              <span>Leírás</span>
+                              <input
+                                className="field-input"
+                                value={line.description}
+                                onChange={(inputEvent) =>
+                                  setCostLineForms((current) =>
+                                    current.map((item, itemIndex) =>
+                                      itemIndex === index ? { ...item, description: inputEvent.target.value } : item,
+                                    ),
+                                  )
+                                }
+                                placeholder="pl. Biztonsági szolgálat"
+                              />
+                            </label>
+                            <label className="field">
+                              <span>Bruttó összeg</span>
+                              <input
+                                className="field-input"
+                                type="number"
+                                min="0"
+                                step="1"
+                                value={line.amount_gross}
+                                onChange={(inputEvent) =>
+                                  setCostLineForms((current) =>
+                                    current.map((item, itemIndex) =>
+                                      itemIndex === index ? { ...item, amount_gross: inputEvent.target.value } : item,
+                                    ),
+                                  )
+                                }
+                              />
+                            </label>
+                            <label className="field">
+                              <span>Forrás</span>
+                              <input
+                                className="field-input"
+                                value={line.source_reference}
+                                onChange={(inputEvent) =>
+                                  setCostLineForms((current) =>
+                                    current.map((item, itemIndex) =>
+                                      itemIndex === index ? { ...item, source_reference: inputEvent.target.value } : item,
+                                    ),
+                                  )
+                                }
+                                placeholder="Számla vagy belső azonosító"
+                              />
+                            </label>
+                          </div>
+                          <div className="catalog-editor-actions">
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              onClick={() =>
+                                setCostLineForms((current) =>
+                                  current.filter((_item, itemIndex) => itemIndex !== index),
+                                )
+                              }
+                            >
+                              Sor törlése
+                            </Button>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                    {costLineForms.length === 0 ? (
+                      <p className="empty-message">
+                        Nincs külön event költségsor. A legacy egyéb költség mező továbbra is beszámít, de az új
+                        sorok auditálhatóbb bontást adnak.
+                      </p>
+                    ) : null}
+                    {costLinesMutation.error ? (
+                      <p className="error-message">{costLinesMutation.error.message}</p>
+                    ) : null}
+                    <div className="catalog-editor-actions">
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => setCostLineForms((current) => [...current, buildEventCostLineForm()])}
+                      >
+                        Költségsor hozzáadása
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => saveCostLines(event.id)}
+                        disabled={costLinesMutation.isPending}
+                      >
+                        {costLinesMutation.isPending ? "Költségsorok mentése..." : "Költségsorok mentése"}
+                      </Button>
+                    </div>
+                  </div>
                   {eventPerformanceQuery.isLoading && expanded ? (
                     <p className="info-message">Event teljesítmény betöltése...</p>
                   ) : null}
@@ -1644,13 +1712,21 @@ export function EventsPage({ mode = "planner" }: { mode?: EventsPageMode }) {
                         </article>
                         <article className="catalog-decision-card warning">
                           <span>Előadói rész</span>
-                          <strong>{formatMoney(performance.performer_share_amount)}</strong>
-                          <small>{formatNumber(performance.performer_share_percent)}% a kapcsolt jegybevételből.</small>
+                          <strong>{formatMoney(performance.performer_total_compensation_gross)}</strong>
+                          <small>
+                            {formatPerformerSettlementType(performance.performer_settlement_type)} · share{" "}
+                            {formatNumber(performance.performer_share_percent)}% / {formatMoney(performance.performer_share_amount)} · fix{" "}
+                            {formatMoney(performance.performer_fixed_fee_amount)}
+                          </small>
                         </article>
                         <article className="catalog-decision-card neutral">
                           <span>Event költség</span>
                           <strong>{formatMoney(performance.operating_cost_gross)}</strong>
-                          <small>Platform {formatMoney(performance.platform_fee_gross)} · Költségarány: {formatNullablePercent(performance.operating_cost_ratio_percent)}</small>
+                          <small>
+                            Platform {formatMoney(performance.platform_fee_gross)} · sorok{" "}
+                            {formatMoney(performance.event_cost_lines_gross)} · Költségarány:{" "}
+                            {formatNullablePercent(performance.operating_cost_ratio_percent)}
+                          </small>
                         </article>
                         <article className="catalog-decision-card primary">
                           <span>Event profit</span>
@@ -1714,6 +1790,7 @@ export function EventsPage({ mode = "planner" }: { mode?: EventsPageMode }) {
                     <article className="detail-item"><span>Kezdés</span><strong>{formatDateTime(event.starts_at)}</strong></article>
                     <article className="detail-item"><span>Zárás</span><strong>{formatDateTime(event.ends_at)}</strong></article>
                     <article className="detail-item"><span>Várt létszám</span><strong>{event.expected_attendance ?? "-"}</strong></article>
+                    <article className="detail-item"><span>Elszámolás</span><strong>{formatPerformerSettlementType(event.performer_settlement_type)}</strong></article>
                     <article className="detail-item"><span>Fix fellépti díj</span><strong>{formatMoney(event.performer_fixed_fee)}</strong></article>
                     <article className="detail-item"><span>Egyéb költség</span><strong>{formatMoney(event.event_cost_amount)}</strong></article>
                     <article className="detail-item"><span>Megjegyzés</span><strong>{event.notes ?? "-"}</strong></article>

@@ -108,9 +108,9 @@ def test_parse_succeeds_for_clean_csv(
 
     db_session.expire_all()
     row_count = db_session.scalar(
-        select(func.count()).select_from(ImportRowModel).where(
-            ImportRowModel.batch_id == UUID(batch_id)
-        )
+        select(func.count())
+        .select_from(ImportRowModel)
+        .where(ImportRowModel.batch_id == UUID(batch_id))
     )
     assert row_count == 4
 
@@ -150,7 +150,10 @@ def test_parse_succeeds_for_clean_csv(
 
     alias_response = client.get(
         "/api/v1/pos-ingestion/product-aliases",
-        params={"business_unit_id": str(test_business_unit.id), "status": "auto_created"},
+        params={
+            "business_unit_id": str(test_business_unit.id),
+            "status": "auto_created",
+        },
     )
     assert alias_response.status_code == 200
     alias_payload = alias_response.json()
@@ -207,7 +210,9 @@ def test_parse_pos_sales_coalesces_repeated_product_aliases_in_same_batch(
     assert aliases[0].occurrence_count == 3
 
     product_count = db_session.scalar(
-        select(func.count()).select_from(ProductModel).where(
+        select(func.count())
+        .select_from(ProductModel)
+        .where(
             ProductModel.business_unit_id == test_business_unit.id,
             ProductModel.name == "Vegyes sos",
         )
@@ -238,9 +243,9 @@ def test_parse_bad_csv_creates_import_row_error(
 
     db_session.expire_all()
     error_count = db_session.scalar(
-        select(func.count()).select_from(ImportRowErrorModel).where(
-            ImportRowErrorModel.batch_id == UUID(batch_id)
-        )
+        select(func.count())
+        .select_from(ImportRowErrorModel)
+        .where(ImportRowErrorModel.batch_id == UUID(batch_id))
     )
     assert error_count >= 1
 
@@ -387,8 +392,7 @@ def test_pos_product_aliases_can_be_approved_in_one_transaction(
 
     db_session.expire_all()
     refreshed_aliases = [
-        db_session.get(PosProductAliasModel, alias.id)
-        for alias in aliases[:2]
+        db_session.get(PosProductAliasModel, alias.id) for alias in aliases[:2]
     ]
     assert [alias.product_id for alias in refreshed_aliases if alias is not None] == [
         product.id for product in products
@@ -535,12 +539,13 @@ def test_pos_product_alias_bulk_approval_is_atomic_on_invalid_product(
 
     db_session.expire_all()
     unchanged_aliases = [
-        db_session.get(PosProductAliasModel, alias.id)
-        for alias in aliases[:2]
+        db_session.get(PosProductAliasModel, alias.id) for alias in aliases[:2]
     ]
     assert all(alias is not None for alias in unchanged_aliases)
     assert all(alias.status == "auto_created" for alias in unchanged_aliases if alias)
-    assert all(alias.mapping_confidence != "manual" for alias in unchanged_aliases if alias)
+    assert all(
+        alias.mapping_confidence != "manual" for alias in unchanged_aliases if alias
+    )
 
 
 def test_pos_catalog_sale_price_uses_latest_sale_date_not_import_order(
@@ -664,9 +669,7 @@ def test_pos_missing_recipe_worklist_returns_pos_products_without_active_recipe(
     assert refreshed_response.status_code == 200
     refreshed_payload = refreshed_response.json()
     assert len(refreshed_payload) == 3
-    assert "Croissant" not in {
-        item["product_name"] for item in refreshed_payload
-    }
+    assert "Croissant" not in {item["product_name"] for item in refreshed_payload}
 
 
 def test_parse_pos_sales_missing_required_column_returns_profile_error(
@@ -694,7 +697,9 @@ def test_parse_pos_sales_missing_required_column_returns_profile_error(
 
     db_session.expire_all()
     stored_error = db_session.scalar(
-        select(ImportRowErrorModel).where(ImportRowErrorModel.batch_id == UUID(batch_id))
+        select(ImportRowErrorModel).where(
+            ImportRowErrorModel.batch_id == UUID(batch_id)
+        )
     )
     assert stored_error is not None
     assert stored_error.error_code == "missing_required_columns"
@@ -794,6 +799,13 @@ def test_parse_gourmand_pos_sales_file_set_uses_summary_categories(
         .where(ImportRowModel.batch_id == UUID(batch_id))
         .order_by(ImportRowModel.row_number.asc(), ImportRowModel.created_at.asc())
     ).all()
+    rows = sorted(
+        rows,
+        key=lambda row: (
+            row.normalized_payload["occurred_at"] if row.normalized_payload else "",
+            row.normalized_payload["source_line_key"] if row.normalized_payload else "",
+        ),
+    )
 
     assert len(rows) == 4
     first_payload = rows[0].normalized_payload
@@ -953,7 +965,9 @@ def test_errors_endpoint_returns_parse_errors(
     batch_id = upload_response.json()["id"]
     client.post(f"{API_PREFIX}/batches/{batch_id}/parse")
 
-    response = client.get(f"{API_PREFIX}/batches/{batch_id}/errors", params={"limit": 20})
+    response = client.get(
+        f"{API_PREFIX}/batches/{batch_id}/errors", params={"limit": 20}
+    )
 
     assert response.status_code == 200
     payload = response.json()
@@ -981,4 +995,6 @@ def test_reparse_of_non_uploaded_batch_returns_conflict(
     second_parse_response = client.post(f"{API_PREFIX}/batches/{batch_id}/parse")
 
     assert second_parse_response.status_code == 409
-    assert "Only uploaded batches can be parsed." in second_parse_response.json()["detail"]
+    assert (
+        "Only uploaded batches can be parsed." in second_parse_response.json()["detail"]
+    )

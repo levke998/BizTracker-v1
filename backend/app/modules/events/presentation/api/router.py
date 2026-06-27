@@ -20,12 +20,23 @@ from app.modules.events.application.commands.create_event import (
 from app.modules.events.application.commands.ensure_event_weather_coverage import (
     EnsureEventWeatherCoverageCommand,
 )
+from app.modules.events.application.commands.replace_event_cost_lines import (
+    EventCostLineInput,
+    EventCostLineValidationError,
+    ReplaceEventCostLinesCommand,
+)
 from app.modules.events.application.commands.upsert_event_ticket_actual import (
     EventTicketActualValidationError,
     UpsertEventTicketActualCommand,
 )
 from app.modules.events.application.queries.get_event_ticket_actual import (
     GetEventTicketActualQuery,
+)
+from app.modules.events.application.queries.list_event_cost_lines import (
+    ListEventCostLinesQuery,
+)
+from app.modules.events.application.queries.get_event_analytics_summary import (
+    GetEventAnalyticsSummaryQuery,
 )
 from app.modules.events.application.queries.list_events import ListEventsQuery
 from app.modules.events.application.queries.get_event_performance import (
@@ -36,21 +47,27 @@ from app.modules.events.application.queries.get_event_performance import (
 from app.modules.events.presentation.dependencies import (
     get_archive_event_command,
     get_create_event_command,
+    get_event_analytics_summary_query,
     get_ensure_event_weather_coverage_command,
     get_event_performance_query,
     get_list_event_performances_query,
     get_list_events_query,
     get_event_ticket_actual_query,
+    get_list_event_cost_lines_query,
+    get_replace_event_cost_lines_command,
     get_update_event_command,
     get_upsert_event_ticket_actual_command,
 )
 from app.modules.events.presentation.schemas.event import (
     EventCreateRequest,
+    EventAnalyticsSummaryResponse,
+    EventCostLineResponse,
     EventPerformanceResponse,
     EventResponse,
     EventTicketActualRequest,
     EventTicketActualResponse,
     EventWeatherCoverageResponse,
+    ReplaceEventCostLinesRequest,
 )
 from app.modules.weather.application.commands.backfill_weather import WeatherValidationError
 
@@ -104,6 +121,32 @@ def list_event_performances(
         limit=limit,
     )
     return [EventPerformanceResponse.model_validate(item) for item in performances]
+
+
+@router.get("/analytics-summary", response_model=EventAnalyticsSummaryResponse)
+def get_event_analytics_summary(
+    query: Annotated[
+        GetEventAnalyticsSummaryQuery,
+        Depends(get_event_analytics_summary_query),
+    ],
+    business_unit_id: uuid.UUID | None = Query(default=None),
+    status: str | None = Query(default=None),
+    is_active: bool | None = Query(default=None),
+    starts_from: datetime | None = Query(default=None),
+    starts_to: datetime | None = Query(default=None),
+    limit: int = Query(default=200, ge=1, le=200),
+) -> EventAnalyticsSummaryResponse:
+    """Return aggregate event analyzer metrics and decision signals."""
+
+    summary = query.execute(
+        business_unit_id=business_unit_id,
+        status=status,
+        is_active=is_active,
+        starts_from=starts_from,
+        starts_to=starts_to,
+        limit=limit,
+    )
+    return EventAnalyticsSummaryResponse.model_validate(summary)
 
 
 @router.get("/{event_id}/performance", response_model=EventPerformanceResponse)
@@ -166,6 +209,58 @@ def upsert_event_ticket_actual(
         ) from exc
 
     return EventTicketActualResponse.model_validate(actual)
+
+
+@router.get(
+    "/{event_id}/cost-lines",
+    response_model=list[EventCostLineResponse],
+)
+def list_event_cost_lines(
+    event_id: uuid.UUID,
+    query: Annotated[
+        ListEventCostLinesQuery,
+        Depends(get_list_event_cost_lines_query),
+    ],
+) -> list[EventCostLineResponse]:
+    """Return manual cost lines attached to one event."""
+
+    try:
+        cost_lines = query.execute(event_id=event_id)
+    except EventNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    return [EventCostLineResponse.model_validate(cost_line) for cost_line in cost_lines]
+
+
+@router.put(
+    "/{event_id}/cost-lines",
+    response_model=list[EventCostLineResponse],
+)
+def replace_event_cost_lines(
+    event_id: uuid.UUID,
+    payload: ReplaceEventCostLinesRequest,
+    command: Annotated[
+        ReplaceEventCostLinesCommand,
+        Depends(get_replace_event_cost_lines_command),
+    ],
+) -> list[EventCostLineResponse]:
+    """Replace manual cost lines attached to one event."""
+
+    try:
+        cost_lines = command.execute(
+            event_id=event_id,
+            cost_lines=[
+                EventCostLineInput(**cost_line.model_dump())
+                for cost_line in payload.cost_lines
+            ],
+        )
+    except EventNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except EventCostLineValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
+    return [EventCostLineResponse.model_validate(cost_line) for cost_line in cost_lines]
 
 
 @router.post(

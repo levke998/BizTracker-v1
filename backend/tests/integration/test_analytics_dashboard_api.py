@@ -313,7 +313,9 @@ class AnalyticsTestDataBuilder:
         ingredient_uom_id,
         quantity: Decimal,
     ) -> None:
-        recipe = RecipeModel(product_id=product_id, name=f"Recipe {uuid4().hex[:8]}", is_active=True)
+        recipe = RecipeModel(
+            product_id=product_id, name=f"Recipe {uuid4().hex[:8]}", is_active=True
+        )
         self.db_session.add(recipe)
         self.db_session.flush()
         version = RecipeVersionModel(
@@ -625,7 +627,9 @@ def test_dashboard_returns_kpis_and_breakdowns_for_business_unit(
     assert payload["category_breakdown"][0]["label"] == "Pastry"
     assert Decimal(str(payload["category_breakdown"][0]["revenue"])) == Decimal("1000")
     assert payload["payment_method_breakdown"][0]["label"] == "cash"
-    assert Decimal(str(payload["payment_method_breakdown"][0]["revenue"])) == Decimal("1000")
+    assert Decimal(str(payload["payment_method_breakdown"][0]["revenue"])) == Decimal(
+        "1000"
+    )
     assert payload["basket_value_distribution"][1]["label"] == "1000-2499"
     assert payload["basket_value_distribution"][1]["transaction_count"] == 1
     assert len(payload["traffic_heatmap"]) == 168
@@ -638,6 +642,58 @@ def test_dashboard_returns_kpis_and_breakdowns_for_business_unit(
     assert "stock_risks" in payload
     assert payload["top_products"][0]["label"] == "Croissant"
     assert payload["expense_breakdown"][0]["label"] == "supplier_invoice"
+
+
+def test_dashboard_returns_statistics_quality_for_distribution_decisions(
+    client: TestClient,
+    analytics_data_builder: AnalyticsTestDataBuilder,
+    test_business_unit: BusinessUnitModel,
+) -> None:
+    sales = [
+        (date(2030, 2, 1), "STAT-1", Decimal("1000")),
+        (date(2030, 2, 1), "STAT-2", Decimal("2000")),
+        (date(2030, 2, 2), "STAT-3", Decimal("3000")),
+        (date(2030, 2, 3), "STAT-4", Decimal("4000")),
+    ]
+    for row_number, (business_date, receipt_no, gross_amount) in enumerate(
+        sales, start=1
+    ):
+        analytics_data_builder.create_pos_row(
+            business_unit_id=test_business_unit.id,
+            row_number=row_number,
+            payload_date=business_date,
+            receipt_no=receipt_no,
+            category_name="Statistics",
+            product_name="Decision Cake",
+            quantity=Decimal("1"),
+            gross_amount=gross_amount,
+        )
+
+    response = client.get(
+        f"{API_PREFIX}/dashboard",
+        params={
+            "scope": "overall",
+            "business_unit_id": str(test_business_unit.id),
+            "period": "custom",
+            "start_date": "2030-02-01",
+            "end_date": "2030-02-07",
+        },
+    )
+
+    assert response.status_code == 200
+    statistics = response.json()["statistics_quality"]
+    assert statistics["period_day_count"] == 7
+    assert statistics["active_sales_day_count"] == 3
+    assert statistics["pos_row_count"] == 4
+    assert statistics["basket_count"] == 4
+    assert Decimal(str(statistics["coverage_percent"])) == Decimal("42.86")
+    assert statistics["quality_level"] == "insufficient"
+    assert Decimal(str(statistics["average_daily_revenue"])) == Decimal("3333.33")
+    assert Decimal(str(statistics["median_daily_revenue"])) == Decimal("3000.00")
+    assert Decimal(str(statistics["p75_basket_value"])) == Decimal("3000.00")
+    assert statistics["amount_basis"] == "gross"
+    assert statistics["amount_origin"] == "actual"
+    assert statistics["recommendation"]
 
 
 def test_dashboard_scope_filters_overall_flow_and_gourmand(
@@ -690,7 +746,9 @@ def test_dashboard_scope_filters_overall_flow_and_gourmand(
     assert _kpi_value(flow_response.json(), "revenue") == Decimal("110.00")
     assert flow_response.json()["business_unit_id"] == str(flow_business_unit.id)
     assert _kpi_value(gourmand_response.json(), "revenue") == Decimal("220.00")
-    assert gourmand_response.json()["business_unit_id"] == str(gourmand_business_unit.id)
+    assert gourmand_response.json()["business_unit_id"] == str(
+        gourmand_business_unit.id
+    )
 
 
 def test_dashboard_period_presets_resolve_year_and_last_30_days(
@@ -905,7 +963,9 @@ def test_dashboard_pos_revenue_tax_breakdown_is_derived_from_product_vat(
     analytics_data_builder: AnalyticsTestDataBuilder,
     test_business_unit: BusinessUnitModel,
 ) -> None:
-    vat_rate = db_session.scalar(select(VatRateModel).where(VatRateModel.code == "HU_27"))
+    vat_rate = db_session.scalar(
+        select(VatRateModel).where(VatRateModel.code == "HU_27")
+    )
     assert vat_rate is not None
     analytics_data_builder.create_product(
         business_unit_id=test_business_unit.id,
@@ -953,7 +1013,11 @@ def test_dashboard_pos_revenue_tax_breakdown_is_derived_from_product_vat(
     )
     source_response = client.get(
         f"{API_PREFIX}/dashboard/product-rows",
-        params={**common_params, "category_name": "Pastry", "product_name": "VAT Croissant"},
+        params={
+            **common_params,
+            "category_name": "Pastry",
+            "product_name": "VAT Croissant",
+        },
     )
     dashboard_response = client.get(
         f"{API_PREFIX}/dashboard",
@@ -1094,7 +1158,9 @@ def test_dashboard_expense_source_returns_supplier_invoice_lines(
             },
         ],
     )
-    post_response = client.post(f"/api/v1/procurement/purchase-invoices/{invoice.id}/post")
+    post_response = client.post(
+        f"/api/v1/procurement/purchase-invoices/{invoice.id}/post"
+    )
     assert post_response.status_code == 200
 
     expenses_response = client.get(
@@ -1663,9 +1729,7 @@ def test_dashboard_returns_gourmand_forecast_category_demand(
     assert response.status_code == 200
     rows = response.json()["forecast_category_demand_insights"]
     forecast_rows = [
-        row
-        for row in rows
-        if row["forecast_date"] == forecast_time.date().isoformat()
+        row for row in rows if row["forecast_date"] == forecast_time.date().isoformat()
     ]
     assert [row["category_name"] for row in forecast_rows[:2]] == ["Fagyi", "Kave"]
     fagyi = forecast_rows[0]
@@ -1744,7 +1808,9 @@ def test_dashboard_returns_gourmand_product_and_peak_time_forecasts(
         for row in payload["forecast_product_demand_insights"]
         if row["forecast_date"] == forecast_time.date().isoformat()
     ]
-    mango = next(row for row in product_rows if row["product_name"] == "Termek mangó fagyi")
+    mango = next(
+        row for row in product_rows if row["product_name"] == "Termek mangó fagyi"
+    )
     assert mango["category_name"] == "Termek Fagyi"
     assert Decimal(str(mango["expected_revenue"])) == Decimal("4800")
     assert Decimal(str(mango["expected_quantity"])) == Decimal("4")

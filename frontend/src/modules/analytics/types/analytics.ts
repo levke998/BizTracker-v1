@@ -384,6 +384,31 @@ export type DashboardBasketReceipt = {
   source_layer: string;
 };
 
+export type DashboardStatisticsQuality = {
+  period_day_count: number;
+  active_sales_day_count: number;
+  pos_row_count: number;
+  basket_count: number;
+  coverage_percent: string;
+  quality_level: "strong" | "usable" | "limited" | "insufficient" | string;
+  average_daily_revenue: string;
+  median_daily_revenue: string;
+  p25_daily_revenue: string;
+  p75_daily_revenue: string;
+  p90_daily_revenue: string;
+  p95_daily_revenue: string;
+  average_basket_value: string;
+  median_basket_value: string;
+  p25_basket_value: string;
+  p75_basket_value: string;
+  p90_basket_value: string;
+  p95_basket_value: string;
+  recommendation: string;
+  source_layer: string;
+  amount_basis: string;
+  amount_origin: string;
+};
+
 export type DashboardData = {
   scope: DashboardScope;
   business_unit_id: string | null;
@@ -410,6 +435,7 @@ export type DashboardData = {
   stock_risks: DashboardStockRiskRow[];
   top_products: DashboardBreakdownRow[];
   expense_breakdown: DashboardExpenseRow[];
+  statistics_quality: DashboardStatisticsQuality;
   notes: string[];
 };
 

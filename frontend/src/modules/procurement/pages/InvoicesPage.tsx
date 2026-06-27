@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { Link, useSearchParams } from "react-router-dom";
 
 import { useTopbarControls } from "../../../shared/components/layout/TopbarControlsContext";
+import { routes } from "../../../shared/constants/routes";
+import { updateInventoryVarianceActionReview } from "../../inventory/api/inventoryApi";
 import type { InventoryItem } from "../../inventory/types/inventory";
 import type { BusinessUnit, UnitOfMeasure, VatRate } from "../../masterData/types/masterData";
 import type {
@@ -426,6 +430,8 @@ function InvoicesHeaderControls({
 
 export function InvoicesPage() {
   const { setControls } = useTopbarControls();
+  const queryClient = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
   const {
     primaryBusinessUnits,
     technicalBusinessUnits,
@@ -457,9 +463,18 @@ export function InvoicesPage() {
     isLoading,
     errorMessage,
   } = usePurchaseInvoices();
+  const requestedBusinessUnitId = searchParams.get("business_unit_id") ?? "";
+  const requestedActionSuggestionId = searchParams.get("action_suggestion_id") ?? "";
+  const requestedQuickAction = searchParams.get("quick_action") ?? "";
+  const requestedReasonCode = searchParams.get("reason_code") ?? "";
+  const isMissingPurchaseInvoiceQuickAction =
+    requestedQuickAction === "review_missing_purchase_invoice";
 
   const [actionMessage, setActionMessage] = useState("");
   const [actionErrorMessage, setActionErrorMessage] = useState("");
+  const [actionReviewMessage, setActionReviewMessage] = useState("");
+  const [actionReviewError, setActionReviewError] = useState("");
+  const [isClosingActionReview, setIsClosingActionReview] = useState(false);
   const [selectedPdfFile, setSelectedPdfFile] = useState<File | null>(null);
   const [selectedPdfDraftId, setSelectedPdfDraftId] = useState("");
   const [aliasSelections, setAliasSelections] = useState<Record<string, string>>({});
@@ -471,6 +486,132 @@ export function InvoicesPage() {
   );
   const summary = summarizeInvoices(invoices);
 
+  function updateRouteParameter(name: string, value: string) {
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        if (value) {
+          next.set(name, value);
+        } else {
+          next.delete(name);
+        }
+        return next;
+      },
+      { replace: true },
+    );
+  }
+
+  function selectBusinessUnit(value: string) {
+    setSelectedBusinessUnitId(value);
+    setActionReviewMessage("");
+    setActionReviewError("");
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        next.set("business_unit_id", value);
+        next.delete("action_suggestion_id");
+        next.delete("quick_action");
+        next.delete("reason_code");
+        return next;
+      },
+      { replace: true },
+    );
+  }
+
+  function buildInventoryActionSuggestionsPath() {
+    const params = new URLSearchParams();
+    if (selectedBusinessUnitId) {
+      params.set("business_unit_id", selectedBusinessUnitId);
+    }
+    if (requestedActionSuggestionId) {
+      params.set("action_suggestion_id", requestedActionSuggestionId);
+    }
+    const queryString = params.toString();
+    return queryString
+      ? `${routes.inventoryTheoreticalStock}?${queryString}`
+      : routes.inventoryTheoreticalStock;
+  }
+
+  function clearActionTargetFocus() {
+    setActionReviewMessage("");
+    setActionReviewError("");
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        next.delete("action_suggestion_id");
+        next.delete("quick_action");
+        next.delete("reason_code");
+        return next;
+      },
+      { replace: true },
+    );
+  }
+
+  async function closeMissingPurchaseInvoiceActionSuggestion() {
+    setActionReviewMessage("");
+    setActionReviewError("");
+    if (!selectedBusinessUnitId) {
+      setActionReviewError("Valassz vallalkozast az akcio lezarasahoz.");
+      return;
+    }
+    if (!requestedActionSuggestionId) {
+      setActionReviewError("Hianyzik az akciojavaslat azonositoja.");
+      return;
+    }
+
+    setIsClosingActionReview(true);
+    try {
+      await updateInventoryVarianceActionReview(requestedActionSuggestionId, {
+        business_unit_id: selectedBusinessUnitId,
+        status: "resolved",
+        note: "Kimaradt beszerzesi szamla kontroll elvegezve a Procurement oldalon.",
+      });
+      setActionReviewMessage("Akciojavaslat lezarva. A beszerzesi kontroll rogzult.");
+      setActionReviewError("");
+      await queryClient.invalidateQueries({
+        queryKey: ["inventory-variance-action-suggestions"],
+      });
+    } catch (error) {
+      setActionReviewError(
+        error instanceof Error ? error.message : "Nem sikerult lezarni az akciojavaslatot.",
+      );
+    } finally {
+      setIsClosingActionReview(false);
+    }
+  }
+
+  useEffect(() => {
+    const businessUnits = [...primaryBusinessUnits, ...technicalBusinessUnits];
+    if (
+      requestedBusinessUnitId &&
+      requestedBusinessUnitId !== selectedBusinessUnitId &&
+      businessUnits.some((unit) => unit.id === requestedBusinessUnitId)
+    ) {
+      setSelectedBusinessUnitId(requestedBusinessUnitId);
+    }
+  }, [
+    primaryBusinessUnits,
+    requestedBusinessUnitId,
+    selectedBusinessUnitId,
+    setSelectedBusinessUnitId,
+    technicalBusinessUnits,
+  ]);
+
+  useEffect(() => {
+    const businessUnits = [...primaryBusinessUnits, ...technicalBusinessUnits];
+    if (
+      selectedBusinessUnitId &&
+      !businessUnits.some((unit) => unit.id === requestedBusinessUnitId)
+    ) {
+      updateRouteParameter("business_unit_id", selectedBusinessUnitId);
+    }
+  }, [
+    primaryBusinessUnits,
+    requestedBusinessUnitId,
+    selectedBusinessUnitId,
+    technicalBusinessUnits,
+  ]);
+
   useEffect(() => {
     setControls(
       <InvoicesHeaderControls
@@ -478,7 +619,7 @@ export function InvoicesPage() {
         technicalBusinessUnits={technicalBusinessUnits}
         suppliers={suppliers}
         selectedBusinessUnitId={selectedBusinessUnitId}
-        setSelectedBusinessUnitId={setSelectedBusinessUnitId}
+        setSelectedBusinessUnitId={selectBusinessUnit}
         selectedSupplierId={selectedSupplierId}
         setSelectedSupplierId={setSelectedSupplierId}
         limit={limit}
@@ -494,7 +635,6 @@ export function InvoicesPage() {
     selectedSupplierId,
     setControls,
     setLimit,
-    setSelectedBusinessUnitId,
     setSelectedSupplierId,
     suppliers,
     technicalBusinessUnits,
@@ -875,6 +1015,43 @@ export function InvoicesPage() {
       {actionErrorMessage ? <p className="error-message">{actionErrorMessage}</p> : null}
       {errorMessage ? <p className="error-message">{errorMessage}</p> : null}
       {isLoading ? <p className="info-message">Beszerzési számlák betöltése...</p> : null}
+
+      {isMissingPurchaseInvoiceQuickAction ? (
+        <div className="action-target-focus-banner">
+          <div>
+            <strong>Inventory akciojavaslat: kimaradt beszerzesi szamla kontroll</strong>
+            <span>
+              Kimaradt beszerzesi szamla okkoddal rogzitett keszletelteres
+              erkezett. Nezd at a PDF draftokat, a vegleges beszerzesi szamlakat,
+              a postolasi allapotot es a beszallitoi alias mappinget.
+              {requestedReasonCode ? ` Ok: ${requestedReasonCode}.` : ""}
+              {requestedActionSuggestionId
+                ? ` Javaslat: ${requestedActionSuggestionId}.`
+                : ""}
+            </span>
+          </div>
+          <button
+            type="button"
+            className="secondary-button"
+            disabled={isClosingActionReview}
+            onClick={() => void closeMissingPurchaseInvoiceActionSuggestion()}
+          >
+            {isClosingActionReview ? "Lezaras..." : "Javaslat lezarasa"}
+          </button>
+          <Link className="secondary-button" to={buildInventoryActionSuggestionsPath()}>
+            Akciojavaslatokhoz
+          </Link>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={clearActionTargetFocus}
+          >
+            Fokusz torlese
+          </button>
+        </div>
+      ) : null}
+      {actionReviewMessage ? <p className="success-message">{actionReviewMessage}</p> : null}
+      {actionReviewError ? <p className="error-message">{actionReviewError}</p> : null}
 
       <div className="finance-summary-grid">
         <article className="finance-summary-card">

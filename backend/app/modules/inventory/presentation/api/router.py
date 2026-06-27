@@ -43,6 +43,11 @@ from app.modules.inventory.application.commands.upsert_variance_threshold import
     InventoryVarianceThresholdBusinessUnitNotFoundError,
     UpsertInventoryVarianceThresholdCommand,
 )
+from app.modules.inventory.application.commands.upsert_variance_action_review import (
+    InventoryVarianceActionReviewBusinessUnitNotFoundError,
+    InventoryVarianceActionReviewInvalidStatusError,
+    UpsertInventoryVarianceActionReviewCommand,
+)
 from app.modules.inventory.application.queries.list_inventory_items import (
     ListInventoryItemsQuery,
 )
@@ -64,6 +69,9 @@ from app.modules.inventory.application.queries.list_stock_levels import (
 from app.modules.inventory.application.queries.list_theoretical_stock import (
     ListInventoryTheoreticalStockQuery,
 )
+from app.modules.inventory.application.queries.list_variance_action_suggestions import (
+    ListInventoryVarianceActionSuggestionsQuery,
+)
 from app.modules.inventory.application.queries.list_variance_reason_summary import (
     ListInventoryVarianceReasonSummaryQuery,
 )
@@ -84,11 +92,13 @@ from app.modules.inventory.presentation.dependencies import (
     get_list_inventory_movements_query,
     get_list_inventory_stock_levels_query,
     get_list_inventory_theoretical_stock_query,
+    get_list_inventory_variance_action_suggestions_query,
     get_list_inventory_variance_item_summary_query,
     get_list_inventory_variance_reason_summary_query,
     get_list_inventory_variance_trend_query,
     get_register_physical_stock_count_command,
     get_update_inventory_item_command,
+    get_upsert_inventory_variance_action_review_command,
     get_upsert_inventory_variance_threshold_command,
 )
 from app.modules.inventory.presentation.schemas.inventory_item import (
@@ -100,6 +110,9 @@ from app.modules.inventory.presentation.schemas.inventory_item import (
     InventoryItemUpdateRequest,
     InventoryStockLevelResponse,
     InventoryTheoreticalStockResponse,
+    InventoryVarianceActionSuggestionResponse,
+    InventoryVarianceActionReviewResponse,
+    InventoryVarianceActionReviewUpdateRequest,
     InventoryVarianceItemSummaryResponse,
     InventoryVariancePeriodComparisonResponse,
     InventoryVarianceReasonSummaryResponse,
@@ -144,7 +157,9 @@ def create_inventory_movement(
         InventoryMovementInventoryItemNotFoundError,
         InventoryMovementUnitOfMeasureNotFoundError,
     ) as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
+        ) from exc
     except (
         InventoryMovementBusinessUnitMismatchError,
         InventoryMovementUnitOfMeasureMismatchError,
@@ -187,7 +202,9 @@ def register_physical_stock_count(
         PhysicalStockCountInventoryItemNotFoundError,
         PhysicalStockCountUnitOfMeasureNotFoundError,
     ) as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
+        ) from exc
     except (
         PhysicalStockCountBusinessUnitMismatchError,
         PhysicalStockCountUnitOfMeasureMismatchError,
@@ -242,7 +259,9 @@ def list_inventory_variance_reasons(
         inventory_item_id=inventory_item_id,
         limit=limit,
     )
-    return [InventoryVarianceReasonSummaryResponse.model_validate(item) for item in items]
+    return [
+        InventoryVarianceReasonSummaryResponse.model_validate(item) for item in items
+    ]
 
 
 @router.get(
@@ -317,6 +336,64 @@ def get_inventory_variance_period_comparison(
 
 
 @router.get(
+    "/variance-action-suggestions",
+    response_model=list[InventoryVarianceActionSuggestionResponse],
+)
+def list_inventory_variance_action_suggestions(
+    query: Annotated[
+        ListInventoryVarianceActionSuggestionsQuery,
+        Depends(get_list_inventory_variance_action_suggestions_query),
+    ],
+    business_unit_id: uuid.UUID | None = Query(default=None),
+    days: int = Query(default=30, ge=1, le=365),
+    limit: int = Query(default=8, ge=1, le=20),
+) -> list[InventoryVarianceActionSuggestionResponse]:
+    """Return prioritized inventory controlling recommendations."""
+
+    items = query.execute(
+        business_unit_id=business_unit_id,
+        days=days,
+        limit=limit,
+    )
+    return [
+        InventoryVarianceActionSuggestionResponse.model_validate(item) for item in items
+    ]
+
+
+@router.put(
+    "/variance-action-suggestions/{suggestion_id}/review",
+    response_model=InventoryVarianceActionReviewResponse,
+)
+def upsert_inventory_variance_action_review(
+    suggestion_id: str,
+    payload: InventoryVarianceActionReviewUpdateRequest,
+    command: Annotated[
+        UpsertInventoryVarianceActionReviewCommand,
+        Depends(get_upsert_inventory_variance_action_review_command),
+    ],
+) -> InventoryVarianceActionReviewResponse:
+    """Persist the manual review state of one generated action suggestion."""
+
+    try:
+        item = command.execute(
+            business_unit_id=payload.business_unit_id,
+            suggestion_id=suggestion_id,
+            status=payload.status,
+            note=payload.note,
+        )
+    except InventoryVarianceActionReviewBusinessUnitNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
+        ) from exc
+    except InventoryVarianceActionReviewInvalidStatusError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
+    return InventoryVarianceActionReviewResponse.model_validate(item)
+
+
+@router.get(
     "/variance-thresholds",
     response_model=InventoryVarianceThresholdResponse,
 )
@@ -353,7 +430,9 @@ def upsert_inventory_variance_threshold(
             worsening_percent_threshold=payload.worsening_percent_threshold,
         )
     except InventoryVarianceThresholdBusinessUnitNotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
+        ) from exc
     return InventoryVarianceThresholdResponse.model_validate(item)
 
 
@@ -364,7 +443,9 @@ def upsert_inventory_variance_threshold(
 )
 def create_inventory_item(
     payload: InventoryItemCreateRequest,
-    command: Annotated[CreateInventoryItemCommand, Depends(get_create_inventory_item_command)],
+    command: Annotated[
+        CreateInventoryItemCommand, Depends(get_create_inventory_item_command)
+    ],
 ) -> InventoryItemResponse:
     """Create a new inventory item."""
 
@@ -378,11 +459,17 @@ def create_inventory_item(
             is_active=payload.is_active,
         )
     except InventoryBusinessUnitNotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
+        ) from exc
     except InventoryUnitOfMeasureNotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
+        ) from exc
     except InventoryItemAlreadyExistsError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail=str(exc)
+        ) from exc
 
     return InventoryItemResponse.model_validate(item)
 
@@ -391,7 +478,9 @@ def create_inventory_item(
 def update_inventory_item(
     inventory_item_id: uuid.UUID,
     payload: InventoryItemUpdateRequest,
-    command: Annotated[UpdateInventoryItemCommand, Depends(get_update_inventory_item_command)],
+    command: Annotated[
+        UpdateInventoryItemCommand, Depends(get_update_inventory_item_command)
+    ],
 ) -> InventoryItemResponse:
     """Update one inventory item."""
 
@@ -405,11 +494,17 @@ def update_inventory_item(
             is_active=payload.is_active,
         )
     except InventoryItemNotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
+        ) from exc
     except InventoryUnitOfMeasureNotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
+        ) from exc
     except InventoryItemAlreadyExistsError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail=str(exc)
+        ) from exc
 
     return InventoryItemResponse.model_validate(item)
 
@@ -427,7 +522,9 @@ def archive_inventory_item(
     try:
         item = command.execute(inventory_item_id=inventory_item_id)
     except InventoryItemNotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
+        ) from exc
 
     return InventoryItemResponse.model_validate(item)
 

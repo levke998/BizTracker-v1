@@ -55,6 +55,11 @@ class EventModel(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         nullable=False,
         server_default=sa.text("0"),
     )
+    performer_settlement_type: Mapped[str] = mapped_column(
+        sa.String(40),
+        nullable=False,
+        server_default=sa.text("'hybrid'"),
+    )
     performer_share_percent: Mapped[Decimal] = mapped_column(
         sa.Numeric(5, 2),
         nullable=False,

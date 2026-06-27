@@ -73,7 +73,7 @@ Kritikus tesztteruletek:
 - weather
 - identity/auth
 
-Legutobb dokumentalt teljes integration allapot: `157 passed`.
+Legutobb dokumentalt teljes integration allapot: `172 passed`.
 
 Legutobbi celzott validacio:
 - Event ticket actual lefedettseg frontend szelet utan:
@@ -158,6 +158,117 @@ Legutobbi celzott validacio:
   - `python -m pytest C:\BizTracker\backend\tests\integration\test_analytics_dashboard_api.py -q` -> `23 passed`
   - `python -m compileall C:\BizTracker\backend\app\modules\analytics C:\BizTracker\backend\tests\integration\test_analytics_dashboard_api.py` -> sikeres
   - `npm.cmd run build` -> sikeres
+- Analytics backend es Dashboard frontend refaktor lezarasa utan:
+  - analytics unit tesztek -> `32 passed`
+  - `python -m pytest C:\BizTracker\backend\tests\integration -q` -> `157 passed`
+  - `python -m compileall C:\BizTracker\backend\app\modules\analytics` -> sikeres
+  - `npm.cmd run build` -> sikeres (`DashboardPage` chunk kb. `81.38 kB`)
+- Event analytics summary backend read-model utan:
+  - `python -m compileall C:\BizTracker\backend\app\modules\events` -> sikeres
+  - `python -m pytest C:\BizTracker\backend\tests\integration\test_events_api.py -q` -> `10 passed`
+  - `npm.cmd run build` -> sikeres (`EventsPage` chunk kb. `35.91 kB`)
+- Flow event koltsegsorok v1 utan:
+  - `python -m alembic upgrade head` -> `034_core_inventory_variance_threshold -> 035_core_event_cost_line`
+  - `python -m compileall C:\BizTracker\backend\app\modules\events C:\BizTracker\backend\migrations\versions\20260508_035_core_event_cost_line.py` -> sikeres
+  - `python -m pytest C:\BizTracker\backend\tests\integration\test_events_api.py -q` -> `11 passed`
+  - `npm.cmd run build` -> sikeres (`EventsPage` chunk kb. `39.57 kB`)
+- Flow performer settlement szabalyok v1 utan:
+  - `python -m alembic upgrade head` -> `035_core_event_cost_line -> 036_core_event_performer_settlement_type`
+  - `python -m compileall C:\BizTracker\backend\app\modules\events C:\BizTracker\backend\migrations\versions\20260508_036_core_event_performer_settlement_type.py` -> sikeres
+  - `python -m pytest C:\BizTracker\backend\tests\integration\test_events_api.py -q` -> `12 passed`
+  - `npm.cmd run build` -> sikeres (`EventsPage` chunk kb. `40.71 kB`)
+- Inventory akciojavaslatok v1 utan:
+  - nincs uj migration
+  - `python -m compileall C:\BizTracker\backend\app\modules\inventory` -> sikeres
+  - `python -m pytest C:\BizTracker\backend\tests\integration\test_inventory_variance_action_suggestions_api.py -q` -> `2 passed`
+  - `python -m pytest C:\BizTracker\backend\tests\integration\test_inventory_movement_api.py C:\BizTracker\backend\tests\integration\test_inventory_variance_period_comparison_api.py -q` -> `11 passed`
+  - `npm.cmd run build` -> sikeres
+- Inventory akciojavaslat review v1 utan:
+  - `python -m alembic upgrade head` -> `036_core_event_performer_settlement_type -> 037_core_inventory_variance_action_review`
+  - `python -m alembic current` -> `037_core_inventory_variance_action_review (head)`
+  - `python -m compileall C:\BizTracker\backend\app\modules\inventory C:\BizTracker\backend\migrations\versions\20260508_037_core_inventory_variance_action_review.py` -> sikeres
+  - `python -m pytest C:\BizTracker\backend\tests\integration\test_inventory_variance_action_suggestions_api.py -q` -> `3 passed`
+  - `python -m pytest C:\BizTracker\backend\tests\integration -q` -> `163 passed`
+  - `npm.cmd run build` -> sikeres (`TheoreticalStockPage` chunk kb. `27.05 kB`)
+- Inventory akciojavaslat gyors celpont v1 utan:
+  - nincs uj migration
+  - `python -m compileall C:\BizTracker\backend\app\modules\inventory` -> sikeres
+  - `python -m pytest C:\BizTracker\backend\tests\integration\test_inventory_variance_action_suggestions_api.py -q` -> `3 passed`
+  - `python -m pytest C:\BizTracker\backend\tests\integration -q` -> `163 passed`
+  - `npm.cmd run build` -> sikeres (`TheoreticalStockPage` chunk kb. `27.53 kB`)
+- Inventory akciojavaslat fokuszparameterek utan:
+  - nincs uj migration
+  - `python -m compileall C:\BizTracker\backend\app\modules\inventory` -> sikeres
+  - `python -m pytest C:\BizTracker\backend\tests\integration\test_inventory_variance_action_suggestions_api.py -q` -> `3 passed`
+  - `python -m pytest C:\BizTracker\backend\tests\integration -q` -> `163 passed`
+  - `npm.cmd run build` -> sikeres (`CatalogIngredientsPage` chunk kb. `21.43 kB`, `TheoreticalStockPage` chunk kb. `27.88 kB`)
+- Inventory akciojavaslat fokusz banner utan:
+  - nincs uj migration
+  - `python -m compileall C:\BizTracker\backend\app\modules\inventory` -> sikeres
+  - `python -m pytest C:\BizTracker\backend\tests\integration\test_inventory_variance_action_suggestions_api.py -q` -> `3 passed`
+  - `python -m pytest C:\BizTracker\backend\tests\integration -q` -> `163 passed`
+  - `npm.cmd run build` -> sikeres (`CatalogIngredientsPage` chunk kb. `21.89 kB`, `TheoreticalStockPage` chunk kb. `28.39 kB`)
+- Inventory akciojavaslat visszaut/fokusz torles utan:
+  - nincs uj migration
+  - `python -m compileall C:\BizTracker\backend\app\modules\inventory` -> sikeres
+  - `python -m black --check C:\BizTracker\backend\app\modules\inventory\application\queries\list_variance_action_suggestions.py C:\BizTracker\backend\tests\integration\test_inventory_variance_action_suggestions_api.py` -> sikeres
+  - `python -m pytest C:\BizTracker\backend\tests\integration\test_inventory_variance_action_suggestions_api.py -q` -> `3 passed`
+  - `python -m pytest C:\BizTracker\backend\tests\integration -q` -> `163 passed`
+  - `npm.cmd run build` -> sikeres (`CatalogIngredientsPage` chunk kb. `22.50 kB`, `TheoreticalStockPage` chunk kb. `28.84 kB`)
+- Git es smoke zaras:
+  - `git show-ref --head --dereference` -> `main`, `origin/main` es `origin/HEAD` ugyanarra a `094fb9e...` commitra mutat
+  - `git fsck --no-progress` -> exit code 0; sok dangling tree latszik, de hianyzo/korrupt kotelezo objektum nincs
+  - `git fetch --dry-run origin` -> sikeres; a korabbi `bad object refs/remotes/origin/main` hiba nem reprodukalhato
+  - `npm.cmd run preview -- --host 127.0.0.1 --port 4173` + `python -m uvicorn app.main:app --host 127.0.0.1 --port 8000` mellett:
+    - `GET http://127.0.0.1:4173/inventory/theoretical-stock?business_unit_id=smoke` -> 200, React root HTML elerheto
+    - `GET http://127.0.0.1:8000/openapi.json` -> 200, tartalmazza a `/api/v1/inventory/variance-action-suggestions` endpointot
+    - `GET http://127.0.0.1:8000/api/v1/inventory/variance-action-suggestions?days=30` -> 200
+  - in-app browser vizualis smoke nem futott le: a browser runtime inicializalas `failed to write kernel assets` hibat adott, ezert csak HTTP smoke eredmeny kerult rogzitesre
+- Inventory hianyzo ar gyorsjavitas v1 utan:
+  - nincs uj migration
+  - `python -m black --check C:\BizTracker\backend\app\modules\inventory\application\queries\list_variance_action_suggestions.py C:\BizTracker\backend\tests\integration\test_inventory_variance_action_suggestions_api.py` -> sikeres
+  - `python -m compileall C:\BizTracker\backend\app\modules\inventory` -> sikeres
+  - `python -m pytest C:\BizTracker\backend\tests\integration\test_inventory_variance_action_suggestions_api.py -q` -> `4 passed`
+  - `python -m pytest C:\BizTracker\backend\tests\integration -q` -> `164 passed`
+  - `npm.cmd run build` -> sikeres (`CatalogIngredientsPage` chunk kb. `24.07 kB`, `TheoreticalStockPage` chunk kb. `28.84 kB`)
+- Inventory recept hiba kontroll v1 utan:
+  - nincs uj migration
+  - `python -m black --check C:\BizTracker\backend\app\modules\inventory\application\queries\list_variance_action_suggestions.py C:\BizTracker\backend\tests\integration\test_inventory_variance_action_suggestions_api.py` -> sikeres
+  - `python -m compileall C:\BizTracker\backend\app\modules\inventory` -> sikeres
+  - `python -m pytest C:\BizTracker\backend\tests\integration\test_inventory_variance_action_suggestions_api.py -q` -> `5 passed`
+  - `python -m pytest C:\BizTracker\backend\tests\integration -q` -> `165 passed`
+  - `npm.cmd run build` -> sikeres (`RecipesPage` chunk kb. `28.67 kB`, `TheoreticalStockPage` chunk kb. `28.84 kB`)
+  - `git diff --check` -> sikeres, csak meglovo CRLF figyelmeztetesekkel
+- Inventory mapping hiba kontroll v1 utan:
+  - nincs uj migration
+  - `python -m black --check C:\BizTracker\backend\app\modules\inventory\application\queries\list_variance_action_suggestions.py C:\BizTracker\backend\tests\integration\test_inventory_variance_action_suggestions_api.py` -> sikeres
+  - `python -m compileall C:\BizTracker\backend\app\modules\inventory` -> sikeres
+  - `python -m pytest C:\BizTracker\backend\tests\integration\test_inventory_variance_action_suggestions_api.py -q` -> `6 passed`
+  - `python -m pytest C:\BizTracker\backend\tests\integration -q` -> `166 passed`
+  - `npm.cmd run build` -> sikeres (`ImportCenterPage` chunk kb. `45.81 kB`, `TheoreticalStockPage` chunk kb. `28.84 kB`)
+- Inventory kimaradt beszerzesi szamla kontroll v1 utan:
+  - nincs uj migration
+  - `python -m black --check C:\BizTracker\backend\app\modules\inventory\application\queries\list_variance_action_suggestions.py C:\BizTracker\backend\tests\integration\test_inventory_variance_action_suggestions_api.py` -> sikeres
+  - `python -m compileall C:\BizTracker\backend\app\modules\inventory` -> sikeres
+  - `python -m pytest C:\BizTracker\backend\tests\integration\test_inventory_variance_action_suggestions_api.py -q` -> `7 passed`
+  - `python -m pytest C:\BizTracker\backend\tests\integration -q` -> `167 passed`
+  - `npm.cmd run build` -> sikeres (`InvoicesPage` chunk kb. `37.82 kB`, `TheoreticalStockPage` chunk kb. `28.84 kB`)
+- Inventory fizikai kontroll okok v1 utan:
+  - nincs uj migration
+  - `python -m black --check C:\BizTracker\backend\app\modules\inventory\application\queries\list_variance_action_suggestions.py C:\BizTracker\backend\tests\integration\test_inventory_variance_action_suggestions_api.py` -> sikeres
+  - `python -m compileall C:\BizTracker\backend\app\modules\inventory` -> sikeres
+  - `python -m pytest C:\BizTracker\backend\tests\integration\test_inventory_variance_action_suggestions_api.py -q` -> `11 passed`
+  - `python -m pytest C:\BizTracker\backend\tests\integration -q` -> `171 passed`
+  - `npm.cmd run build` -> sikeres (`TheoreticalStockPage` chunk kb. `31.50 kB`)
+- Dashboard 2.0 Statistics Quality v1 utan:
+  - nincs uj migration
+  - `python -m black --check C:\BizTracker\backend\app\modules\analytics\domain\entities\dashboard_snapshot.py C:\BizTracker\backend\app\modules\analytics\presentation\schemas\dashboard.py C:\BizTracker\backend\app\modules\analytics\infrastructure\repositories\statistics_analytics_builder.py C:\BizTracker\backend\app\modules\analytics\infrastructure\repositories\sqlalchemy_analytics_repository.py C:\BizTracker\backend\tests\integration\test_analytics_dashboard_api.py` -> sikeres
+  - `python -m compileall C:\BizTracker\backend\app\modules\analytics` -> sikeres
+  - `python -m pytest C:\BizTracker\backend\tests\integration\test_analytics_dashboard_api.py -q` -> `24 passed`
+  - `python -m pytest C:\BizTracker\backend\tests\integration -q` -> `172 passed`
+  - `npm.cmd run build` -> sikeres (`DashboardPage` chunk kb. `84.15 kB`)
+- POS import file-set sorrend flake javitas utan:
+  - `python -m pytest C:\BizTracker\backend\tests\integration\test_imports_api.py::test_parse_gourmand_pos_sales_file_set_uses_summary_categories -q` -> `1 passed`
 - POS import stuck-batch es duplicate alias regresszio utan:
   - `python -m pytest C:\BizTracker\backend\tests\integration\test_imports_api.py -q` -> `15 passed`
   - `python -m compileall C:\BizTracker\backend\scripts\recover_import_batch.py C:\BizTracker\backend\app\modules\imports C:\BizTracker\backend\app\modules\pos_ingestion` -> sikeres

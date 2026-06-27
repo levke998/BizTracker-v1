@@ -21,6 +21,10 @@ import type {
   InventoryStockLevelFilters,
   InventoryTheoreticalStock,
   InventoryTheoreticalStockFilters,
+  InventoryVarianceActionReview,
+  InventoryVarianceActionReviewUpdatePayload,
+  InventoryVarianceActionSuggestion,
+  InventoryVarianceActionSuggestionFilters,
   InventoryVarianceItemSummary,
   InventoryVarianceItemSummaryFilters,
   InventoryVariancePeriodComparison,
@@ -87,6 +91,28 @@ export function getInventoryVariancePeriodComparison(
   return apiGet<InventoryVariancePeriodComparison>(
     "inventory/variance-period-comparison",
     filters
+  );
+}
+
+export function listInventoryVarianceActionSuggestions(
+  filters: InventoryVarianceActionSuggestionFilters
+) {
+  return apiGet<InventoryVarianceActionSuggestion[]>(
+    "inventory/variance-action-suggestions",
+    filters
+  );
+}
+
+export function updateInventoryVarianceActionReview(
+  suggestionId: string,
+  payload: InventoryVarianceActionReviewUpdatePayload
+) {
+  return apiPutJson<
+    InventoryVarianceActionReviewUpdatePayload,
+    InventoryVarianceActionReview
+  >(
+    `inventory/variance-action-suggestions/${encodeURIComponent(suggestionId)}/review`,
+    payload
   );
 }
 

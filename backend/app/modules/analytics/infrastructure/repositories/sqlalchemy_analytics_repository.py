@@ -4,12 +4,11 @@ from __future__ import annotations
 
 import uuid
 from collections import defaultdict
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any
 from zoneinfo import ZoneInfo
 
-import sqlalchemy as sa
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -17,21 +16,20 @@ from app.modules.analytics.domain.entities.dashboard_snapshot import (
     DashboardBasketPairRow,
     DashboardBasketReceipt,
     DashboardBreakdownRow,
-    DashboardCategoryTrendRow,
     DashboardExpenseDetailRow,
     DashboardExpenseSource,
-    DashboardHeatmapCell,
     DashboardKpi,
     DashboardPeriod,
-    DashboardProductRiskRow,
     DashboardPosSourceRow,
     DashboardProductDetailRow,
     DashboardSnapshot,
-    DashboardStockRiskRow,
     DashboardVatReadiness,
 )
 from app.modules.analytics.infrastructure.repositories.expense_analytics_reader import (
     ExpenseAnalyticsReader,
+)
+from app.modules.analytics.infrastructure.repositories.catalog_inventory_risk_reader import (
+    CatalogInventoryRiskReader,
 )
 from app.modules.analytics.infrastructure.repositories.forecast_analytics_reader import (
     ForecastAnalyticsReader,
@@ -49,6 +47,12 @@ from app.modules.analytics.infrastructure.repositories.pos_financial_metrics imp
 from app.modules.analytics.infrastructure.repositories.pos_sales_analytics_builder import (
     PosSalesAnalyticsBuilder,
 )
+from app.modules.analytics.infrastructure.repositories.statistics_analytics_builder import (
+    DashboardStatisticsAnalyticsBuilder,
+)
+from app.modules.analytics.infrastructure.repositories.traffic_trend_analytics_builder import (
+    TrafficTrendAnalyticsBuilder,
+)
 from app.modules.analytics.infrastructure.repositories.weather_analytics_reader import (
     WeatherAnalyticsReader,
 )
@@ -57,32 +61,11 @@ from app.modules.finance.infrastructure.orm.transaction_model import (
 )
 from app.modules.imports.infrastructure.orm.import_batch_model import ImportBatchModel
 from app.modules.imports.infrastructure.orm.import_row_model import ImportRowModel
-from app.modules.inventory.infrastructure.orm.inventory_item_model import (
-    InventoryItemModel,
-)
-from app.modules.inventory.infrastructure.orm.inventory_movement_model import (
-    InventoryMovementModel,
-)
 from app.modules.master_data.infrastructure.orm.business_unit_model import (
     BusinessUnitModel,
 )
-from app.modules.master_data.infrastructure.orm.category_model import CategoryModel
 from app.modules.master_data.infrastructure.orm.product_model import ProductModel
 from app.modules.master_data.infrastructure.orm.vat_rate_model import VatRateModel
-from app.modules.master_data.infrastructure.orm.unit_of_measure_model import (
-    UnitOfMeasureModel,
-)
-from app.modules.procurement.infrastructure.orm.purchase_invoice_line_model import (
-    PurchaseInvoiceLineModel,
-)
-from app.modules.procurement.infrastructure.orm.purchase_invoice_model import (
-    PurchaseInvoiceModel,
-)
-from app.modules.production.infrastructure.orm.recipe_model import (
-    RecipeIngredientModel,
-    RecipeModel,
-    RecipeVersionModel,
-)
 from app.modules.weather.application.commands.sync_shared_weather import (
     SHARED_WEATHER_LOCATION_NAME,
     SHARED_WEATHER_PROVIDER,
@@ -108,7 +91,16 @@ class SqlAlchemyAnalyticsRepository:
             unknown_category=UNKNOWN_CATEGORY,
             unknown_product=UNKNOWN_PRODUCT,
         )
+        self._traffic_trends = TrafficTrendAnalyticsBuilder(
+            time_zone=APP_TIME_ZONE,
+            unknown_category=UNKNOWN_CATEGORY,
+        )
+        self._statistics = DashboardStatisticsAnalyticsBuilder(time_zone=APP_TIME_ZONE)
         self._expenses = ExpenseAnalyticsReader(session)
+        self._catalog_inventory = CatalogInventoryRiskReader(
+            session,
+            unknown_category=UNKNOWN_CATEGORY,
+        )
         self._weather = WeatherAnalyticsReader(
             session,
             time_zone=APP_TIME_ZONE,
@@ -159,7 +151,7 @@ class SqlAlchemyAnalyticsRepository:
         import_rows = self._list_pos_sales_rows(
             business_unit_id=resolved_business_unit_id,
         )
-        product_costs = self._build_product_unit_costs(
+        product_costs = self._catalog_inventory.product_unit_costs(
             business_unit_id=resolved_business_unit_id,
         )
         product_vat_rates = self._build_product_vat_rates(
@@ -184,9 +176,9 @@ class SqlAlchemyAnalyticsRepository:
         )
         average_basket_value, average_basket_quantity = (
             self._pos_sales.build_basket_metrics(
-            rows=import_rows,
-            start_at=start_at,
-            end_at=end_at,
+                rows=import_rows,
+                start_at=start_at,
+                end_at=end_at,
             )
         )
         forecast_category_demand_insights = tuple(
@@ -331,14 +323,14 @@ class SqlAlchemyAnalyticsRepository:
                 )
             ),
             traffic_heatmap=tuple(
-                self._build_traffic_heatmap(
+                self._traffic_trends.build_heatmap(
                     rows=import_rows,
                     start_at=start_at,
                     end_at=end_at,
                 )
             ),
             category_trends=tuple(
-                self._build_category_trends(
+                self._traffic_trends.build_category_trends(
                     rows=import_rows,
                     start_at=start_at,
                     end_at=end_at,
@@ -379,10 +371,10 @@ class SqlAlchemyAnalyticsRepository:
                     business_unit_id=resolved_business_unit_id,
                     scope=scope,
                     demand_rows=list(forecast_category_demand_insights),
-                    recipe_ingredients=self._build_active_recipe_ingredients(
+                    recipe_ingredients=self._catalog_inventory.active_recipe_ingredients(
                         business_unit_id=resolved_business_unit_id,
                     ),
-                    stock_levels=self._build_inventory_stock_level_summary(
+                    stock_levels=self._catalog_inventory.stock_levels(
                         business_unit_id=resolved_business_unit_id,
                     ),
                     limit=10,
@@ -408,13 +400,13 @@ class SqlAlchemyAnalyticsRepository:
                 )
             ),
             product_risks=tuple(
-                self._build_product_risks(
+                self._catalog_inventory.build_product_risks(
                     business_unit_id=resolved_business_unit_id,
                     limit=8,
                 )
             ),
             stock_risks=tuple(
-                self._build_stock_risks(
+                self._catalog_inventory.build_stock_risks(
                     business_unit_id=resolved_business_unit_id,
                     limit=8,
                 )
@@ -432,6 +424,11 @@ class SqlAlchemyAnalyticsRepository:
             ),
             expense_breakdown=tuple(
                 self._expenses.build_breakdown(transactions=transactions, limit=10)
+            ),
+            statistics_quality=self._statistics.build_quality(
+                rows=import_rows,
+                start_at=start_at,
+                end_at=end_at,
             ),
             notes=(
                 "A pénzügyi KPI-k a rögzített pénzügyi tranzakciókból számolódnak.",
@@ -485,7 +482,7 @@ class SqlAlchemyAnalyticsRepository:
             end_at=end_at,
             category_name=category_name,
             limit=200,
-            product_costs=self._build_product_unit_costs(
+            product_costs=self._catalog_inventory.product_unit_costs(
                 business_unit_id=resolved_business_unit_id,
             ),
             product_vat_rates=self._build_product_vat_rates(
@@ -610,7 +607,9 @@ class SqlAlchemyAnalyticsRepository:
             return None, None
 
         model = self._session.scalar(
-            select(BusinessUnitModel).where(BusinessUnitModel.code == business_unit_code)
+            select(BusinessUnitModel).where(
+                BusinessUnitModel.code == business_unit_code
+            )
         )
         if model is None:
             return None, None
@@ -653,7 +652,9 @@ class SqlAlchemyAnalyticsRepository:
         )
 
         if business_unit_id is not None:
-            statement = statement.where(ImportBatchModel.business_unit_id == business_unit_id)
+            statement = statement.where(
+                ImportBatchModel.business_unit_id == business_unit_id
+            )
 
         return list(self._session.scalars(statement).all())
 
@@ -672,40 +673,6 @@ class SqlAlchemyAnalyticsRepository:
             Decimal("0"),
         )
 
-    def _build_product_unit_costs(
-        self,
-        *,
-        business_unit_id: uuid.UUID | None,
-    ) -> dict[str, Decimal]:
-        product_statement = (
-            select(ProductModel, UnitOfMeasureModel.code)
-            .outerjoin(UnitOfMeasureModel, ProductModel.sales_uom_id == UnitOfMeasureModel.id)
-            .where(ProductModel.is_active.is_(True))
-        )
-        if business_unit_id is not None:
-            product_statement = product_statement.where(
-                ProductModel.business_unit_id == business_unit_id
-            )
-
-        latest_item_costs = self._build_latest_inventory_item_costs()
-        recipe_costs = self._build_recipe_product_unit_costs(latest_item_costs)
-        costs: dict[str, Decimal] = {}
-
-        for product, sales_uom_code in self._session.execute(product_statement).all():
-            unit_cost = recipe_costs.get(product.id)
-            if unit_cost is None and product.default_unit_cost is not None:
-                unit_cost = Decimal(product.default_unit_cost)
-            if unit_cost is None:
-                continue
-
-            for key in (str(product.id), product.sku, product.name):
-                if key:
-                    costs[str(key)] = unit_cost
-            if sales_uom_code:
-                costs[f"{product.name}|{sales_uom_code}"] = unit_cost
-
-        return costs
-
     def _build_product_vat_rates(
         self,
         *,
@@ -718,7 +685,9 @@ class SqlAlchemyAnalyticsRepository:
             .where(VatRateModel.is_active.is_(True))
         )
         if business_unit_id is not None:
-            statement = statement.where(ProductModel.business_unit_id == business_unit_id)
+            statement = statement.where(
+                ProductModel.business_unit_id == business_unit_id
+            )
 
         rates: dict[str, Decimal] = {}
         name_rates: dict[str, set[Decimal]] = defaultdict(set)
@@ -800,571 +769,6 @@ class SqlAlchemyAnalyticsRepository:
             ),
         )
 
-    def _build_latest_inventory_item_costs(self) -> dict[uuid.UUID, Decimal]:
-        costs = {
-            item.id: Decimal(item.default_unit_cost)
-            for item in self._session.scalars(select(InventoryItemModel)).all()
-            if item.default_unit_cost is not None
-        }
-
-        invoice_rows = self._session.execute(
-            select(PurchaseInvoiceLineModel, PurchaseInvoiceModel.invoice_date)
-            .join(
-                PurchaseInvoiceModel,
-                PurchaseInvoiceModel.id == PurchaseInvoiceLineModel.invoice_id,
-            )
-            .where(PurchaseInvoiceLineModel.inventory_item_id.is_not(None))
-            .order_by(
-                PurchaseInvoiceModel.invoice_date.asc(),
-                PurchaseInvoiceLineModel.id.asc(),
-            )
-        ).all()
-        for line, _invoice_date in invoice_rows:
-            if line.inventory_item_id is not None:
-                costs[line.inventory_item_id] = Decimal(line.unit_net_amount)
-
-        return costs
-
-    def _build_recipe_product_unit_costs(
-        self,
-        item_costs: dict[uuid.UUID, Decimal],
-    ) -> dict[uuid.UUID, Decimal]:
-        uom_codes = {
-            unit.id: unit.code
-            for unit in self._session.scalars(select(UnitOfMeasureModel)).all()
-        }
-        versions = self._session.execute(
-            select(
-                RecipeModel.product_id,
-                RecipeVersionModel.id,
-                RecipeVersionModel.yield_quantity,
-            )
-            .join(RecipeVersionModel, RecipeVersionModel.recipe_id == RecipeModel.id)
-            .where(RecipeModel.is_active.is_(True))
-            .where(RecipeVersionModel.is_active.is_(True))
-        ).all()
-
-        product_costs: dict[uuid.UUID, Decimal] = {}
-        for product_id, version_id, yield_quantity in versions:
-            ingredients = self._session.execute(
-                select(RecipeIngredientModel, InventoryItemModel.uom_id)
-                .join(
-                    InventoryItemModel,
-                    InventoryItemModel.id == RecipeIngredientModel.inventory_item_id,
-                )
-                .where(RecipeIngredientModel.recipe_version_id == version_id)
-            ).all()
-            total_cost = Decimal("0")
-            for ingredient, item_uom_id in ingredients:
-                unit_cost = item_costs.get(ingredient.inventory_item_id)
-                if unit_cost is None:
-                    continue
-                quantity = self._convert_quantity(
-                    Decimal(ingredient.quantity),
-                    from_uom=uom_codes.get(ingredient.uom_id),
-                    to_uom=uom_codes.get(item_uom_id),
-                )
-                total_cost += quantity * unit_cost
-
-            yield_qty = Decimal(yield_quantity)
-            if yield_qty > 0:
-                product_costs[product_id] = total_cost / yield_qty
-
-        return product_costs
-
-    def _build_traffic_heatmap(
-        self,
-        *,
-        rows: list[ImportRowModel],
-        start_at: datetime,
-        end_at: datetime,
-    ) -> list[DashboardHeatmapCell]:
-        aggregate: dict[tuple[int, int], dict[str, Decimal | int]] = {
-            (weekday, hour): {"revenue": Decimal("0"), "count": 0}
-            for weekday in range(7)
-            for hour in range(24)
-        }
-
-        for row in rows:
-            payload = row.normalized_payload or {}
-            occurred_at = self._payload_occurred_at(payload)
-            if occurred_at is None or occurred_at < start_at or occurred_at > end_at:
-                continue
-
-            key = (occurred_at.weekday(), occurred_at.hour)
-            aggregate[key]["revenue"] += self._parse_decimal(payload.get("gross_amount"))
-            aggregate[key]["count"] += 1
-
-        return [
-            DashboardHeatmapCell(
-                weekday=weekday,
-                hour=hour,
-                revenue=Decimal(aggregate[(weekday, hour)]["revenue"]),
-                transaction_count=int(aggregate[(weekday, hour)]["count"]),
-                source_layer="import_derived",
-            )
-            for weekday in range(7)
-            for hour in range(24)
-        ]
-
-    def _build_category_trends(
-        self,
-        *,
-        rows: list[ImportRowModel],
-        start_at: datetime,
-        end_at: datetime,
-        limit: int,
-    ) -> list[DashboardCategoryTrendRow]:
-        period_length = end_at - start_at
-        previous_end_at = start_at - timedelta(microseconds=1)
-        previous_start_at = previous_end_at - period_length
-        current = self._aggregate_categories(
-            rows=rows,
-            start_at=start_at,
-            end_at=end_at,
-        )
-        previous = self._aggregate_categories(
-            rows=rows,
-            start_at=previous_start_at,
-            end_at=previous_end_at,
-        )
-
-        labels = set(current) | set(previous)
-        trend_rows = [
-            self._build_category_trend_row(
-                label=label,
-                current=current.get(label, self._empty_category_aggregate()),
-                previous=previous.get(label, self._empty_category_aggregate()),
-            )
-            for label in labels
-        ]
-        return sorted(
-            trend_rows,
-            key=lambda row: (abs(row.revenue_change), row.current_revenue),
-            reverse=True,
-        )[:limit]
-
-    def _build_category_trend_row(
-        self,
-        *,
-        label: str,
-        current: dict[str, Decimal | int],
-        previous: dict[str, Decimal | int],
-    ) -> DashboardCategoryTrendRow:
-        current_revenue = Decimal(current["revenue"])
-        previous_revenue = Decimal(previous["revenue"])
-        revenue_change = current_revenue - previous_revenue
-        if previous_revenue > Decimal("0"):
-            revenue_change_percent = revenue_change / previous_revenue * Decimal("100")
-        elif current_revenue > Decimal("0"):
-            revenue_change_percent = Decimal("100")
-        else:
-            revenue_change_percent = Decimal("0")
-
-        return DashboardCategoryTrendRow(
-            label=label,
-            current_revenue=current_revenue,
-            previous_revenue=previous_revenue,
-            revenue_change=revenue_change,
-            revenue_change_percent=revenue_change_percent,
-            current_quantity=Decimal(current["quantity"]),
-            previous_quantity=Decimal(previous["quantity"]),
-            current_transaction_count=int(current["count"]),
-            previous_transaction_count=int(previous["count"]),
-            source_layer="import_derived",
-        )
-
-    def _aggregate_categories(
-        self,
-        *,
-        rows: list[ImportRowModel],
-        start_at: datetime,
-        end_at: datetime,
-    ) -> dict[str, dict[str, Decimal | int]]:
-        aggregate: dict[str, dict[str, Decimal | int]] = defaultdict(
-            self._empty_category_aggregate
-        )
-
-        for row in rows:
-            payload = row.normalized_payload or {}
-            occurred_at = self._payload_occurred_at(payload)
-            if occurred_at is None or occurred_at < start_at or occurred_at > end_at:
-                continue
-
-            label = self._extract_text(
-                payload.get("category_name"),
-                fallback=UNKNOWN_CATEGORY,
-            )
-            aggregate[label]["revenue"] += self._parse_decimal(payload.get("gross_amount"))
-            aggregate[label]["quantity"] += self._parse_decimal(payload.get("quantity"))
-            aggregate[label]["count"] += 1
-
-        return dict(aggregate)
-
-    @staticmethod
-    def _empty_category_aggregate() -> dict[str, Decimal | int]:
-        return {"revenue": Decimal("0"), "quantity": Decimal("0"), "count": 0}
-
-    def _build_product_risks(
-        self,
-        *,
-        business_unit_id: uuid.UUID | None,
-        limit: int,
-    ) -> list[DashboardProductRiskRow]:
-        product_statement = (
-            select(ProductModel, CategoryModel.name)
-            .outerjoin(CategoryModel, ProductModel.category_id == CategoryModel.id)
-            .where(ProductModel.is_active.is_(True))
-            .order_by(ProductModel.name.asc())
-        )
-        if business_unit_id is not None:
-            product_statement = product_statement.where(
-                ProductModel.business_unit_id == business_unit_id
-            )
-
-        latest_item_costs = self._build_latest_inventory_item_costs()
-        recipe_costs = self._build_recipe_product_unit_costs(latest_item_costs)
-        recipe_ingredients = self._build_active_recipe_ingredients(
-            business_unit_id=business_unit_id
-        )
-        stock_levels = self._build_inventory_stock_level_summary(
-            business_unit_id=business_unit_id
-        )
-
-        risk_rows: list[tuple[int, DashboardProductRiskRow]] = []
-        for product, category_name in self._session.execute(product_statement).all():
-            sale_price = Decimal(product.sale_price_gross or 0)
-            unit_cost = recipe_costs.get(product.id)
-            if unit_cost is None and product.default_unit_cost is not None:
-                unit_cost = Decimal(product.default_unit_cost)
-            if unit_cost is None:
-                unit_cost = Decimal("0")
-
-            margin_amount = sale_price - unit_cost
-            margin_percent = (
-                margin_amount / sale_price * Decimal("100")
-                if sale_price > Decimal("0")
-                else Decimal("0")
-            )
-            ingredients = recipe_ingredients.get(product.id, [])
-            low_stock_count = 0
-            missing_stock_count = 0
-            reasons: list[str] = []
-            score = 0
-
-            if margin_amount < Decimal("0"):
-                reasons.append("Negatív árrés")
-                score += 100
-            elif margin_percent > Decimal("0") and margin_percent < Decimal("15"):
-                reasons.append("Alacsony árrés")
-                score += 45
-
-            if product.sale_price_gross is None:
-                reasons.append("Hiányzó eladási ár")
-                score += 60
-
-            if product.id in recipe_costs and len(ingredients) == 0:
-                reasons.append("Hiányzó receptsor")
-                score += 55
-            elif product.default_unit_cost is None and product.id not in recipe_costs:
-                reasons.append("Hiányzó költségalap")
-                score += 50
-
-            for ingredient in ingredients:
-                stock_level = stock_levels.get(ingredient.inventory_item_id)
-                if stock_level is None or stock_level["movement_count"] == 0:
-                    missing_stock_count += 1
-                    continue
-                if Decimal(stock_level["current_quantity"]) <= Decimal("0"):
-                    low_stock_count += 1
-
-            if low_stock_count > 0:
-                reasons.append("Alapanyaghiány")
-                score += 80 + low_stock_count * 5
-            if missing_stock_count > 0:
-                reasons.append("Hiányzó készletadat")
-                score += 35 + missing_stock_count * 3
-
-            if not reasons:
-                continue
-
-            risk_level = "danger" if score >= 80 else "warning"
-            risk_rows.append(
-                (
-                    score,
-                    DashboardProductRiskRow(
-                        product_id=product.id,
-                        product_name=product.name,
-                        category_name=category_name or UNKNOWN_CATEGORY,
-                        sale_price_gross=sale_price,
-                        estimated_unit_cost=unit_cost,
-                        estimated_margin_amount=margin_amount,
-                        estimated_margin_percent=margin_percent,
-                        risk_level=risk_level,
-                        risk_reasons=tuple(reasons),
-                        low_stock_ingredient_count=low_stock_count,
-                        missing_stock_ingredient_count=missing_stock_count,
-                        source_layer="catalog_inventory_actual",
-                    ),
-                )
-            )
-
-        return [
-            row
-            for _score, row in sorted(
-                risk_rows,
-                key=lambda item: (
-                    item[0],
-                    abs(item[1].estimated_margin_amount),
-                    item[1].product_name,
-                ),
-                reverse=True,
-            )[:limit]
-        ]
-
-    def _build_active_recipe_ingredients(
-        self,
-        *,
-        business_unit_id: uuid.UUID | None,
-    ) -> dict[uuid.UUID, list[RecipeIngredientModel]]:
-        statement = (
-            select(RecipeModel.product_id, RecipeIngredientModel)
-            .join(RecipeVersionModel, RecipeVersionModel.recipe_id == RecipeModel.id)
-            .outerjoin(
-                RecipeIngredientModel,
-                RecipeIngredientModel.recipe_version_id == RecipeVersionModel.id,
-            )
-            .join(ProductModel, ProductModel.id == RecipeModel.product_id)
-            .where(RecipeModel.is_active.is_(True))
-            .where(RecipeVersionModel.is_active.is_(True))
-            .where(ProductModel.is_active.is_(True))
-        )
-        if business_unit_id is not None:
-            statement = statement.where(ProductModel.business_unit_id == business_unit_id)
-
-        ingredients_by_product: dict[uuid.UUID, list[RecipeIngredientModel]] = defaultdict(list)
-        for product_id, ingredient in self._session.execute(statement).all():
-            if ingredient is not None:
-                ingredients_by_product[product_id].append(ingredient)
-            else:
-                ingredients_by_product.setdefault(product_id, [])
-        return dict(ingredients_by_product)
-
-    def _build_inventory_stock_level_summary(
-        self,
-        *,
-        business_unit_id: uuid.UUID | None,
-    ) -> dict[uuid.UUID, dict[str, Decimal | int | datetime | None]]:
-        signed_quantity = sa.case(
-            (
-                InventoryMovementModel.movement_type.in_(
-                    ["purchase", "initial_stock", "adjustment"]
-                ),
-                InventoryMovementModel.quantity,
-            ),
-            (InventoryMovementModel.movement_type == "waste", -InventoryMovementModel.quantity),
-            else_=0,
-        )
-        statement = (
-            select(
-                InventoryItemModel.id,
-                sa.func.coalesce(sa.func.sum(signed_quantity), 0).label("current_quantity"),
-                sa.func.count(InventoryMovementModel.id).label("movement_count"),
-                sa.func.max(InventoryMovementModel.occurred_at).label("last_movement_at"),
-            )
-            .select_from(InventoryItemModel)
-            .outerjoin(
-                InventoryMovementModel,
-                InventoryMovementModel.inventory_item_id == InventoryItemModel.id,
-            )
-            .where(InventoryItemModel.is_active.is_(True))
-            .group_by(InventoryItemModel.id)
-        )
-        if business_unit_id is not None:
-            statement = statement.where(InventoryItemModel.business_unit_id == business_unit_id)
-
-        return {
-            item_id: {
-                "current_quantity": Decimal(current_quantity),
-                "movement_count": int(movement_count),
-                "last_movement_at": last_movement_at,
-            }
-            for item_id, current_quantity, movement_count, last_movement_at in self._session.execute(
-                statement
-            ).all()
-        }
-
-    def _build_stock_risks(
-        self,
-        *,
-        business_unit_id: uuid.UUID | None,
-        limit: int,
-    ) -> list[DashboardStockRiskRow]:
-        stock_levels = self._build_inventory_stock_level_summary(
-            business_unit_id=business_unit_id
-        )
-        usage_counts = self._build_inventory_item_usage_counts(
-            business_unit_id=business_unit_id
-        )
-        item_statement = (
-            select(InventoryItemModel)
-            .where(InventoryItemModel.is_active.is_(True))
-            .where(InventoryItemModel.track_stock.is_(True))
-            .order_by(InventoryItemModel.name.asc())
-        )
-        if business_unit_id is not None:
-            item_statement = item_statement.where(
-                InventoryItemModel.business_unit_id == business_unit_id
-            )
-
-        risk_rows: list[tuple[int, DashboardStockRiskRow]] = []
-        for item in self._session.scalars(item_statement).all():
-            stock_level = stock_levels.get(item.id)
-            current_quantity = (
-                Decimal(stock_level["current_quantity"])
-                if stock_level is not None
-                else Decimal("0")
-            )
-            movement_count = (
-                int(stock_level["movement_count"]) if stock_level is not None else 0
-            )
-            used_by_product_count = usage_counts.get(item.id, 0)
-            reasons: list[str] = []
-            score = 0
-
-            if movement_count == 0:
-                reasons.append("Nincs készletmozgás")
-                score += 55
-            if current_quantity <= Decimal("0"):
-                reasons.append("Nincs tényleges készlet")
-                score += 90
-            elif used_by_product_count > 0 and current_quantity <= Decimal(
-                used_by_product_count
-            ):
-                reasons.append("Alacsony készlet recept-használathoz képest")
-                score += 45
-            if item.estimated_stock_quantity is None:
-                reasons.append("Hiányzó becsült készlet")
-                score += 25
-            elif Decimal(item.estimated_stock_quantity) <= Decimal("0"):
-                reasons.append("Becsült készlet nulla")
-                score += 35
-            if used_by_product_count > 0:
-                score += min(used_by_product_count * 4, 24)
-
-            if not reasons:
-                continue
-
-            risk_level = "danger" if score >= 80 else "warning"
-            risk_rows.append(
-                (
-                    score,
-                    DashboardStockRiskRow(
-                        inventory_item_id=item.id,
-                        item_name=item.name,
-                        item_type=item.item_type,
-                        current_quantity=current_quantity,
-                        theoretical_quantity=None,
-                        variance_quantity=None,
-                        used_by_product_count=used_by_product_count,
-                        movement_count=movement_count,
-                        last_movement_at=(
-                            stock_level["last_movement_at"]
-                            if stock_level is not None
-                            else None
-                        ),
-                        risk_level=risk_level,
-                        risk_reasons=tuple(reasons),
-                        source_layer="inventory_actual",
-                    ),
-                )
-            )
-
-        return [
-            row
-            for _score, row in sorted(
-                risk_rows,
-                key=lambda item: (
-                    item[0],
-                    item[1].used_by_product_count,
-                    item[1].item_name,
-                ),
-                reverse=True,
-            )[:limit]
-        ]
-
-    def _build_inventory_item_usage_counts(
-        self,
-        *,
-        business_unit_id: uuid.UUID | None,
-    ) -> dict[uuid.UUID, int]:
-        statement = (
-            select(
-                RecipeIngredientModel.inventory_item_id,
-                sa.func.count(sa.func.distinct(ProductModel.id)).label("product_count"),
-            )
-            .join(
-                RecipeVersionModel,
-                RecipeVersionModel.id == RecipeIngredientModel.recipe_version_id,
-            )
-            .join(RecipeModel, RecipeModel.id == RecipeVersionModel.recipe_id)
-            .join(ProductModel, ProductModel.id == RecipeModel.product_id)
-            .where(RecipeModel.is_active.is_(True))
-            .where(RecipeVersionModel.is_active.is_(True))
-            .where(ProductModel.is_active.is_(True))
-            .group_by(RecipeIngredientModel.inventory_item_id)
-        )
-        if business_unit_id is not None:
-            statement = statement.where(ProductModel.business_unit_id == business_unit_id)
-
-        return {
-            inventory_item_id: int(product_count)
-            for inventory_item_id, product_count in self._session.execute(statement).all()
-        }
-
-    @staticmethod
-    def _iter_buckets(
-        *,
-        start_at: datetime,
-        end_at: datetime,
-        grain: str,
-    ) -> list[datetime]:
-        buckets: list[datetime] = []
-        current = SqlAlchemyAnalyticsRepository._bucket_datetime(start_at, grain=grain)
-        end_bucket = SqlAlchemyAnalyticsRepository._bucket_datetime(end_at, grain=grain)
-        while current <= end_bucket:
-            buckets.append(current)
-            if grain == "month":
-                current = (
-                    current.replace(year=current.year + 1, month=1)
-                    if current.month == 12
-                    else current.replace(month=current.month + 1)
-                )
-            elif grain == "hour":
-                current += timedelta(hours=1)
-            else:
-                current += timedelta(days=1)
-        return buckets
-
-    @staticmethod
-    def _bucket_datetime(value: datetime, *, grain: str) -> datetime:
-        local_value = (
-            value.replace(tzinfo=APP_TIME_ZONE)
-            if value.tzinfo is None
-            else value.astimezone(APP_TIME_ZONE)
-        )
-        if grain == "month":
-            return local_value.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        if grain == "hour":
-            return local_value.replace(minute=0, second=0, microsecond=0)
-        return local_value.replace(hour=0, minute=0, second=0, microsecond=0)
-
-    @staticmethod
-    def _as_app_time(value: datetime) -> datetime:
-        if value.tzinfo is None:
-            return value.replace(tzinfo=APP_TIME_ZONE)
-        return value.astimezone(APP_TIME_ZONE)
-
     @staticmethod
     def _parse_payload_date(value: Any) -> date | None:
         if not isinstance(value, str):
@@ -1407,57 +811,3 @@ class SqlAlchemyAnalyticsRepository:
             return Decimal(str(value))
         except (InvalidOperation, ValueError):
             return Decimal("0")
-
-    @classmethod
-    def _lookup_payload_unit_cost(
-        cls,
-        payload: dict[str, Any],
-        product_costs: dict[str, Decimal],
-    ) -> Decimal:
-        return cls._lookup_payload_unit_cost_optional(payload, product_costs) or Decimal("0")
-
-    @staticmethod
-    def _lookup_payload_unit_cost_optional(
-        payload: dict[str, Any],
-        product_costs: dict[str, Decimal],
-    ) -> Decimal | None:
-        for key_name in ("product_id", "sku", "product_name"):
-            value = payload.get(key_name)
-            if isinstance(value, str) and value in product_costs:
-                return product_costs[value]
-        return None
-
-    @staticmethod
-    def _convert_quantity(
-        quantity: Decimal,
-        *,
-        from_uom: str | None,
-        to_uom: str | None,
-    ) -> Decimal:
-        if from_uom == to_uom or from_uom is None or to_uom is None:
-            return quantity
-
-        factors = {
-            "g": ("mass", Decimal("0.001")),
-            "kg": ("mass", Decimal("1")),
-            "ml": ("volume", Decimal("0.001")),
-            "l": ("volume", Decimal("1")),
-        }
-        from_factor = factors.get(from_uom)
-        to_factor = factors.get(to_uom)
-        if from_factor is None or to_factor is None or from_factor[0] != to_factor[0]:
-            return quantity
-
-        return (quantity * from_factor[1]) / to_factor[1]
-
-    @staticmethod
-    def _extract_text(value: Any, *, fallback: str) -> str:
-        if isinstance(value, str) and value.strip():
-            return value.strip()
-        return fallback
-
-    @staticmethod
-    def _extract_optional_text(value: Any) -> str | None:
-        if isinstance(value, str) and value.strip():
-            return value.strip()
-        return None

@@ -16,11 +16,20 @@ from app.modules.events.application.commands.create_event import (
 from app.modules.events.application.commands.ensure_event_weather_coverage import (
     EnsureEventWeatherCoverageCommand,
 )
+from app.modules.events.application.commands.replace_event_cost_lines import (
+    ReplaceEventCostLinesCommand,
+)
 from app.modules.events.application.commands.upsert_event_ticket_actual import (
     UpsertEventTicketActualCommand,
 )
 from app.modules.events.application.queries.get_event_ticket_actual import (
     GetEventTicketActualQuery,
+)
+from app.modules.events.application.queries.list_event_cost_lines import (
+    ListEventCostLinesQuery,
+)
+from app.modules.events.application.queries.get_event_analytics_summary import (
+    GetEventAnalyticsSummaryQuery,
 )
 from app.modules.events.application.queries.list_events import ListEventsQuery
 from app.modules.events.application.queries.get_event_performance import (
@@ -29,6 +38,9 @@ from app.modules.events.application.queries.get_event_performance import (
 )
 from app.modules.events.infrastructure.repositories.sqlalchemy_event_performance_repository import (
     SqlAlchemyEventPerformanceRepository,
+)
+from app.modules.events.infrastructure.repositories.sqlalchemy_event_cost_repository import (
+    SqlAlchemyEventCostRepository,
 )
 from app.modules.events.infrastructure.repositories.sqlalchemy_event_repository import (
     SqlAlchemyEventRepository,
@@ -70,11 +82,29 @@ def get_list_event_performances_query(session: DbSession) -> ListEventPerformanc
     return ListEventPerformancesQuery(repository=repository)
 
 
+def get_event_analytics_summary_query(session: DbSession) -> GetEventAnalyticsSummaryQuery:
+    """Wire the event analyzer summary query."""
+
+    event_repository = SqlAlchemyEventRepository(session)
+    performance_repository = SqlAlchemyEventPerformanceRepository(session)
+    return GetEventAnalyticsSummaryQuery(
+        event_repository=event_repository,
+        performance_repository=performance_repository,
+    )
+
+
 def get_event_ticket_actual_query(session: DbSession) -> GetEventTicketActualQuery:
     """Wire the event ticket actual query."""
 
     repository = SqlAlchemyEventTicketActualRepository(session)
     return GetEventTicketActualQuery(repository=repository)
+
+
+def get_list_event_cost_lines_query(session: DbSession) -> ListEventCostLinesQuery:
+    """Wire the event cost line list query."""
+
+    repository = SqlAlchemyEventCostRepository(session)
+    return ListEventCostLinesQuery(repository=repository)
 
 
 def get_create_event_command(session: DbSession) -> CreateEventCommand:
@@ -98,6 +128,15 @@ def get_upsert_event_ticket_actual_command(
 
     repository = SqlAlchemyEventTicketActualRepository(session)
     return UpsertEventTicketActualCommand(repository=repository)
+
+
+def get_replace_event_cost_lines_command(
+    session: DbSession,
+) -> ReplaceEventCostLinesCommand:
+    """Wire the event cost line replace command."""
+
+    repository = SqlAlchemyEventCostRepository(session)
+    return ReplaceEventCostLinesCommand(repository=repository)
 
 
 def get_ensure_event_weather_coverage_command(

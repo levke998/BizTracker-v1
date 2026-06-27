@@ -462,6 +462,34 @@ class DashboardBasketReceipt:
 
 
 @dataclass(frozen=True, slots=True)
+class DashboardStatisticsQuality:
+    """Distribution and data-quality summary for Dashboard 2.0 decisions."""
+
+    period_day_count: int
+    active_sales_day_count: int
+    pos_row_count: int
+    basket_count: int
+    coverage_percent: Decimal
+    quality_level: str
+    average_daily_revenue: Decimal
+    median_daily_revenue: Decimal
+    p25_daily_revenue: Decimal
+    p75_daily_revenue: Decimal
+    p90_daily_revenue: Decimal
+    p95_daily_revenue: Decimal
+    average_basket_value: Decimal
+    median_basket_value: Decimal
+    p25_basket_value: Decimal
+    p75_basket_value: Decimal
+    p90_basket_value: Decimal
+    p95_basket_value: Decimal
+    recommendation: str
+    source_layer: str
+    amount_basis: str = "gross"
+    amount_origin: str = "actual"
+
+
+@dataclass(frozen=True, slots=True)
 class DashboardSnapshot:
     """Top-level dashboard payload."""
 
@@ -490,4 +518,5 @@ class DashboardSnapshot:
     stock_risks: tuple[DashboardStockRiskRow, ...]
     top_products: tuple[DashboardBreakdownRow, ...]
     expense_breakdown: tuple[DashboardExpenseRow, ...]
+    statistics_quality: DashboardStatisticsQuality
     notes: tuple[str, ...]

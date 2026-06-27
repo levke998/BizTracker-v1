@@ -9,7 +9,7 @@ from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.modules.events.domain.entities.event_performance import (
@@ -18,7 +18,9 @@ from app.modules.events.domain.entities.event_performance import (
     EventPerformanceProductRow,
     EventWeatherSummary,
 )
+from app.modules.events.domain.entities.event import uses_fixed_fee, uses_revenue_share
 from app.modules.events.infrastructure.orm.event_model import EventModel
+from app.modules.events.infrastructure.orm.event_cost_model import EventCostLineModel
 from app.modules.events.infrastructure.orm.event_ticket_actual_model import (
     EventTicketActualModel,
 )
@@ -132,14 +134,29 @@ class SqlAlchemyEventPerformanceRepository:
             platform_fee_gross = Decimal(ticket_actual.platform_fee_gross)
             ticket_revenue_source = "ticket_actual"
 
+        performer_settlement_type = event.performer_settlement_type or "hybrid"
         performer_share_percent = Decimal(event.performer_share_percent)
-        performer_share_amount = self._money(ticket_revenue * performer_share_percent / Decimal("100"))
+        performer_share_amount = (
+            self._money(ticket_revenue * performer_share_percent / Decimal("100"))
+            if uses_revenue_share(performer_settlement_type)
+            else Decimal("0.00")
+        )
+        performer_fixed_fee_amount = (
+            self._money(Decimal(event.performer_fixed_fee))
+            if uses_fixed_fee(performer_settlement_type)
+            else Decimal("0.00")
+        )
+        performer_total_compensation_gross = self._money(
+            performer_share_amount + performer_fixed_fee_amount
+        )
         retained_ticket_revenue = self._money(ticket_revenue - performer_share_amount)
         own_revenue = self._money(retained_ticket_revenue + bar_revenue)
+        event_cost_lines_gross = self._event_cost_lines_gross(event.id)
         operating_cost_gross = self._money(
-            Decimal(event.performer_fixed_fee)
+            performer_fixed_fee_amount
             + Decimal(event.event_cost_amount)
             + platform_fee_gross
+            + event_cost_lines_gross
         )
         event_profit_lite = self._money(own_revenue - operating_cost_gross)
         total_revenue = self._money(ticket_revenue + bar_revenue)
@@ -156,10 +173,14 @@ class SqlAlchemyEventPerformanceRepository:
             total_revenue_gross=total_revenue,
             ticket_quantity=ticket_quantity,
             bar_quantity=bar_quantity,
+            performer_settlement_type=performer_settlement_type,
             performer_share_percent=performer_share_percent,
             performer_share_amount=performer_share_amount,
+            performer_fixed_fee_amount=performer_fixed_fee_amount,
+            performer_total_compensation_gross=performer_total_compensation_gross,
             retained_ticket_revenue=retained_ticket_revenue,
             platform_fee_gross=self._money(platform_fee_gross),
+            event_cost_lines_gross=self._money(event_cost_lines_gross),
             own_revenue=own_revenue,
             operating_cost_gross=operating_cost_gross,
             event_profit_lite=event_profit_lite,
@@ -202,6 +223,14 @@ class SqlAlchemyEventPerformanceRepository:
         return self._session.scalar(
             select(EventTicketActualModel).where(EventTicketActualModel.event_id == event_id)
         )
+
+    def _event_cost_lines_gross(self, event_id: uuid.UUID) -> Decimal:
+        amount = self._session.scalar(
+            select(func.coalesce(func.sum(EventCostLineModel.amount_gross), 0)).where(
+                EventCostLineModel.event_id == event_id
+            )
+        )
+        return Decimal(amount or 0)
 
     @staticmethod
     def _settlement_status(ticket_revenue_source: str) -> str:

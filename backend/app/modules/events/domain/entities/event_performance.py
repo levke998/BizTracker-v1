@@ -56,10 +56,14 @@ class EventPerformance:
     total_revenue_gross: Decimal
     ticket_quantity: Decimal
     bar_quantity: Decimal
+    performer_settlement_type: str
     performer_share_percent: Decimal
     performer_share_amount: Decimal
+    performer_fixed_fee_amount: Decimal
+    performer_total_compensation_gross: Decimal
     retained_ticket_revenue: Decimal
     platform_fee_gross: Decimal
+    event_cost_lines_gross: Decimal
     own_revenue: Decimal
     operating_cost_gross: Decimal
     event_profit_lite: Decimal

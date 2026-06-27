@@ -7,7 +7,11 @@ from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 
-from app.modules.events.domain.entities.event import Event, NewEvent
+from app.modules.events.domain.entities.event import (
+    Event,
+    NewEvent,
+    PERFORMER_SETTLEMENT_TYPES,
+)
 from app.modules.events.domain.repositories.event_repository import EventRepository
 
 EVENT_STATUSES = {"planned", "confirmed", "completed", "cancelled"}
@@ -41,6 +45,7 @@ def _normalize_event(
     expected_attendance: int | None,
     ticket_revenue_gross: Decimal,
     bar_revenue_gross: Decimal,
+    performer_settlement_type: str,
     performer_share_percent: Decimal,
     performer_fixed_fee: Decimal,
     event_cost_amount: Decimal,
@@ -49,9 +54,12 @@ def _normalize_event(
 ) -> NewEvent:
     normalized_title = title.strip()
     normalized_status = status.strip().lower()
+    normalized_settlement_type = performer_settlement_type.strip().lower()
 
     if normalized_status not in EVENT_STATUSES:
         raise EventValidationError("Unsupported event status.")
+    if normalized_settlement_type not in PERFORMER_SETTLEMENT_TYPES:
+        raise EventValidationError("Unsupported performer settlement type.")
     if ends_at is not None and ends_at <= starts_at:
         raise EventValidationError("Event end must be after event start.")
     if not normalized_title:
@@ -80,6 +88,7 @@ def _normalize_event(
         expected_attendance=expected_attendance,
         ticket_revenue_gross=ticket_revenue_gross,
         bar_revenue_gross=bar_revenue_gross,
+        performer_settlement_type=normalized_settlement_type,
         performer_share_percent=performer_share_percent,
         performer_fixed_fee=performer_fixed_fee,
         event_cost_amount=event_cost_amount,
@@ -107,6 +116,7 @@ class CreateEventCommand:
         expected_attendance: int | None = None,
         ticket_revenue_gross: Decimal = Decimal("0"),
         bar_revenue_gross: Decimal = Decimal("0"),
+        performer_settlement_type: str = "hybrid",
         performer_share_percent: Decimal = Decimal("80"),
         performer_fixed_fee: Decimal = Decimal("0"),
         event_cost_amount: Decimal = Decimal("0"),
@@ -136,6 +146,7 @@ class CreateEventCommand:
             expected_attendance=expected_attendance,
             ticket_revenue_gross=ticket_revenue_gross,
             bar_revenue_gross=bar_revenue_gross,
+            performer_settlement_type=performer_settlement_type,
             performer_share_percent=performer_share_percent,
             performer_fixed_fee=performer_fixed_fee,
             event_cost_amount=event_cost_amount,

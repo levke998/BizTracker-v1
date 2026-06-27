@@ -1,17 +1,22 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useSearchParams } from "react-router-dom";
 
 import { useEstimatedConsumptionAudit } from "../hooks/useEstimatedConsumptionAudit";
 import { useTheoreticalStock } from "../hooks/useTheoreticalStock";
+import { InventoryVarianceActionSuggestionsPanel } from "../components/InventoryVarianceActionSuggestionsPanel";
 import {
   getInventoryVariancePeriodComparison,
   getInventoryVarianceThreshold,
+  listInventoryVarianceActionSuggestions,
   listInventoryVarianceItemSummary,
   listInventoryVarianceReasonSummary,
   listInventoryVarianceTrend,
   registerPhysicalStockCount,
+  updateInventoryVarianceActionReview,
   updateInventoryVarianceThreshold,
 } from "../api/inventoryApi";
+import type { InventoryVarianceActionSuggestion } from "../types/inventory";
 
 function formatDateTime(value: string | null) {
   if (!value) {
@@ -101,8 +106,39 @@ const STOCK_COUNT_REASONS = [
   { value: "other", label: "Egyeb" },
 ];
 
+const PHYSICAL_CONTROL_QUICK_ACTIONS = new Set([
+  "review_waste_process",
+  "review_breakage_process",
+  "review_spoilage_process",
+  "review_theft_suspected",
+]);
+
+const PHYSICAL_CONTROL_REASON_CODES = new Set([
+  "waste",
+  "breakage",
+  "spoilage",
+  "theft_suspected",
+]);
+
 function formatReasonLabel(value: string) {
   return STOCK_COUNT_REASONS.find((reason) => reason.value === value)?.label ?? value;
+}
+
+function getPhysicalControlDescription(reasonCode: string) {
+  const descriptions: Record<string, string> = {
+    waste:
+      "Selejt okkal rogzitett elteres erkezett. Nezd at a selejt rogziteset, az elokeszitesi folyamatot es a tarolasi pontokat.",
+    breakage:
+      "Tores vagy kiborulas okkal rogzitett elteres erkezett. Nezd at az erintett munkafolyamatot, es jelold, ha visszatero folyamatkockazat.",
+    spoilage:
+      "Romlas okkal rogzitett elteres erkezett. Nezd at a rendelest, tarolast, szavatossagot es elokeszitesi mennyisegeket.",
+    theft_suspected:
+      "Lopasgyanu okkal rogzitett elteres erkezett. Vegezz celzott fizikai kontrollt es jogosultsagi/folyamat ellenorzest.",
+  };
+  return (
+    descriptions[reasonCode] ??
+    "Fizikai kontroll okkal rogzitett elteres erkezett. Nezd at a kapcsolodo keszletkorrekciokat."
+  );
 }
 
 function formatAnomalyStatus(value: string) {
@@ -151,6 +187,15 @@ function getDecisionStatusClass(value: string) {
 
 export function TheoreticalStockPage() {
   const queryClient = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedBusinessUnitId = searchParams.get("business_unit_id") ?? "";
+  const requestedInventoryItemId = searchParams.get("inventory_item_id") ?? "";
+  const requestedActionSuggestionId = searchParams.get("action_suggestion_id") ?? "";
+  const requestedReasonCode = searchParams.get("reason_code") ?? "";
+  const requestedQuickAction = searchParams.get("quick_action") ?? "";
+  const isPhysicalControlQuickAction =
+    PHYSICAL_CONTROL_QUICK_ACTIONS.has(requestedQuickAction) &&
+    PHYSICAL_CONTROL_REASON_CODES.has(requestedReasonCode);
   const [selectedInventoryItemId, setSelectedInventoryItemId] = useState("");
   const [countedQuantity, setCountedQuantity] = useState("");
   const [countReason, setCountReason] = useState("physical_count");
@@ -161,6 +206,9 @@ export function TheoreticalStockPage() {
   const [worseningThreshold, setWorseningThreshold] = useState("");
   const [thresholdMessage, setThresholdMessage] = useState("");
   const [thresholdErrorMessage, setThresholdErrorMessage] = useState("");
+  const [actionReviewMessage, setActionReviewMessage] = useState("");
+  const [actionReviewErrorMessage, setActionReviewErrorMessage] = useState("");
+  const [updatingSuggestionId, setUpdatingSuggestionId] = useState<string | null>(null);
   const {
     primaryBusinessUnits,
     technicalBusinessUnits,
@@ -225,6 +273,16 @@ export function TheoreticalStockPage() {
       }),
   });
   const variancePeriodComparison = variancePeriodComparisonQuery.data ?? null;
+  const varianceActionSuggestionsQuery = useQuery({
+    queryKey: ["inventory-variance-action-suggestions", selectedBusinessUnitId],
+    queryFn: () =>
+      listInventoryVarianceActionSuggestions({
+        business_unit_id: selectedBusinessUnitId || undefined,
+        days: 30,
+        limit: 8,
+      }),
+  });
+  const varianceActionSuggestions = varianceActionSuggestionsQuery.data ?? [];
   const varianceThresholdQuery = useQuery({
     queryKey: ["inventory-variance-threshold", selectedBusinessUnitId],
     queryFn: () => getInventoryVarianceThreshold(selectedBusinessUnitId),
@@ -240,11 +298,22 @@ export function TheoreticalStockPage() {
       }),
   });
   const varianceItemRows = varianceItemQuery.data ?? [];
+  const visibleVarianceReasonRows = isPhysicalControlQuickAction
+    ? varianceReasonRows.filter((row) => row.reason_code === requestedReasonCode)
+    : varianceReasonRows;
   const totalCorrectionCount = varianceReasonRows.reduce(
     (total, item) => total + item.movement_count,
     0,
   );
+  const visibleCorrectionCount = visibleVarianceReasonRows.reduce(
+    (total, item) => total + item.movement_count,
+    0,
+  );
   const totalCorrectionQuantity = varianceReasonRows.reduce(
+    (total, item) => total + Math.abs(Number(item.net_quantity_delta)),
+    0,
+  );
+  const visibleCorrectionQuantity = visibleVarianceReasonRows.reduce(
     (total, item) => total + Math.abs(Number(item.net_quantity_delta)),
     0,
   );
@@ -280,6 +349,9 @@ export function TheoreticalStockPage() {
           queryKey: ["inventory-variance-period-comparison"],
         }),
         queryClient.invalidateQueries({ queryKey: ["inventory-variance-items"] }),
+        queryClient.invalidateQueries({
+          queryKey: ["inventory-variance-action-suggestions"],
+        }),
       ]);
     },
   });
@@ -296,6 +368,32 @@ export function TheoreticalStockPage() {
         }),
         queryClient.invalidateQueries({ queryKey: ["inventory-variance-items"] }),
       ]);
+    },
+  });
+  const actionReviewMutation = useMutation({
+    mutationFn: ({
+      suggestion,
+      status,
+    }: {
+      suggestion: InventoryVarianceActionSuggestion;
+      status: "open" | "resolved";
+    }) =>
+      updateInventoryVarianceActionReview(suggestion.id, {
+        business_unit_id: selectedBusinessUnitId,
+        status,
+      }),
+    onSuccess: async (_result, variables) => {
+      setActionReviewMessage(
+        variables.status === "resolved"
+          ? "Akciojavaslat lezarva."
+          : "Akciojavaslat ujranyitva.",
+      );
+      await queryClient.invalidateQueries({
+        queryKey: ["inventory-variance-action-suggestions"],
+      });
+    },
+    onSettled: () => {
+      setUpdatingSuggestionId(null);
     },
   });
 
@@ -318,6 +416,101 @@ export function TheoreticalStockPage() {
     setCountMessage("");
     setCountErrorMessage("");
   }
+
+  function clearActionTargetFocus() {
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        next.delete("inventory_item_id");
+        next.delete("action_suggestion_id");
+        next.delete("reason_code");
+        next.delete("quick_action");
+        return next;
+      },
+      { replace: true },
+    );
+  }
+
+  function changeBusinessUnit(value: string) {
+    setSelectedBusinessUnitId(value);
+    setActionReviewMessage("");
+    setActionReviewErrorMessage("");
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        if (value) {
+          next.set("business_unit_id", value);
+        } else {
+          next.delete("business_unit_id");
+        }
+        next.delete("inventory_item_id");
+        next.delete("action_suggestion_id");
+        next.delete("reason_code");
+        next.delete("quick_action");
+        return next;
+      },
+      { replace: true },
+    );
+  }
+
+  async function closePhysicalControlActionSuggestion() {
+    setActionReviewMessage("");
+    setActionReviewErrorMessage("");
+    if (!selectedBusinessUnitId) {
+      setActionReviewErrorMessage("Valassz vallalkozast az akcio allapot mentesehez.");
+      return;
+    }
+    if (!requestedActionSuggestionId) {
+      setActionReviewErrorMessage("Hianyzik az akciojavaslat azonositoja.");
+      return;
+    }
+    setUpdatingSuggestionId(requestedActionSuggestionId);
+    try {
+      await updateInventoryVarianceActionReview(requestedActionSuggestionId, {
+        business_unit_id: selectedBusinessUnitId,
+        status: "resolved",
+        note: `${formatReasonLabel(requestedReasonCode)} fizikai kontroll elvegezve a Becsult keszlet oldalon.`,
+      });
+      setActionReviewMessage("Akciojavaslat lezarva. A fizikai kontroll rogzult.");
+      await queryClient.invalidateQueries({
+        queryKey: ["inventory-variance-action-suggestions"],
+      });
+    } catch (error) {
+      setActionReviewErrorMessage(
+        error instanceof Error ? error.message : "Nem sikerult menteni az akcio allapotat.",
+      );
+    } finally {
+      setUpdatingSuggestionId(null);
+    }
+  }
+
+  useEffect(() => {
+    if (
+      requestedBusinessUnitId &&
+      requestedBusinessUnitId !== selectedBusinessUnitId &&
+      [...primaryBusinessUnits, ...technicalBusinessUnits].some(
+        (businessUnit) => businessUnit.id === requestedBusinessUnitId,
+      )
+    ) {
+      setSelectedBusinessUnitId(requestedBusinessUnitId);
+    }
+  }, [
+    primaryBusinessUnits,
+    requestedBusinessUnitId,
+    selectedBusinessUnitId,
+    setSelectedBusinessUnitId,
+    technicalBusinessUnits,
+  ]);
+
+  useEffect(() => {
+    if (
+      requestedInventoryItemId &&
+      requestedInventoryItemId !== selectedInventoryItemId &&
+      stockRows.some((item) => item.inventory_item_id === requestedInventoryItemId)
+    ) {
+      selectStockRow(requestedInventoryItemId);
+    }
+  }, [requestedInventoryItemId, selectedInventoryItemId, stockRows]);
 
   async function submitPhysicalStockCount() {
     setCountMessage("");
@@ -370,6 +563,27 @@ export function TheoreticalStockPage() {
     }
   }
 
+  async function updateActionReview(
+    suggestion: InventoryVarianceActionSuggestion,
+    status: "open" | "resolved",
+  ) {
+    setActionReviewMessage("");
+    setActionReviewErrorMessage("");
+    if (!selectedBusinessUnitId) {
+      setActionReviewErrorMessage("Valassz vallalkozast az akcio allapot mentesehez.");
+      return;
+    }
+    setUpdatingSuggestionId(suggestion.id);
+    try {
+      await actionReviewMutation.mutateAsync({ suggestion, status });
+    } catch (error) {
+      setActionReviewErrorMessage(
+        error instanceof Error ? error.message : "Nem sikerult menteni az akcio allapotat.",
+      );
+      setUpdatingSuggestionId(null);
+    }
+  }
+
   return (
     <section className="page-section">
       <div className="finance-summary-grid">
@@ -398,7 +612,7 @@ export function TheoreticalStockPage() {
             <span>Vállalkozás</span>
             <select
               value={selectedBusinessUnitId}
-              onChange={(event) => setSelectedBusinessUnitId(event.target.value)}
+              onChange={(event) => changeBusinessUnit(event.target.value)}
               className="field-input"
             >
               <option value="">Válassz vállalkozást</option>
@@ -460,6 +674,71 @@ export function TheoreticalStockPage() {
         {isLoading ? <p className="info-message">Becsült készlet betöltése...</p> : null}
       </div>
 
+      {requestedInventoryItemId ? (
+        <div className="action-target-focus-banner">
+          <div>
+            <strong>Akciojavaslat fokusz</strong>
+            <span>
+              {selectedStockRow
+                ? `${selectedStockRow.name} keszletelem naploja megnyitva.`
+                : "A keresett keszletelem betoltese folyamatban vagy mar nem talalhato."}
+              {requestedActionSuggestionId
+                ? ` Javaslat: ${requestedActionSuggestionId}.`
+                : ""}
+            </span>
+          </div>
+          {selectedStockRow ? (
+            <button
+              className="secondary-button inventory-audit-button"
+              type="button"
+              onClick={() => selectStockRow(selectedStockRow.inventory_item_id)}
+            >
+              Fogyasi naplo
+            </button>
+          ) : null}
+          <button
+            className="secondary-button inventory-audit-button"
+            type="button"
+            onClick={clearActionTargetFocus}
+          >
+            Fokusz torlese
+          </button>
+        </div>
+      ) : null}
+
+      {isPhysicalControlQuickAction ? (
+        <div className="action-target-focus-banner">
+          <div>
+            <strong>
+              Inventory akciojavaslat: {formatReasonLabel(requestedReasonCode)} kontroll
+            </strong>
+            <span>
+              {getPhysicalControlDescription(requestedReasonCode)}
+              {requestedActionSuggestionId
+                ? ` Javaslat: ${requestedActionSuggestionId}.`
+                : ""}
+            </span>
+          </div>
+          <button
+            className="secondary-button inventory-audit-button"
+            type="button"
+            disabled={updatingSuggestionId === requestedActionSuggestionId}
+            onClick={() => void closePhysicalControlActionSuggestion()}
+          >
+            {updatingSuggestionId === requestedActionSuggestionId
+              ? "Lezaras..."
+              : "Javaslat lezarasa"}
+          </button>
+          <button
+            className="secondary-button inventory-audit-button"
+            type="button"
+            onClick={clearActionTargetFocus}
+          >
+            Fokusz torlese
+          </button>
+        </div>
+      ) : null}
+
       <section className="panel">
         <div className="panel-header">
           <h2>Becsült készlet állapota</h2>
@@ -495,7 +774,14 @@ export function TheoreticalStockPage() {
               </thead>
               <tbody>
                 {stockRows.map((item) => (
-                  <tr key={item.inventory_item_id}>
+                  <tr
+                    className={
+                      requestedInventoryItemId === item.inventory_item_id
+                        ? "action-target-focused-row"
+                        : undefined
+                    }
+                    key={item.inventory_item_id}
+                  >
                     <td>{item.name}</td>
                     <td>{formatItemType(item.item_type)}</td>
                     <td>{item.actual_quantity}</td>
@@ -530,26 +816,58 @@ export function TheoreticalStockPage() {
         ) : null}
       </section>
 
+      <InventoryVarianceActionSuggestionsPanel
+        suggestions={varianceActionSuggestions}
+        isLoading={varianceActionSuggestionsQuery.isLoading}
+        error={
+          varianceActionSuggestionsQuery.error instanceof Error
+            ? varianceActionSuggestionsQuery.error
+            : null
+        }
+        canUpdateReviews={Boolean(selectedBusinessUnitId)}
+        updatingSuggestionId={updatingSuggestionId}
+        focusedSuggestionId={requestedActionSuggestionId}
+        onSelectInventoryItem={selectStockRow}
+        onUpdateReview={(suggestion, status) =>
+          void updateActionReview(suggestion, status)
+        }
+      />
+      {actionReviewMessage ? (
+        <p className="success-message">{actionReviewMessage}</p>
+      ) : null}
+      {actionReviewErrorMessage ? (
+        <p className="error-message">{actionReviewErrorMessage}</p>
+      ) : null}
+
       <section className="panel">
         <div className="panel-header">
           <h2>Eltérés okok</h2>
-          <span className="panel-count">{totalCorrectionCount}</span>
+          <span className="panel-count">
+            {isPhysicalControlQuickAction ? visibleCorrectionCount : totalCorrectionCount}
+          </span>
         </div>
 
         <div className="finance-summary-grid">
           <article className="finance-summary-card">
             <span>Korrekciós esemény</span>
-            <strong>{totalCorrectionCount}</strong>
+            <strong>
+              {isPhysicalControlQuickAction ? visibleCorrectionCount : totalCorrectionCount}
+            </strong>
           </article>
           <article className="finance-summary-card">
             <span>Összes érintett mennyiség</span>
-            <strong>{totalCorrectionQuantity.toFixed(3)}</strong>
+            <strong>
+              {(isPhysicalControlQuickAction
+                ? visibleCorrectionQuantity
+                : totalCorrectionQuantity
+              ).toFixed(3)}
+            </strong>
           </article>
           <article className="finance-summary-card">
             <span>Leggyakoribb ok</span>
             <strong>
-              {varianceReasonRows[0]
-                ? formatReasonLabel(varianceReasonRows[0].reason_code)
+              {visibleVarianceReasonRows[0]
+                ? formatReasonLabel(visibleVarianceReasonRows[0].reason_code)
                 : "-"}
             </strong>
           </article>
@@ -571,7 +889,16 @@ export function TheoreticalStockPage() {
           </p>
         ) : null}
 
-        {varianceReasonRows.length > 0 ? (
+        {isPhysicalControlQuickAction &&
+        !varianceReasonQuery.isLoading &&
+        varianceReasonRows.length > 0 &&
+        visibleVarianceReasonRows.length === 0 ? (
+          <p className="empty-message">
+            A fokuszalt okra meg nincs talalat: {formatReasonLabel(requestedReasonCode)}.
+          </p>
+        ) : null}
+
+        {visibleVarianceReasonRows.length > 0 ? (
           <div className="table-wrap">
             <table className="data-table">
               <thead>
@@ -584,8 +911,15 @@ export function TheoreticalStockPage() {
                 </tr>
               </thead>
               <tbody>
-                {varianceReasonRows.map((row) => (
-                  <tr key={row.reason_code}>
+                {visibleVarianceReasonRows.map((row) => (
+                  <tr
+                    key={row.reason_code}
+                    className={
+                      requestedReasonCode === row.reason_code
+                        ? "action-target-focused-row"
+                        : undefined
+                    }
+                  >
                     <td>{formatReasonLabel(row.reason_code)}</td>
                     <td>{row.movement_count}</td>
                     <td>{row.total_quantity}</td>

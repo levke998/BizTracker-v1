@@ -489,6 +489,35 @@ class DashboardBasketReceiptResponse(BaseModel):
     source_layer: str
 
 
+class DashboardStatisticsQualityResponse(BaseModel):
+    """Dashboard 2.0 statistics quality response."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    period_day_count: int
+    active_sales_day_count: int
+    pos_row_count: int
+    basket_count: int
+    coverage_percent: Decimal
+    quality_level: str
+    average_daily_revenue: Decimal
+    median_daily_revenue: Decimal
+    p25_daily_revenue: Decimal
+    p75_daily_revenue: Decimal
+    p90_daily_revenue: Decimal
+    p95_daily_revenue: Decimal
+    average_basket_value: Decimal
+    median_basket_value: Decimal
+    p25_basket_value: Decimal
+    p75_basket_value: Decimal
+    p90_basket_value: Decimal
+    p95_basket_value: Decimal
+    recommendation: str
+    source_layer: str
+    amount_basis: str = "gross"
+    amount_origin: str = "actual"
+
+
 class DashboardResponse(BaseModel):
     """Business dashboard response."""
 
@@ -519,4 +548,5 @@ class DashboardResponse(BaseModel):
     stock_risks: list[DashboardStockRiskRowResponse]
     top_products: list[DashboardBreakdownRowResponse]
     expense_breakdown: list[DashboardExpenseRowResponse]
+    statistics_quality: DashboardStatisticsQualityResponse
     notes: list[str]

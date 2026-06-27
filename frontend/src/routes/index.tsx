@@ -60,6 +60,11 @@ const SuppliersPage = lazy(() =>
     default: module.SuppliersPage,
   })),
 );
+const TheoreticalStockPage = lazy(() =>
+  import("../modules/inventory/pages/TheoreticalStockPage").then((module) => ({
+    default: module.TheoreticalStockPage,
+  })),
+);
 const TransactionsPage = lazy(() =>
   import("../modules/finance/pages/TransactionsPage").then((module) => ({
     default: module.TransactionsPage,
@@ -120,7 +125,7 @@ export function AppRoutes() {
           />
           <Route
             path={routes.inventoryTheoreticalStock.slice(1)}
-            element={<Navigate replace to={routes.catalogIngredients} />}
+            element={<TheoreticalStockPage />}
           />
           <Route
             path={routes.procurementSuppliers.slice(1)}

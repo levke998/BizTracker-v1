@@ -15,6 +15,7 @@ from app.modules.inventory.domain.entities.inventory_item import (
     InventoryItem,
     InventoryMovement,
     InventoryStockLevel,
+    InventoryVarianceActionReview,
     InventoryVarianceItemSummary,
     InventoryVariancePeriodComparison,
     InventoryVarianceReasonSummary,
@@ -31,6 +32,9 @@ from app.modules.inventory.infrastructure.orm.inventory_movement_model import (
 )
 from app.modules.inventory.infrastructure.orm.inventory_variance_threshold_model import (
     InventoryVarianceThresholdModel,
+)
+from app.modules.inventory.infrastructure.orm.inventory_variance_action_review_model import (
+    InventoryVarianceActionReviewModel,
 )
 from app.modules.inventory.infrastructure.orm.inventory_item_model import (
     InventoryItemModel,
@@ -201,7 +205,9 @@ class SqlAlchemyInventoryItemRepository:
                     "total_quantity"
                 ),
                 func.coalesce(func.sum(signed_quantity), 0).label("net_quantity_delta"),
-                func.max(InventoryMovementModel.occurred_at).label("latest_occurred_at"),
+                func.max(InventoryMovementModel.occurred_at).label(
+                    "latest_occurred_at"
+                ),
             )
             .where(InventoryMovementModel.reason_code.is_not(None))
             .where(InventoryMovementModel.movement_type.in_(["adjustment", "waste"]))
@@ -306,7 +312,9 @@ class SqlAlchemyInventoryItemRepository:
             select(
                 bucket_date.label("bucket_date"),
                 func.count(InventoryMovementModel.id).label("movement_count"),
-                func.coalesce(func.sum(shortage_quantity), 0).label("shortage_quantity"),
+                func.coalesce(func.sum(shortage_quantity), 0).label(
+                    "shortage_quantity"
+                ),
                 func.coalesce(func.sum(surplus_quantity), 0).label("surplus_quantity"),
                 func.coalesce(func.sum(signed_quantity), 0).label("net_quantity_delta"),
                 func.coalesce(func.sum(shortage_value), 0).label(
@@ -345,7 +353,9 @@ class SqlAlchemyInventoryItemRepository:
         rows = self._session.execute(statement.order_by(bucket_date.asc())).all()
         return [
             InventoryVarianceTrendPoint(
-                bucket_date=datetime.combine(row.bucket_date, datetime.min.time(), tzinfo=UTC),
+                bucket_date=datetime.combine(
+                    row.bucket_date, datetime.min.time(), tzinfo=UTC
+                ),
                 movement_count=row.movement_count,
                 shortage_quantity=Decimal(row.shortage_quantity),
                 surplus_quantity=Decimal(row.surplus_quantity),
@@ -430,7 +440,9 @@ class SqlAlchemyInventoryItemRepository:
                 InventoryItemModel.item_type,
                 InventoryItemModel.default_unit_cost,
                 func.count(InventoryMovementModel.id).label("movement_count"),
-                func.coalesce(func.sum(shortage_quantity), 0).label("shortage_quantity"),
+                func.coalesce(func.sum(shortage_quantity), 0).label(
+                    "shortage_quantity"
+                ),
                 func.coalesce(func.sum(surplus_quantity), 0).label("surplus_quantity"),
                 func.coalesce(func.sum(signed_quantity), 0).label("net_quantity_delta"),
                 func.coalesce(func.sum(shortage_value), 0).label(
@@ -445,7 +457,9 @@ class SqlAlchemyInventoryItemRepository:
                 func.coalesce(func.sum(missing_cost_movement), 0).label(
                     "missing_cost_movement_count"
                 ),
-                func.max(InventoryMovementModel.occurred_at).label("latest_occurred_at"),
+                func.max(InventoryMovementModel.occurred_at).label(
+                    "latest_occurred_at"
+                ),
             )
             .select_from(InventoryMovementModel)
             .join(
@@ -488,15 +502,21 @@ class SqlAlchemyInventoryItemRepository:
                 shortage_quantity=Decimal(row.shortage_quantity),
                 surplus_quantity=Decimal(row.surplus_quantity),
                 net_quantity_delta=Decimal(row.net_quantity_delta),
-                estimated_shortage_value=self._money(row.estimated_shortage_value)
-                if row.missing_cost_movement_count == 0
-                else None,
-                estimated_surplus_value=self._money(row.estimated_surplus_value)
-                if row.missing_cost_movement_count == 0
-                else None,
-                estimated_net_value_delta=self._money(row.estimated_net_value_delta)
-                if row.missing_cost_movement_count == 0
-                else None,
+                estimated_shortage_value=(
+                    self._money(row.estimated_shortage_value)
+                    if row.missing_cost_movement_count == 0
+                    else None
+                ),
+                estimated_surplus_value=(
+                    self._money(row.estimated_surplus_value)
+                    if row.missing_cost_movement_count == 0
+                    else None
+                ),
+                estimated_net_value_delta=(
+                    self._money(row.estimated_net_value_delta)
+                    if row.missing_cost_movement_count == 0
+                    else None
+                ),
                 missing_cost_movement_count=row.missing_cost_movement_count,
                 anomaly_status=self._variance_anomaly_status(
                     movement_count=row.movement_count,
@@ -530,6 +550,57 @@ class SqlAlchemyInventoryItemRepository:
         if surplus_quantity > 0:
             return "surplus_review"
         return "normal"
+
+    def list_variance_action_reviews(
+        self,
+        *,
+        business_unit_id: uuid.UUID,
+        suggestion_ids: list[str],
+    ) -> list[InventoryVarianceActionReview]:
+        if not suggestion_ids:
+            return []
+
+        rows = self._session.scalars(
+            select(InventoryVarianceActionReviewModel)
+            .where(
+                InventoryVarianceActionReviewModel.business_unit_id == business_unit_id
+            )
+            .where(InventoryVarianceActionReviewModel.suggestion_id.in_(suggestion_ids))
+        ).all()
+        return [self._to_variance_action_review_entity(row) for row in rows]
+
+    def upsert_variance_action_review(
+        self,
+        *,
+        business_unit_id: uuid.UUID,
+        suggestion_id: str,
+        status: str,
+        note: str | None = None,
+    ) -> InventoryVarianceActionReview:
+        model = self._session.scalar(
+            select(InventoryVarianceActionReviewModel).where(
+                InventoryVarianceActionReviewModel.business_unit_id == business_unit_id,
+                InventoryVarianceActionReviewModel.suggestion_id == suggestion_id,
+            )
+        )
+        resolved_at = datetime.now(UTC) if status == "resolved" else None
+        if model is None:
+            model = InventoryVarianceActionReviewModel(
+                business_unit_id=business_unit_id,
+                suggestion_id=suggestion_id,
+                status=status,
+                note=note,
+                resolved_at=resolved_at,
+            )
+            self._session.add(model)
+        else:
+            model.status = status
+            model.note = note
+            model.resolved_at = resolved_at
+
+        self._session.commit()
+        self._session.refresh(model)
+        return self._to_variance_action_review_entity(model)
 
     def get_variance_period_comparison(
         self,
@@ -619,7 +690,9 @@ class SqlAlchemyInventoryItemRepository:
             estimated_shortage_value_change=self._money(shortage_value_change),
             estimated_shortage_value_change_percent=change_percent,
             current_missing_cost_movement_count=current["missing_cost_movement_count"],
-            previous_missing_cost_movement_count=previous["missing_cost_movement_count"],
+            previous_missing_cost_movement_count=previous[
+                "missing_cost_movement_count"
+            ],
             decision_status=decision_status,
             recommendation=recommendation,
         )
@@ -657,7 +730,9 @@ class SqlAlchemyInventoryItemRepository:
         statement = (
             select(
                 func.count(InventoryMovementModel.id).label("movement_count"),
-                func.coalesce(func.sum(shortage_quantity), 0).label("shortage_quantity"),
+                func.coalesce(func.sum(shortage_quantity), 0).label(
+                    "shortage_quantity"
+                ),
                 func.coalesce(func.sum(shortage_value), 0).label(
                     "estimated_shortage_value"
                 ),
@@ -728,7 +803,10 @@ class SqlAlchemyInventoryItemRepository:
                 "worsening",
                 "A becsult veszteseg az elozo idoszakhoz kepest romlik; erdemes a top vesztesegu tetelekre es okokra szurni.",
             )
-        if previous_shortage_value > 0 and current_shortage_value < previous_shortage_value:
+        if (
+            previous_shortage_value > 0
+            and current_shortage_value < previous_shortage_value
+        ):
             return (
                 "improving",
                 "A becsult veszteseg csokken, de a visszatero okokat tovabbra is figyelni kell.",
@@ -821,6 +899,21 @@ class SqlAlchemyInventoryItemRepository:
         )
 
     @staticmethod
+    def _to_variance_action_review_entity(
+        model: InventoryVarianceActionReviewModel,
+    ) -> InventoryVarianceActionReview:
+        return InventoryVarianceActionReview(
+            id=model.id,
+            business_unit_id=model.business_unit_id,
+            suggestion_id=model.suggestion_id,
+            status=model.status,
+            note=model.note,
+            resolved_at=model.resolved_at,
+            created_at=model.created_at,
+            updated_at=model.updated_at,
+        )
+
+    @staticmethod
     def _money(value: object) -> Decimal:
         return Decimal(value).quantize(Decimal("0.01"))
 
@@ -854,7 +947,9 @@ class SqlAlchemyInventoryItemRepository:
             .where(InventoryItemModel.name == name)
         )
         if exclude_inventory_item_id is not None:
-            statement = statement.where(InventoryItemModel.id != exclude_inventory_item_id)
+            statement = statement.where(
+                InventoryItemModel.id != exclude_inventory_item_id
+            )
 
         count = self._session.scalar(statement)
         return bool(count)
@@ -880,7 +975,10 @@ class SqlAlchemyInventoryItemRepository:
                 ),
                 InventoryMovementModel.quantity,
             ),
-            (InventoryMovementModel.movement_type == "waste", -InventoryMovementModel.quantity),
+            (
+                InventoryMovementModel.movement_type == "waste",
+                -InventoryMovementModel.quantity,
+            ),
             else_=0,
         )
 
@@ -974,12 +1072,19 @@ class SqlAlchemyInventoryItemRepository:
                 InventoryItemModel.name.label("inventory_item_name"),
                 UnitOfMeasureModel.code.label("uom_code"),
             )
-            .join(ProductModel, ProductModel.id == EstimatedConsumptionAuditModel.product_id)
+            .join(
+                ProductModel,
+                ProductModel.id == EstimatedConsumptionAuditModel.product_id,
+            )
             .join(
                 InventoryItemModel,
-                InventoryItemModel.id == EstimatedConsumptionAuditModel.inventory_item_id,
+                InventoryItemModel.id
+                == EstimatedConsumptionAuditModel.inventory_item_id,
             )
-            .join(UnitOfMeasureModel, UnitOfMeasureModel.id == EstimatedConsumptionAuditModel.uom_id)
+            .join(
+                UnitOfMeasureModel,
+                UnitOfMeasureModel.id == EstimatedConsumptionAuditModel.uom_id,
+            )
         )
 
         if business_unit_id is not None:
