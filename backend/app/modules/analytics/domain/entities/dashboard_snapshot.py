@@ -462,6 +462,80 @@ class DashboardBasketReceipt:
 
 
 @dataclass(frozen=True, slots=True)
+class DashboardStatisticsTrendPoint:
+    """Daily statistic point with rolling decision-support indicators."""
+
+    business_date: date
+    daily_revenue: Decimal
+    basket_count: int
+    average_basket_value: Decimal
+    rolling_7_day_average_revenue: Decimal
+    moving_7_day_median_revenue: Decimal
+    rolling_7_day_average_basket_value: Decimal
+    moving_7_day_median_basket_value: Decimal
+    source_layer: str
+
+
+@dataclass(frozen=True, slots=True)
+class DashboardStatisticsOutlierFlag:
+    """Explainable statistical warning derived from POS daily or basket data."""
+
+    code: str
+    severity: str
+    label: str
+    business_date: date | None
+    metric_value: Decimal
+    baseline_value: Decimal
+    recommendation: str
+    source_layer: str
+
+
+@dataclass(frozen=True, slots=True)
+class DashboardDemandPercentileRow:
+    """Demand percentile preparation row for category or product demand models."""
+
+    label: str
+    scope: str
+    transaction_count: int
+    quantity: Decimal
+    gross_revenue: Decimal
+    median_daily_quantity: Decimal
+    p90_daily_quantity: Decimal
+    p95_daily_quantity: Decimal
+    source_layer: str
+    amount_basis: str = "gross"
+    amount_origin: str = "actual"
+
+
+@dataclass(frozen=True, slots=True)
+class DashboardInventoryTurnoverReadiness:
+    """Readiness signal for the next inventory-turnover read-model slice."""
+
+    status: str
+    pos_row_count: int
+    product_demand_row_count: int
+    category_demand_row_count: int
+    required_source_layers: tuple[str, ...]
+    recommendation: str
+    source_layer: str
+
+
+@dataclass(frozen=True, slots=True)
+class DashboardStatisticsInsight:
+    """Prioritized business interpretation derived from statistics signals."""
+
+    code: str
+    severity: str
+    category: str
+    title: str
+    summary: str
+    recommendation: str
+    confidence: str
+    priority_score: Decimal
+    source_layer: str
+
+
+@dataclass(frozen=True, slots=True)
 class DashboardStatisticsQuality:
     """Distribution and data-quality summary for Dashboard 2.0 decisions."""
 
@@ -483,6 +557,17 @@ class DashboardStatisticsQuality:
     p75_basket_value: Decimal
     p90_basket_value: Decimal
     p95_basket_value: Decimal
+    trend_direction: str
+    trend_stability: str
+    trend_change_percent: Decimal
+    volatility_percent: Decimal
+    trend_recommendation: str
+    rolling_points: tuple[DashboardStatisticsTrendPoint, ...]
+    outlier_flags: tuple[DashboardStatisticsOutlierFlag, ...]
+    category_demand_percentiles: tuple[DashboardDemandPercentileRow, ...]
+    product_demand_percentiles: tuple[DashboardDemandPercentileRow, ...]
+    inventory_turnover_readiness: DashboardInventoryTurnoverReadiness
+    insights: tuple[DashboardStatisticsInsight, ...]
     recommendation: str
     source_layer: str
     amount_basis: str = "gross"

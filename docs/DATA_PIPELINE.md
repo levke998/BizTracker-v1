@@ -412,6 +412,11 @@ Az elso statisztikai blokk nem kulon modulban jelenik meg, hanem a Business Dash
 - POS sorokbol es kosarakbol szamolt mezok: `pos_row_count`, `basket_count`, `active_sales_day_count`, `period_day_count`, `coverage_percent`
 - napi bevetel es kosarertek leiro statisztikak: atlag, median, P25, P75, P90, P95
 - `quality_level`: `strong`, `usable`, `limited`, `insufficient`; ez adatminosegi/readiness jelzes, nem modellpontossag
+- Statistics v1.1 mezok ugyanebben a blokkban: `rolling_points`, `trend_direction`, `trend_stability`, `trend_change_percent`, `volatility_percent`, `outlier_flags`, `category_demand_percentiles`, `product_demand_percentiles`, `inventory_turnover_readiness`
+- a rolling pontok naptari napokra epulnek, igy a hianyzo POS napok nulla napi bevetel kent latszanak es outlier/import kontroll jelzest kaphatnak
+- a termek- es kategoriakeresleti percentilisek POS actual quantity es gross revenue alapon keszulnek; ez elokeszites a keszletforgas, baseline forecast es demand planning kovetkezo szeleteihez
+- Statistics v1.2 mezok: `insights` lista, amely a minosegi kapu, trend, outlier, keresleti percentilis es keszletforgas-readiness jelekbol priorizalt vezetoi interpretaciot ad
+- az `insights` elemek nem frontend-only szovegek: backendbol erkeznek `code`, `severity`, `category`, `title`, `summary`, `recommendation`, `confidence`, `priority_score` es `source_layer` mezokkel
 - a frontend Dashboard 2.0 kartya ezt megjeleniti, nem szamolja ujra
 - forecast, weather es kesobbi ML reteg ezt a readiness/coverage jelzest hasznalhatja confidence es modellinditasi kapukent
 

@@ -1,4 +1,6 @@
 backend/.env
+frontend/.env
+backend/.venv/
 backend/backups/
 backend/storage/
 backend/.test-tmp/

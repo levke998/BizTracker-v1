@@ -364,6 +364,12 @@ Dashboardon mindig latszodjon:
 Dashboard 2.0 statisztikai alap:
 - a dashboard nem kulon statisztika oldal, hanem a vezeto elemzo felulet; a statisztikai read-modelek a meglovo KPI, trend, weather es forecast blokkok minoseget erositik
 - elso kesz szelet: `statistics_quality` read-model a dashboard payloadban, amely idoszaki POS sor-, kosar-, aktiv nap- es lefedettsegi mintameretet, napi bevetel es kosarertek atlag/median/P25/P75/P90/P95 mutatokat, valamint `quality_level` dontesi jelzest ad
+- Statistics v1.1 kesz szelet: ugyanebben a `statistics_quality` blokkban naptari napi `rolling_points` jon 7 napos rolling atlaggal es mozgo mediannal napi bevetelre es kosarertekre, `trend_direction`, `trend_stability`, trendvaltozas es volatilitas jelzessel
+- az outlier/import kontroll read-model `outlier_flags` sorokban jelzi a szokatlan forgalmu napot, extrem kosarerteket es gyanus hianyzo napot; ez ellenorzesi jelzes, nem automatikus adatjavitas
+- a termek- es kategoriakereslet percentilis elokeszites backend read-modelkent jelenik meg `product_demand_percentiles` es `category_demand_percentiles` mezokben, daily quantity median/P90/P95 mutatokkal
+- a keszletforgas kovetkezo szeletehez `inventory_turnover_readiness` jelzi, hogy a POS keresleti percentilisek, production recipe read-model es inventory movement actual retegek osszekotese kovetkezhet
+- Statistics v1.2 insight interpretation layer: a `statistics_quality.insights` priorizalt, magyarul megjelenitheto vezetoi ertelmezest ad a statisztikai jelzesekbol; minden insight tartalmaz kategoriat, sulyossagot, bizalmi szintet, osszefoglalot es kovetkezo lepest
+- az insight nem uj adatforras es nem ML dontes, hanem a backend statisztikai read-model uzleti interpretacioja, amely a kesobbi prediktiv modellek feature-eit es confidence gatingjet kesziti elo
 - az atlag es median parhuzamosan jelenik meg, mert a kosarertek es napi bevetel szelso ertekekre erzekeny
 - a `quality_level` nem modellpontossag, hanem adatminosegi/readiness jelzes: `strong`, `usable`, `limited`, `insufficient`
 - forecast, weather-alapu dontestamogatas es ML csak akkor epithet erre erosen, ha a statisztikai alap legalabb `usable`, es minden predikcio confidence/adatminoseg jelzessel jon

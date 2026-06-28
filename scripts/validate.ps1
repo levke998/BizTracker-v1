@@ -8,6 +8,28 @@ $ErrorActionPreference = "Stop"
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 $backendRoot = Join-Path $repositoryRoot "backend"
 $frontendRoot = Join-Path $repositoryRoot "frontend"
+$backendVenvPython = Join-Path $backendRoot ".venv\Scripts\python.exe"
+$pythonCommand = if (Test-Path -LiteralPath $backendVenvPython) {
+    $backendVenvPython
+} else {
+    "python"
+}
+$npmExecutable = Get-Command npm.cmd -ErrorAction SilentlyContinue
+if ($npmExecutable) {
+    $npmCommand = $npmExecutable.Source
+} else {
+    $codexNpm = Get-ChildItem `
+        -Path "$env:LOCALAPPDATA\OpenAI\Codex\runtimes\cua_node" `
+        -Filter npm.cmd `
+        -Recurse `
+        -ErrorAction SilentlyContinue |
+        Select-Object -First 1 -ExpandProperty FullName
+    $npmCommand = if ($codexNpm) { $codexNpm } else { "npm.cmd" }
+}
+$npmDirectory = Split-Path -Parent $npmCommand
+if ($npmDirectory -and (Test-Path -LiteralPath $npmDirectory)) {
+    $env:Path = "$npmDirectory;$env:Path"
+}
 $testDatabaseName = "biztracker_test"
 $databasePort = if ($env:BIZTRACKER_DB_PORT) {
     $env:BIZTRACKER_DB_PORT
@@ -35,20 +57,22 @@ function Invoke-CheckedCommand {
 
 Push-Location $repositoryRoot
 try {
-    Invoke-CheckedCommand {
-        docker compose up -d db
-    } "A helyi PostgreSQL kontener nem indult el."
+    if (-not $SkipIntegration) {
+        Invoke-CheckedCommand {
+            docker compose up -d db
+        } "A helyi PostgreSQL kontener nem indult el."
 
-    $healthStatus = ""
-    for ($attempt = 0; $attempt -lt 30; $attempt++) {
-        $healthStatus = docker inspect --format "{{.State.Health.Status}}" biztracker-postgres
-        if ($LASTEXITCODE -eq 0 -and $healthStatus -eq "healthy") {
-            break
+        $healthStatus = ""
+        for ($attempt = 0; $attempt -lt 30; $attempt++) {
+            $healthStatus = docker inspect --format "{{.State.Health.Status}}" biztracker-postgres
+            if ($LASTEXITCODE -eq 0 -and $healthStatus -eq "healthy") {
+                break
+            }
+            Start-Sleep -Seconds 1
         }
-        Start-Sleep -Seconds 1
-    }
-    if ($healthStatus -ne "healthy") {
-        throw "A helyi PostgreSQL kontener nem valt healthy allapotuva."
+        if ($healthStatus -ne "healthy") {
+            throw "A helyi PostgreSQL kontener nem valt healthy allapotuva."
+        }
     }
 
     Push-Location $backendRoot
@@ -58,7 +82,7 @@ try {
         New-Item -ItemType Directory -Force -Path ".test-tmp" | Out-Null
 
         Invoke-CheckedCommand {
-            python -m pytest tests/unit -q -p no:cacheprovider `
+            & $pythonCommand -m pytest tests/unit -q -p no:cacheprovider `
                 --basetemp .test-tmp/unit
         } "A backend unit tesztek hibaval alltak le."
 
@@ -86,13 +110,13 @@ try {
             try {
                 $env:DATABASE_URL = $testDatabaseUrl
                 Invoke-CheckedCommand {
-                    python -m alembic upgrade head
+                    & $pythonCommand -m alembic upgrade head
                 } "A tesztadatbazis migracioja sikertelen."
                 Invoke-CheckedCommand {
-                    python -m scripts.bootstrap_reference_data
+                    & $pythonCommand -m scripts.bootstrap_reference_data
                 } "A tesztadatbazis referenciaadatainak letrehozasa sikertelen."
                 Invoke-CheckedCommand {
-                    python -m pytest tests/integration -q -p no:cacheprovider `
+                    & $pythonCommand -m pytest tests/integration -q -p no:cacheprovider `
                         --basetemp .test-tmp/integration
                 } "A backend integration tesztek hibaval alltak le."
             }
@@ -113,7 +137,7 @@ try {
         Push-Location $frontendRoot
         try {
             Invoke-CheckedCommand {
-                npm.cmd run build:check
+                & $npmCommand run build:check
             } "A frontend build ellenorzese hibaval allt le."
         }
         finally {

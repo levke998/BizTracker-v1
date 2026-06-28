@@ -696,6 +696,126 @@ def test_dashboard_returns_statistics_quality_for_distribution_decisions(
     assert statistics["recommendation"]
 
 
+def test_dashboard_returns_statistics_v11_trends_outliers_and_demand_percentiles(
+    client: TestClient,
+    analytics_data_builder: AnalyticsTestDataBuilder,
+    test_business_unit: BusinessUnitModel,
+) -> None:
+    sales = [
+        (
+            date(2030, 3, 1),
+            "STAT11-1",
+            "Cake",
+            "Sacher",
+            Decimal("1"),
+            Decimal("1000"),
+        ),
+        (
+            date(2030, 3, 2),
+            "STAT11-2",
+            "Cake",
+            "Sacher",
+            Decimal("2"),
+            Decimal("1200"),
+        ),
+        (
+            date(2030, 3, 4),
+            "STAT11-3",
+            "Cake",
+            "Sacher",
+            Decimal("6"),
+            Decimal("6000"),
+        ),
+        (
+            date(2030, 3, 5),
+            "STAT11-4",
+            "Coffee",
+            "Espresso",
+            Decimal("3"),
+            Decimal("1500"),
+        ),
+    ]
+    for row_number, (
+        business_date,
+        receipt_no,
+        category_name,
+        product_name,
+        quantity,
+        gross_amount,
+    ) in enumerate(sales, start=1):
+        analytics_data_builder.create_pos_row(
+            business_unit_id=test_business_unit.id,
+            row_number=row_number,
+            payload_date=business_date,
+            receipt_no=receipt_no,
+            category_name=category_name,
+            product_name=product_name,
+            quantity=quantity,
+            gross_amount=gross_amount,
+        )
+
+    response = client.get(
+        f"{API_PREFIX}/dashboard",
+        params={
+            "scope": "overall",
+            "business_unit_id": str(test_business_unit.id),
+            "period": "custom",
+            "start_date": "2030-03-01",
+            "end_date": "2030-03-07",
+        },
+    )
+
+    assert response.status_code == 200
+    statistics = response.json()["statistics_quality"]
+
+    assert statistics["trend_direction"] in {
+        "increasing",
+        "decreasing",
+        "volatile",
+        "flat",
+        "insufficient_data",
+    }
+    assert len(statistics["rolling_points"]) == 7
+    assert statistics["rolling_points"][3]["business_date"] == "2030-03-04"
+    assert Decimal(
+        str(statistics["rolling_points"][3]["rolling_7_day_average_revenue"])
+    ) == Decimal("2050.00")
+
+    flags_by_code = {row["code"]: row for row in statistics["outlier_flags"]}
+    assert flags_by_code["unusual_sales_day"]["business_date"] == "2030-03-04"
+    assert flags_by_code["suspicious_missing_day"]["business_date"] == "2030-03-03"
+
+    product_rows = {
+        row["label"]: row for row in statistics["product_demand_percentiles"]
+    }
+    assert Decimal(str(product_rows["Sacher"]["quantity"])) == Decimal("9")
+    assert Decimal(str(product_rows["Sacher"]["p90_daily_quantity"])) == Decimal("6.00")
+    assert product_rows["Sacher"]["amount_basis"] == "gross"
+    assert product_rows["Sacher"]["amount_origin"] == "actual"
+
+    category_rows = {
+        row["label"]: row for row in statistics["category_demand_percentiles"]
+    }
+    assert Decimal(str(category_rows["Cake"]["gross_revenue"])) == Decimal("8200")
+
+    readiness = statistics["inventory_turnover_readiness"]
+    assert readiness["source_layer"] == "inventory_turnover_readiness"
+    assert "pos_import_demand_percentiles" in readiness["required_source_layers"]
+    assert readiness["product_demand_row_count"] >= 2
+    assert readiness["recommendation"]
+
+    insights = statistics["insights"]
+    assert len(insights) >= 3
+    assert insights[0]["code"] == "statistics_sample_gate"
+    assert insights[0]["category"] == "data_quality"
+    assert insights[0]["confidence"] == "very_low"
+    assert insights[0]["priority_score"] == "95"
+    assert any(row["code"] == "statistics_outlier_control" for row in insights)
+    assert any(row["code"] == "product_demand_leader" for row in insights)
+    assert all(row["summary"] for row in insights)
+    assert all(row["recommendation"] for row in insights)
+
+
 def test_dashboard_scope_filters_overall_flow_and_gourmand(
     client: TestClient,
     analytics_data_builder: AnalyticsTestDataBuilder,

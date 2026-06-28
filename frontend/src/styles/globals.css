@@ -7898,6 +7898,65 @@ select option:checked {
   background: rgba(15, 23, 42, 0.45);
 }
 
+.dashboard-insight-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.dashboard-insight {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid rgba(56, 189, 248, 0.24);
+  border-radius: 10px;
+  background: rgba(8, 47, 73, 0.32);
+}
+
+.dashboard-insight-success {
+  border-color: rgba(34, 197, 94, 0.32);
+  background: rgba(20, 83, 45, 0.24);
+}
+
+.dashboard-insight-warning {
+  border-color: rgba(245, 158, 11, 0.35);
+  background: rgba(113, 63, 18, 0.24);
+}
+
+.dashboard-insight-danger {
+  border-color: rgba(248, 113, 113, 0.36);
+  background: rgba(127, 29, 29, 0.25);
+}
+
+.dashboard-insight-topline {
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.dashboard-insight h3 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 1rem;
+  line-height: 1.25;
+}
+
+.dashboard-insight p,
+.dashboard-insight small {
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
+.dashboard-insight small {
+  color: var(--text-muted);
+}
+
 .dashboard-card-pair {
   display: grid;
   gap: 14px;
@@ -8394,6 +8453,7 @@ select option:checked {
   .flow-forecast-summary,
   .flow-forecast-metrics,
   .flow-performer-list,
+  .dashboard-insight-grid,
   .kpi-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -8584,6 +8644,9 @@ select option:checked {
   .expense-summary-strip,
   .expense-detail-layout,
   .expense-source-metrics,
+  .dashboard-insight-grid,
+  .dashboard-statistics-grid,
+  .finance-summary-grid,
   .catalog-recipe-line {
     grid-template-columns: 1fr;
   }

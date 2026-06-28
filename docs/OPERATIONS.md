@@ -18,6 +18,32 @@ cd C:\BizTracker\frontend
 npm.cmd run dev
 ```
 
+## Windows fejlesztoi PATH es venv
+
+Az uj gepen a fejlesztoi alap user PATH-ba kerult:
+
+```text
+C:\Program Files\Git\cmd
+C:\Users\ADMIN\AppData\Local\Programs\Python\Python312
+C:\Users\ADMIN\AppData\Local\Programs\Python\Python312\Scripts
+C:\Users\ADMIN\AppData\Local\OpenAI\Codex\runtimes\cua_node\1b23c930bdf84ed6\bin
+```
+
+Meglevo Codex/terminal folyamat nem mindig veszi at azonnal a friss user PATH-ot;
+uj terminalban kell latszania. A backendhez repo-lokalis virtualenv keszult:
+
+```powershell
+cd C:\BizTracker\BizTracker-v1
+backend\.venv\Scripts\python.exe -m pip install -e "backend[dev]" black
+```
+
+A `scripts\validate.ps1` eloszor ezt a venv Pythont hasznalja, ha letezik.
+Docker nelkuli gyors kapu:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\validate.ps1 -SkipIntegration
+```
+
 ## Adatbazis es migration
 
 Uj fejlesztoi gep, Docker/PostgreSQL es gepkozi DB snapshot:
@@ -267,6 +293,27 @@ Legutobbi celzott validacio:
   - `python -m pytest C:\BizTracker\backend\tests\integration\test_analytics_dashboard_api.py -q` -> `24 passed`
   - `python -m pytest C:\BizTracker\backend\tests\integration -q` -> `172 passed`
   - `npm.cmd run build` -> sikeres (`DashboardPage` chunk kb. `84.15 kB`)
+- Dashboard 2.0 Statistics v1.1 utan:
+  - nincs uj migration
+  - Windows user PATH javitva Git/Python/npm iranyba; backend `.venv` letrehozva
+  - `backend\.venv\Scripts\python.exe -m black --check ...analytics... test_analytics_dashboard_api.py` -> sikeres
+  - `backend\.venv\Scripts\python.exe -m compileall backend\app\modules\analytics` -> sikeres
+  - `backend\.venv\Scripts\python.exe -m pytest backend\tests\unit -q` -> `41 passed`
+  - `backend\.venv\Scripts\python.exe -m pytest backend\tests\integration\test_analytics_dashboard_api.py -q` -> `25 passed`
+  - frontend `tsc --noEmit` -> sikeres
+  - frontend `vite build` -> sikeres (`DashboardPage` chunk kb. `86.36 kB`)
+  - `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\validate.ps1 -SkipIntegration` -> sikeres
+  - teljes integration nem futott ezen a gepen, mert Docker nem erheto el
+- Dashboard 2.0 Statistics v1.2 insight interpretation layer elso szelet utan:
+  - nincs uj migration
+  - `backend\.venv\Scripts\python.exe -m black backend\app\modules\analytics\domain\entities\dashboard_snapshot.py backend\app\modules\analytics\presentation\schemas\dashboard.py backend\app\modules\analytics\infrastructure\repositories\statistics_analytics_builder.py backend\tests\integration\test_analytics_dashboard_api.py` -> sikeres
+  - `backend\.venv\Scripts\python.exe -m pytest backend\tests\integration\test_analytics_dashboard_api.py -q` -> `25 passed`
+  - `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\validate.ps1 -SkipIntegration` -> sikeres (`41 passed`, frontend build-check sikeres)
+  - `npm.cmd run build` -> sikeres (`DashboardPage` chunk kb. `87.25 kB`)
+- Dashboard 2.0 Attekintes/Professzionalis UX elso szelet utan:
+  - nincs uj migration
+  - `backend\.venv\Scripts\python.exe -m pytest backend\tests\integration\test_analytics_dashboard_api.py -q` -> `25 passed`
+  - frontend `npm.cmd run build:check` -> sikeres (`DashboardPage` chunk kb. `87.62 kB`)
 - POS import file-set sorrend flake javitas utan:
   - `python -m pytest C:\BizTracker\backend\tests\integration\test_imports_api.py::test_parse_gourmand_pos_sales_file_set_uses_summary_categories -q` -> `1 passed`
 - POS import stuck-batch es duplicate alias regresszio utan:

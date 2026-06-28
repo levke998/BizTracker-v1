@@ -403,10 +403,86 @@ export type DashboardStatisticsQuality = {
   p75_basket_value: string;
   p90_basket_value: string;
   p95_basket_value: string;
+  trend_direction:
+    | "increasing"
+    | "decreasing"
+    | "volatile"
+    | "flat"
+    | "insufficient_data"
+    | string;
+  trend_stability: "stable" | "volatile" | "low_sample" | string;
+  trend_change_percent: string;
+  volatility_percent: string;
+  trend_recommendation: string;
+  rolling_points: DashboardStatisticsTrendPoint[];
+  outlier_flags: DashboardStatisticsOutlierFlag[];
+  category_demand_percentiles: DashboardDemandPercentileRow[];
+  product_demand_percentiles: DashboardDemandPercentileRow[];
+  inventory_turnover_readiness: DashboardInventoryTurnoverReadiness;
+  insights: DashboardStatisticsInsight[];
   recommendation: string;
   source_layer: string;
   amount_basis: string;
   amount_origin: string;
+};
+
+export type DashboardStatisticsTrendPoint = {
+  business_date: string;
+  daily_revenue: string;
+  basket_count: number;
+  average_basket_value: string;
+  rolling_7_day_average_revenue: string;
+  moving_7_day_median_revenue: string;
+  rolling_7_day_average_basket_value: string;
+  moving_7_day_median_basket_value: string;
+  source_layer: string;
+};
+
+export type DashboardStatisticsOutlierFlag = {
+  code: string;
+  severity: "warning" | "danger" | string;
+  label: string;
+  business_date: string | null;
+  metric_value: string;
+  baseline_value: string;
+  recommendation: string;
+  source_layer: string;
+};
+
+export type DashboardDemandPercentileRow = {
+  label: string;
+  scope: "category" | "product" | string;
+  transaction_count: number;
+  quantity: string;
+  gross_revenue: string;
+  median_daily_quantity: string;
+  p90_daily_quantity: string;
+  p95_daily_quantity: string;
+  source_layer: string;
+  amount_basis: string;
+  amount_origin: string;
+};
+
+export type DashboardInventoryTurnoverReadiness = {
+  status: string;
+  pos_row_count: number;
+  product_demand_row_count: number;
+  category_demand_row_count: number;
+  required_source_layers: string[];
+  recommendation: string;
+  source_layer: string;
+};
+
+export type DashboardStatisticsInsight = {
+  code: string;
+  severity: "success" | "info" | "warning" | "danger" | string;
+  category: "data_quality" | "trend" | "demand" | "inventory" | string;
+  title: string;
+  summary: string;
+  recommendation: string;
+  confidence: "high" | "medium" | "low" | "very_low" | string;
+  priority_score: string;
+  source_layer: string;
 };
 
 export type DashboardData = {

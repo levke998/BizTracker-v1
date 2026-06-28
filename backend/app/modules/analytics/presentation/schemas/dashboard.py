@@ -489,6 +489,85 @@ class DashboardBasketReceiptResponse(BaseModel):
     source_layer: str
 
 
+class DashboardStatisticsTrendPointResponse(BaseModel):
+    """Dashboard 2.0 rolling statistics response point."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    business_date: date
+    daily_revenue: Decimal
+    basket_count: int
+    average_basket_value: Decimal
+    rolling_7_day_average_revenue: Decimal
+    moving_7_day_median_revenue: Decimal
+    rolling_7_day_average_basket_value: Decimal
+    moving_7_day_median_basket_value: Decimal
+    source_layer: str
+
+
+class DashboardStatisticsOutlierFlagResponse(BaseModel):
+    """Dashboard 2.0 outlier/import warning response."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    code: str
+    severity: str
+    label: str
+    business_date: date | None
+    metric_value: Decimal
+    baseline_value: Decimal
+    recommendation: str
+    source_layer: str
+
+
+class DashboardDemandPercentileRowResponse(BaseModel):
+    """Dashboard 2.0 category or product demand percentile response."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    label: str
+    scope: str
+    transaction_count: int
+    quantity: Decimal
+    gross_revenue: Decimal
+    median_daily_quantity: Decimal
+    p90_daily_quantity: Decimal
+    p95_daily_quantity: Decimal
+    source_layer: str
+    amount_basis: str = "gross"
+    amount_origin: str = "actual"
+
+
+class DashboardInventoryTurnoverReadinessResponse(BaseModel):
+    """Dashboard 2.0 inventory-turnover readiness response."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    status: str
+    pos_row_count: int
+    product_demand_row_count: int
+    category_demand_row_count: int
+    required_source_layers: list[str]
+    recommendation: str
+    source_layer: str
+
+
+class DashboardStatisticsInsightResponse(BaseModel):
+    """Prioritized dashboard statistics business interpretation response."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    code: str
+    severity: str
+    category: str
+    title: str
+    summary: str
+    recommendation: str
+    confidence: str
+    priority_score: Decimal
+    source_layer: str
+
+
 class DashboardStatisticsQualityResponse(BaseModel):
     """Dashboard 2.0 statistics quality response."""
 
@@ -512,6 +591,17 @@ class DashboardStatisticsQualityResponse(BaseModel):
     p75_basket_value: Decimal
     p90_basket_value: Decimal
     p95_basket_value: Decimal
+    trend_direction: str
+    trend_stability: str
+    trend_change_percent: Decimal
+    volatility_percent: Decimal
+    trend_recommendation: str
+    rolling_points: list[DashboardStatisticsTrendPointResponse]
+    outlier_flags: list[DashboardStatisticsOutlierFlagResponse]
+    category_demand_percentiles: list[DashboardDemandPercentileRowResponse]
+    product_demand_percentiles: list[DashboardDemandPercentileRowResponse]
+    inventory_turnover_readiness: DashboardInventoryTurnoverReadinessResponse
+    insights: list[DashboardStatisticsInsightResponse]
     recommendation: str
     source_layer: str
     amount_basis: str = "gross"

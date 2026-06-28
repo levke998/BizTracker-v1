@@ -5,6 +5,8 @@ import type {
 } from "../types/analytics";
 import { periodOptions, scopeOptions } from "./dashboardView";
 
+export type DashboardViewMode = "overview" | "professional";
+
 export function DashboardHeaderControls({
   scope,
   setScope,
@@ -16,6 +18,8 @@ export function DashboardHeaderControls({
   setEndDate,
   onExport,
   canExport,
+  viewMode,
+  setViewMode,
 }: {
   scope: DashboardScope;
   setScope: (value: DashboardScope) => void;
@@ -27,6 +31,8 @@ export function DashboardHeaderControls({
   setEndDate: (value: string) => void;
   onExport: () => void;
   canExport: boolean;
+  viewMode: DashboardViewMode;
+  setViewMode: (value: DashboardViewMode) => void;
 }) {
   return (
     <>
@@ -39,6 +45,26 @@ export function DashboardHeaderControls({
               scope === option.value ? "filter-chip filter-chip-active" : "filter-chip"
             }
             onClick={() => setScope(option.value)}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="business-segmented-control topbar-segmented-control">
+        {[
+          { value: "overview" as const, label: "Áttekintés" },
+          { value: "professional" as const, label: "Professzionális" },
+        ].map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            className={
+              viewMode === option.value
+                ? "filter-chip filter-chip-active"
+                : "filter-chip"
+            }
+            onClick={() => setViewMode(option.value)}
           >
             {option.label}
           </button>

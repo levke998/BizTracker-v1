@@ -156,10 +156,12 @@ Scope pontositas:
 ### P2 - Dashboard es UX
 
 1. Dashboard legyen a fo termekelmeny, nem admin lista.
-2. Tablazatok csak drill-down, audit es validacio szerepben maradjanak.
-3. Overall, Gourmand es Flow scope valtas erositese.
-4. Kartyak es diagramok a valos uzleti kerdesekre valaszoljanak.
-5. Magyar, business-barat szovegek; technikai enumok ne jelenjenek meg nyersen.
+2. Dashboard 2.0 a BizTracker elemzo/data science termekmagja; reszletes elv:
+   [DASHBOARD_2_STRATEGY.md](DASHBOARD_2_STRATEGY.md).
+3. Tablazatok csak drill-down, audit es validacio szerepben maradjanak.
+4. Overall, Gourmand es Flow scope valtas erositese.
+5. Kartyak es diagramok a valos uzleti kerdesekre valaszoljanak.
+6. Magyar, business-barat szovegek; technikai enumok ne jelenjenek meg nyersen.
 
 ### P2 - Statisztika es predikcio
 
@@ -205,7 +207,7 @@ Ez a lista csak a nyitott, soron kovetkezo fejleszteseket tartalmazza. A mar lez
 5. Flow event elszamolasi melyites kovetkezo szelet: event profit osszehasonlitas es settlement riportok. A ticket import adapter jegelve, amig nincs dontes a ticket adatok importformatumarol.
 6. Inventory controlling javitasi workflow-k kovetkezo szelet: a recept hiba, mapping, kimaradt beszerzesi szamla es fizikai kontroll okok gyorslink + lezaro workflow kesz; kovetkezhet a statisztikai alapok elokeszitese.
 7. Netto/brutto/AFA reporting kovetkezo melyitese: termek margin utan kategoriak/uzletagak osszesitett netto margin es AFA visszaigenylesi nezet.
-8. Dashboard 2.0 statisztikai alapok kovetkezo szelet: `statistics_quality` kesz; kovetkezhet rolling average/mozgomedian, outlier/import hiba jelzes, termek- es kategoriakereslet percentilisek.
+8. Dashboard 2.0 statisztikai alapok kovetkezo szelet: Statistics v1.2 insight interpretation layer es az altalanos/professzionalis dashboard nezeti UX elso szelete kesz; kovetkezhet a keszletforgas read-model tenyleges production recipe + inventory movement osszekotese es baseline forecast savos inditasa.
 9. Forecast readiness es predikcios alapok: pesszimista/realista/optimista savok, baseline forecast, szezonalis es esemeny-alapu magyarazatok, majd regression/Bayes/scenario planning elokeszitese.
 10. Weather-alapu dontestamogatas: csak stabil weather cache, adatminosegi lefedettseg es baseline utan; rovid tavon konkret forecast, 17-30 napra szezonalis/weather-normal becsles bizonytalansagi jelolessel.
 11. ML/data science reteg: csak stabil historikus adat, mapping lineage, feature store-szeru read model es visszameresi metrika utan.
@@ -266,6 +268,9 @@ A reszletes kesz allapot az `Allapot roviden` blokkban van. A fejlesztesi sorren
 - Flow POS fogyasztasi kontrollkartya: a Flow uzleti dashboard mar kulon mutatja a POS-only bar/fogyasztasi koncentraciot, top 3 kategoriaranyt, csucsterhelest, kosarprofilt, kategoriamozgast es AFA readiness jelzest event rangsor nelkul.
 - Event ticket actual lefedettseg szelet: az Event elemzo mar kulon jelzi a ticket actual coverage aranyt, a hianyzo ticket actual eventeket munkalistaban nyitja, es a szovegek ticket actual + POS bar alapon kezelik az event performance-t.
 - Dashboard 2.0 Statistics Quality v1: a dashboard payload `statistics_quality` blokkot ad POS sor-, kosar-, aktiv nap- es lefedettsegi mintamerettel, napi bevetel es kosarertek atlag/median/P25/P75/P90/P95 mutatokkal, `quality_level` dontesi jelzessel es frontend minosegi kartyaval. Ez a forecast/weather/ML reteg adatminosegi alapja, nem kulon statisztika oldal.
+- Dashboard 2.0 Statistics v1.1: a `statistics_quality` blokk backend read-modelbol ad napi 7 napos rolling atlagot, mozgo mediant, trendirany/stabilitas/volatilitas jelzest, outlier/import kontroll flag-eket, termek- es kategoriakereslet median/P90/P95 percentiliseket, valamint keszletforgas-readiness jelzest. A Dashboard kartya ezeket megjeleniti, nem frontend-only szamolja.
+- Dashboard 2.0 Statistics v1.2 insight interpretation layer elso szelet: a `statistics_quality.insights` backendbol priorizalt vezetoi ertelmezest ad adatminoseg, trend, outlier/import kontroll, keresleti percentilis es keszletforgas-readiness jelekbol. A frontend kiemelt insight kartyakat jelenit meg confidence es kovetkezo lepes jelzessel.
+- Dashboard 2.0 nezeti UX elso szelet: a dashboard topbaron belul `Attekintes` es `Professzionalis` mod valaszthato. Az Attekintes vezeto pulzust es dontesi insightokat mutat, a Professzionalis ugyanazon backend read-modelbol nyitja a readiness, drill-down, weather/forecast, kosar es koltseg melyitest.
 - Event analytics summary backend read-model: az Event elemzo osszesito metrikai,
   highlightjai, fellepo rangsora es dontesi insightjai mar
   `/api/v1/events/analytics-summary` endpointbol jonnek. A frontend nem
